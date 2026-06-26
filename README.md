@@ -40,10 +40,10 @@ on its own page. The report can optionally be read aloud via text-to-speech
 ### GitHub Integration
 
 The GitHub section lets you clone any repository you have access to and work
-on it with Claude Code exactly like a local project. When Claude Code has
-finished its changes, the **Repo Push** page lets you push the result back —
-but only after an explicit confirmation step. Pushing never happens
-automatically.
+on it with Claude Code exactly like a local project. Each repo card has an
+**Update** button that commits the local folder's changes, merges in anything
+the remote gained in the meantime, and pushes — one click, one repo. Pushing
+only happens when you press it; it never happens automatically.
 
 ### Settings
 
@@ -195,7 +195,7 @@ lib/
 app/
   api/                   Route handlers (fs, projects, index, launcher
                          [incl. /launcher/review], settings, models, open,
-                         github, repo-push, voice [tts, voices])
+                         github [incl. /github/update], voice [tts, voices])
   components/            Shell, UI primitives, sections
 .data/                   Local storage (gitignored):
                          settings.json, index.json, launcher.json

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Code,
-  GitPullRequestArrow,
   LayoutDashboard,
   PanelLeftClose,
   PanelLeftOpen,
@@ -23,7 +22,6 @@ import DashboardSection from "./sections/DashboardSection";
 import LauncherSection from "./sections/LauncherSection";
 import SettingsSection from "./sections/SettingsSection";
 import GithubSection from "./sections/GithubSection";
-import RepoPushSection from "./sections/RepoPushSection";
 
 interface SectionDef {
   id: SectionId;
@@ -36,7 +34,6 @@ const MAIN_SECTIONS: SectionDef[] = [
   { id: "dashboard", label: "Dashboard", desc: "All your projects at a glance", icon: LayoutDashboard },
   { id: "launcher", label: "Launcher", desc: "Improve prompt & launch Claude Code", icon: Rocket },
   { id: "github", label: "GitHub", desc: "Connect repos & edit with Claude", icon: Code },
-  { id: "repoPush", label: "Repo Push", desc: "Push finished repos", icon: GitPullRequestArrow },
 ];
 
 const SETTINGS_SECTION: SectionDef = {
@@ -97,8 +94,6 @@ export default function Shell() {
         dispatch("launcher", { projectPath, projectName, prompt }),
       launchClaudeInRepo: (projectPath, projectName, prompt) =>
         dispatch("launcher", { projectPath, projectName, prompt, origin: "github" }),
-      requestPush: (repoPath, repoName) =>
-        dispatch("repoPush", { requestPush: { repoPath, repoName } }),
     }),
     [go, dispatch],
   );
@@ -156,8 +151,6 @@ function renderSection(id: SectionId, command: SectionCommand | null) {
       return <LauncherSection command={command} />;
     case "github":
       return <GithubSection />;
-    case "repoPush":
-      return <RepoPushSection command={command} />;
     case "settings":
       return <SettingsSection />;
     default:

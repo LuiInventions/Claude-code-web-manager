@@ -4,22 +4,12 @@ import { getConfig } from "../config";
 import { saveLauncherSession, type LauncherSession } from "../launcher-store";
 import { normalizeModel, normalizeEffort } from "../launcher-config";
 import { recordRateLimit, getUsage, isBlocked } from "../usage-store";
-import { gitStatus, gitChangedFiles } from "../git";
-import { enqueuePush } from "../repo-push-store";
 
 /**
  * Spawns Claude Code in print mode with streamable JSONL output and bridges it
  * to the /ws/claude WebSocket. One WebSocket can drive several parallel runs;
  * each run is identified by an id. Session metadata is persisted for history.
  */
-
-/** A github-origin run that ended with local changes should queue for push. */
-export function shouldEnqueuePush(
-  origin: string | undefined,
-  status: { dirty: boolean; ahead: number },
-): boolean {
-  return origin === "github" && (status.dirty || status.ahead > 0);
-}
 
 let resolvedBin: string | null = null;
 export function resolveClaudeBin(): string {
@@ -155,21 +145,6 @@ function startRun(
     session.endedAt = Date.now();
     session.exitCode = code ?? undefined;
     saveLauncherSession(session);
-    void (async () => {
-      const status = await gitStatus(opts.projectPath);
-      if (shouldEnqueuePush(opts.origin, status)) {
-        const changedFiles = await gitChangedFiles(opts.projectPath);
-        enqueuePush({
-          repoPath: opts.projectPath,
-          repoName: opts.projectName,
-          reason: "claude-run",
-          changedFiles,
-          ahead: status.ahead,
-          status: "pending",
-          addedAt: Date.now(),
-        });
-      }
-    })();
     LIVE.delete(id);
     emit({ type: "exit", id, code });
   });

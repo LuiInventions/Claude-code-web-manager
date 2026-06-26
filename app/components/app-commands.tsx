@@ -6,7 +6,6 @@ export type SectionId =
   | "dashboard"
   | "launcher"
   | "github"
-  | "repoPush"
   | "settings";
 
 /** A command targeted at a section, with a nonce so repeats re-trigger effects. */
@@ -28,7 +27,6 @@ export interface AppCommands {
     projectName: string,
     prompt: string,
   ) => void;
-  requestPush: (repoPath: string, repoName: string) => void;
 }
 
 export const AppCommandsContext = createContext<AppCommands | null>(null);

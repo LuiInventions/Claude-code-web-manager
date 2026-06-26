@@ -1,9 +1,7 @@
 import { WebSocket } from "ws";
 import * as pty from "node-pty";
 import os from "node:os";
-import { resolveClaudeBin, shouldEnqueuePush } from "./claude-runner";
-import { gitStatus, gitChangedFiles } from "../git";
-import { enqueuePush } from "../repo-push-store";
+import { resolveClaudeBin } from "./claude-runner";
 import { normalizeModel, normalizeEffort } from "../launcher-config";
 import { getUsage, isBlocked } from "../usage-store";
 import {
@@ -256,30 +254,6 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
     session.status = exitCode === 0 ? "done" : "error";
     session.exitCode = exitCode;
     broadcast(session, { t: "exit", code: exitCode });
-    // Repo-push trigger: a github-origin session that ended with local changes
-    // queues the repo for push. Best-effort — never break the session on it.
-    void (async () => {
-      try {
-        const status = await gitStatus(cwd);
-        if (shouldEnqueuePush(origin, status)) {
-          const changedFiles = await gitChangedFiles(cwd);
-          enqueuePush({
-            repoPath: cwd,
-            repoName:
-              repoFullName?.split("/").pop() ||
-              cwd.split(/[\\/]/).filter(Boolean).pop() ||
-              "",
-            reason: "claude-run",
-            changedFiles,
-            ahead: status.ahead,
-            status: "pending",
-            addedAt: Date.now(),
-          });
-        }
-      } catch {
-        /* best-effort */
-      }
-    })();
   });
 
   attach(session, ws);
