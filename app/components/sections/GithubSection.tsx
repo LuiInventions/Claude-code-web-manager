@@ -491,7 +491,7 @@ function VisibilityChoice({
 }
 
 function CloneBadge({ status }: { status: StoredRepo["cloneStatus"] }) {
-  if (status === "cloned") return <Badge tone="running" dot>cloned</Badge>;
+  if (status === "cloned") return null;
   if (status === "cloning") return <Badge tone="warn" dot pulse>cloning…</Badge>;
   if (status === "error") return <Badge tone="danger" dot>Error</Badge>;
   return <Badge tone="neutral">waiting</Badge>;
@@ -517,6 +517,11 @@ function RepoCard({
           <div className="truncate font-mono text-[11px] text-faint">{repo.fullName}</div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
+          {repo.pendingPush && (
+            <Badge tone="warn" dot>
+              pushbar
+            </Badge>
+          )}
           <Badge tone="neutral">{repo.private ? "private" : "public"}</Badge>
           <CloneBadge status={repo.cloneStatus} />
           <button

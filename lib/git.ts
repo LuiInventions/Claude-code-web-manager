@@ -215,6 +215,21 @@ export async function gitPushPreview(
   return { branch, files };
 }
 
+/**
+ * Lightweight check for the GitHub tab's per-repo "pushable" hint: true when the
+ * working tree has uncommitted changes, or there are committed-but-unpushed
+ * commits ahead of the upstream. No network access. Returns early on a dirty
+ * tree so the common case costs a single git call.
+ */
+export async function gitHasPendingPush(dir: string): Promise<boolean> {
+  const porcelain = await git(dir, ["status", "--porcelain"]);
+  if (porcelain && porcelain.trim().length > 0) return true;
+  const branch = await gitCurrentBranch(dir);
+  if (!branch) return false;
+  const aheadRaw = await git(dir, ["rev-list", "--count", `origin/${branch}..HEAD`]);
+  return (Number.parseInt((aheadRaw ?? "0").trim(), 10) || 0) > 0;
+}
+
 export async function gitCommitAll(dir: string, message: string): Promise<boolean> {
   const added = await git(dir, ["add", "-A"]);
   if (added === null) return false;

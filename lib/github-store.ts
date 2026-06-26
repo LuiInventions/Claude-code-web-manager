@@ -8,6 +8,11 @@ export type CloneStatus = "pending" | "cloning" | "cloned" | "error";
 export interface StoredRepo extends GithubRepo {
   cloneStatus: CloneStatus;
   localPath: string;
+  /**
+   * Transient (never persisted): whether the local clone has changes to commit
+   * or unpushed commits. Computed on the fly by `GET /api/github`.
+   */
+  pendingPush?: boolean;
 }
 
 export interface GithubState {
