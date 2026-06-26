@@ -126,22 +126,35 @@ export default function LauncherSection({
   }, []);
 
   // Also offer the connected GitHub repos (cloned ones) in the same dropdown.
+  // Poll instead of fetching once: on first app start the repos are still
+  // cloning in the background (status "pending"/"cloning") and would be filtered
+  // out, leaving the dropdown empty until a manual page reload. Polling picks up
+  // each repo the moment its clone finishes — no refresh needed.
   useEffect(() => {
-    fetch("/api/github")
-      .then((r) => r.json())
-      .then((d) => {
-        const repos = (d?.repos ?? []) as Array<{
-          name: string;
-          localPath: string;
-          cloneStatus: string;
-        }>;
-        setGithubProjects(
-          repos
-            .filter((r) => r.cloneStatus === "cloned" && r.localPath)
-            .map((r) => ({ name: r.name, path: r.localPath })),
-        );
-      })
-      .catch(() => {});
+    let cancelled = false;
+    const loadGithub = () =>
+      fetch("/api/github")
+        .then((r) => r.json())
+        .then((d) => {
+          if (cancelled) return;
+          const repos = (d?.repos ?? []) as Array<{
+            name: string;
+            localPath: string;
+            cloneStatus: string;
+          }>;
+          setGithubProjects(
+            repos
+              .filter((r) => r.cloneStatus === "cloned" && r.localPath)
+              .map((r) => ({ name: r.name, path: r.localPath })),
+          );
+        })
+        .catch(() => {});
+    loadGithub();
+    const id = setInterval(loadGithub, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, []);
 
   // Restore still-running sessions after a page refresh / revisit: the PTYs
