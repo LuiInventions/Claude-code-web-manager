@@ -81,6 +81,9 @@ time through the Settings page — no server restart required.
 
 ```powershell
 git clone https://github.com/LuiInventions/Claude-code-web-manager.git
+```
+
+```powershell
 cd Claude-code-web-manager
 ```
 
