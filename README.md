@@ -77,7 +77,7 @@ time through the Settings page — no server restart required.
 
 ## Setup
 
-### 1 — Repository klonen
+### 1 — Clone the repository
 
 ```powershell
 git clone https://github.com/LuiInventions/Claude-code-web-manager.git
@@ -87,7 +87,7 @@ git clone https://github.com/LuiInventions/Claude-code-web-manager.git
 cd Claude-code-web-manager
 ```
 
-### 2 — Installation & Konfiguration
+### 2 — Install & configure
 
 A PowerShell script handles installation and API-key configuration end to end:
 

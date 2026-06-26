@@ -990,8 +990,8 @@ export default function LauncherSection({
                 </span>
                 <button
                   onClick={() => setActiveReviewId(null)}
-                  title="Review schließen"
-                  aria-label="Review schließen"
+                  title="Close review"
+                  aria-label="Close review"
                   className="ml-auto inline-flex size-7 cursor-pointer items-center justify-center rounded-md text-faint transition-colors hover:bg-raised hover:text-danger"
                 >
                   <X className="size-4" />
@@ -1015,7 +1015,7 @@ export default function LauncherSection({
                   const first = sessions.find((s) => s.batchId === id);
                   if (first) setSelectedId(first.id);
                 }}
-                aria-label={`Seite ${i + 1}`}
+                aria-label={`Page ${i + 1}`}
                 aria-current={!activeReviewId && id === activeBatchId}
                 className={cn(
                   "flex size-9 cursor-pointer items-center justify-center rounded-md border text-sm font-medium transition-colors",
@@ -1056,7 +1056,7 @@ function InstanceNumber({ n, active }: { n: number; active?: boolean }) {
   if (n <= 0) return null;
   return (
     <span
-      title={`Instanz #${n}`}
+      title={`Instance #${n}`}
       className={cn(
         "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded px-1 font-mono text-[11px] font-semibold tabular-nums",
         active
@@ -1071,7 +1071,7 @@ function InstanceNumber({ n, active }: { n: number; active?: boolean }) {
 
 function SidebarToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   const Icon = open ? PanelLeftClose : PanelLeftOpen;
-  const label = open ? "Seitenleiste einklappen" : "Seitenleiste ausklappen";
+  const label = open ? "Collapse sidebar" : "Expand sidebar";
   return (
     <button
       onClick={onToggle}
@@ -1091,9 +1091,9 @@ function StatusPill({ status }: { status: Status }) {
   if (status === "done")
     return (
       <Badge tone="running" dot>
-        fertig
+        done
       </Badge>
     );
-  if (status === "stopped") return <Badge tone="neutral">gestoppt</Badge>;
-  return <Badge tone="danger">Fehler</Badge>;
+  if (status === "stopped") return <Badge tone="neutral">stopped</Badge>;
+  return <Badge tone="danger">Error</Badge>;
 }
