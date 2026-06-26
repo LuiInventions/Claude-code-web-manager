@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { snapshotPtySessions } from "@/lib/server/claude-pty";
-import { reviewSessions, type ReviewItem } from "@/lib/session-review";
+import { generateSpeechSummary, generateMarkdownReport, type ReviewItem } from "@/lib/session-review";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -9,6 +9,13 @@ interface Body {
   sessions?: { id?: string; number?: number }[];
 }
 
+/**
+ * Streams two NDJSON lines so the client can start TTS immediately:
+ *   {"type":"speech","text":"..."}
+ *   {"type":"markdown","text":"..."}
+ * Both LLM calls run in parallel; each line is written as soon as its call
+ * finishes — whichever arrives first is sent first.
+ */
 export async function POST(req: NextRequest) {
   let body: Body;
   try {
@@ -21,7 +28,6 @@ export async function POST(req: NextRequest) {
     .map((s) => ({ id: String(s.id ?? ""), number: Number(s.number ?? 0) }))
     .filter((s) => s.id && s.number > 0);
 
-  // Pull output in the requested id order, then re-attach the UI numbers.
   const ids = requested.map((s) => s.id);
   const numberById = new Map(requested.map((s) => [s.id, s.number]));
   const snapshots = snapshotPtySessions(ids);
@@ -30,10 +36,29 @@ export async function POST(req: NextRequest) {
     number: numberById.get(snap.id) ?? 0,
   }));
 
-  try {
-    const result = await reviewSessions(items);
-    return Response.json(result);
-  } catch (err) {
-    return Response.json({ error: (err as Error).message }, { status: 400 });
-  }
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (obj: Record<string, string>) =>
+        controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
+
+      try {
+        await Promise.all([
+          generateSpeechSummary(items)
+            .then((text) => send({ type: "speech", text }))
+            .catch(() => send({ type: "speech", text: "Der Review ist abgeschlossen." })),
+          generateMarkdownReport(items)
+            .then((text) => send({ type: "markdown", text }))
+            .catch(() => send({ type: "markdown", text: "_Kein Ergebnis._" })),
+        ]);
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: { "Content-Type": "application/x-ndjson" },
+  });
 }

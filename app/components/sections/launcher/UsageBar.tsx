@@ -39,14 +39,32 @@ function fmtCountdown(ms: number): string {
   return `${m}:${String(sec).padStart(2, "0")} min`;
 }
 
+/** Coarse "time until reset" for the per-window chips: days/hours/minutes. */
+function untilReset(ms: number, now: number): string {
+  const diff = ms - now;
+  if (diff <= 0) return "jetzt";
+  const totalMin = Math.floor(diff / 60_000);
+  const d = Math.floor(totalMin / 1440);
+  const h = Math.floor((totalMin % 1440) / 60);
+  const m = totalMin % 60;
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
 function barColor(util: number, status: string): string {
   if (status === "rejected" || util >= 0.9) return "bg-danger";
   if (status === "allowed_warning" || util >= 0.75) return "bg-warn";
   return "bg-running";
 }
 
-function WindowChip({ win }: { win: RlWindow }) {
+function WindowChip({ win, now }: { win: RlWindow; now: number }) {
   const pct = Math.round(Math.min(1, Math.max(0, win.utilization)) * 100);
+  // Prefer the real reset instant parsed from `/usage` (absolute date + live
+  // countdown); fall back to the raw scraped label if it couldn't be parsed.
+  const reset = win.resetsAt
+    ? `${fmtReset(win.resetsAt)} · in ${untilReset(win.resetsAt, now)}`
+    : win.resetLabel ?? "?";
   return (
     <div className="flex items-center gap-1.5">
       <span className="text-faint">{label(win.rateLimitType)}</span>
@@ -57,7 +75,9 @@ function WindowChip({ win }: { win: RlWindow }) {
         />
       </div>
       <span className="tabular-nums text-ink">{pct}%</span>
-      <span className="text-faint">· Reset {win.resetLabel ?? fmtReset(win.resetsAt)}</span>
+      <span className="text-faint" title={win.resetLabel}>
+        · Reset {reset}
+      </span>
     </div>
   );
 }
@@ -105,7 +125,7 @@ export default function UsageBar({
             {windows
               .sort((a, b) => a.rateLimitType.localeCompare(b.rateLimitType))
               .map((w) => (
-                <WindowChip key={w.rateLimitType} win={w} />
+                <WindowChip key={w.rateLimitType} win={w} now={now} />
               ))}
           </div>
           {stale && usage?.lastScrapeAt ? (

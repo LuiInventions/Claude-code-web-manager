@@ -33,16 +33,16 @@ interface SectionDef {
 }
 
 const MAIN_SECTIONS: SectionDef[] = [
-  { id: "dashboard", label: "Dashboard", desc: "Deine Projekte auf einen Blick", icon: LayoutDashboard },
-  { id: "launcher", label: "Launcher", desc: "Prompt verbessern & Claude Code starten", icon: Rocket },
-  { id: "github", label: "GitHub", desc: "Repos verbinden & mit Claude bearbeiten", icon: Code },
-  { id: "repoPush", label: "Repo Push", desc: "Fertige Repos pushen", icon: GitPullRequestArrow },
+  { id: "dashboard", label: "Dashboard", desc: "All your projects at a glance", icon: LayoutDashboard },
+  { id: "launcher", label: "Launcher", desc: "Improve prompt & launch Claude Code", icon: Rocket },
+  { id: "github", label: "GitHub", desc: "Connect repos & edit with Claude", icon: Code },
+  { id: "repoPush", label: "Repo Push", desc: "Push finished repos", icon: GitPullRequestArrow },
 ];
 
 const SETTINGS_SECTION: SectionDef = {
   id: "settings",
   label: "Settings",
-  desc: "Konfiguration",
+  desc: "Configuration",
   icon: SettingsIcon,
 };
 
@@ -168,7 +168,7 @@ function renderSection(id: SectionId, command: SectionCommand | null) {
 function PlaceholderSection({ id }: { id: SectionId }) {
   const def = ALL_SECTIONS.find((s) => s.id === id)!;
   return (
-    <EmptyState icon={def.icon} title={`${def.label} – kommt gleich`} description="Dieser Bereich wird gerade gebaut." />
+    <EmptyState icon={def.icon} title={`${def.label} – coming soon`} description="This section is currently being built." />
   );
 }
 

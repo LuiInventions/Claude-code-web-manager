@@ -8,6 +8,21 @@ import { getConfig } from "./config";
 
 const BASE = "https://api.cartesia.ai";
 
+/**
+ * Make text safe to read ALOUD. Cartesia Sonic spells standalone all-caps
+ * tokens letter by letter (e.g. "README" → "R-E-A-D-M-E"). The user wants the
+ * bot to NEVER spell anything out — always whole words, even if the result
+ * sounds slightly off. We title-case each standalone run of 2+ capital letters
+ * (README → Readme, PR → Pr, RED-GREEN → Red-Green) so it is pronounced as a
+ * word. Single capitals and camelCase identifiers (getURL) are left untouched.
+ */
+export function humanizeForSpeech(text: string): string {
+  return text.replace(
+    /\b[A-ZÄÖÜ]{2,}\b/g,
+    (w) => w[0] + w.slice(1).toLowerCase(),
+  );
+}
+
 function authHeaders(): Record<string, string> {
   const cfg = getConfig();
   if (!cfg.cartesiaApiKey) throw new Error("CARTESIA_API_KEY ist nicht gesetzt.");
@@ -46,7 +61,7 @@ export async function synthesize(
     headers: { ...authHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify({
       model_id: cfg.cartesiaTtsModel,
-      transcript: text,
+      transcript: humanizeForSpeech(text),
       voice: { mode: "id", id: cfg.cartesiaVoice },
       language: cfg.voiceLanguage,
       output_format: { container: "mp3", sample_rate: 44100, bit_rate: 128000 },

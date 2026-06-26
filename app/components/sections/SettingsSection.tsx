@@ -87,8 +87,8 @@ export default function SettingsSection() {
         <Card className="space-y-3 p-5">
           <Label
             icon={FolderOpen}
-            title="Projektordner"
-            hint="Direkte Unterordner werden als Projekte gelistet (Dashboard & Jarvis-Index)."
+            title="Projects folder"
+            hint="Direct subfolders are listed as projects (Dashboard & index)."
           />
           <Input
             value={projectsDir}
@@ -99,14 +99,14 @@ export default function SettingsSection() {
         </Card>
 
         <Card className="space-y-3 p-5">
-          <Label icon={Cpu} title="OpenAI-Modell" hint="Für Jarvis-Reasoning und den Prompt-Verbesserer." />
+          <Label icon={Cpu} title="OpenAI model" hint="For reasoning and the prompt improver." />
           {models.length > 0 ? (
             <select
               value={model}
               onChange={(e) => setModel(e.target.value)}
               className="h-9 w-full cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
             >
-              {model && !models.includes(model) && <option value={model}>{model} (aktuell)</option>}
+              {model && !models.includes(model) && <option value={model}>{model} (current)</option>}
               {models.map((m) => (
                 <option key={m} value={m}>
                   {m}
@@ -121,8 +121,8 @@ export default function SettingsSection() {
         <Card className="space-y-3 p-5">
           <Label
             icon={AudioLines}
-            title="Jarvis-Stimme (Cartesia)"
-            hint="Deutsche Stimme für die Sprachausgabe. Default: Sebastian – Orator."
+            title="Voice (Cartesia)"
+            hint="Voice for text-to-speech output. Default: Sebastian – Orator."
           />
           {voices.length > 0 ? (
             <select
@@ -131,7 +131,7 @@ export default function SettingsSection() {
               className="h-9 w-full cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
             >
               {voice && !voices.some((v) => v.id === voice) && (
-                <option value={voice}>{voice} (aktuell)</option>
+                <option value={voice}>{voice} (current)</option>
               )}
               {voices.map((v) => (
                 <option key={v.id} value={v.id}>
@@ -143,41 +143,41 @@ export default function SettingsSection() {
           ) : (
             <p className="text-xs text-faint">
               {cfg.hasCartesiaKey
-                ? "Stimmen werden geladen…"
-                : "Kein Cartesia-Key gesetzt — Stimmen nicht verfügbar."}
+                ? "Loading voices…"
+                : "No Cartesia key set — voices unavailable."}
             </p>
           )}
         </Card>
 
         <Card className="space-y-4 p-5">
           <div className="flex items-center justify-between gap-3">
-            <Label icon={KeyRound} title="OpenAI API-Key" hint="Reasoning + Prompt-Verbesserer. Nur serverseitig." />
+            <Label icon={KeyRound} title="OpenAI API key" hint="Reasoning + prompt improver. Server-side only." />
             {cfg.hasApiKey ? (
               <Badge tone="running" dot>
-                gesetzt
+                set
               </Badge>
             ) : (
               <Badge tone="danger" dot>
-                fehlt
+                missing
               </Badge>
             )}
           </div>
           <div className="h-px bg-line" />
           <div className="flex items-center justify-between gap-3">
-            <Label icon={AudioLines} title="Cartesia API-Key" hint="Sprache (STT + TTS). Nur serverseitig." />
+            <Label icon={AudioLines} title="Cartesia API key" hint="Speech (STT + TTS). Server-side only." />
             {cfg.hasCartesiaKey ? (
               <Badge tone="running" dot>
-                gesetzt
+                set
               </Badge>
             ) : (
               <Badge tone="danger" dot>
-                fehlt
+                missing
               </Badge>
             )}
           </div>
           <div className="h-px bg-line" />
           <div className="flex items-center justify-between gap-3">
-            <Label icon={Server} title="Server" hint="Nur lokal erreichbar." />
+            <Label icon={Server} title="Server" hint="Local access only." />
             <span className="flex items-center gap-2 font-mono text-xs text-muted">
               {cfg.host}:{cfg.port}
               <Badge tone="accent">loopback</Badge>
@@ -189,9 +189,9 @@ export default function SettingsSection() {
 
         <div className="flex items-center gap-3">
           <Button variant="primary" icon={saved ? Check : Save} onClick={save} loading={saving}>
-            {saved ? "Gespeichert" : "Speichern"}
+            {saved ? "Saved" : "Save"}
           </Button>
-          <span className="text-xs text-faint">Änderungen gelten sofort — kein Neustart nötig.</span>
+          <span className="text-xs text-faint">Changes apply immediately — no restart needed.</span>
         </div>
       </div>
     </div>

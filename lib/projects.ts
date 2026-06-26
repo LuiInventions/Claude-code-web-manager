@@ -52,6 +52,9 @@ export async function scanProjects(): Promise<{
   projects: ProjectSummary[];
 }> {
   const root = getConfig().projectsDir;
+  // The default projects dir lives inside the app and may not exist on a fresh
+  // checkout — create it so the Dashboard shows an empty list instead of erroring.
+  await fs.mkdir(root, { recursive: true }).catch(() => {});
   let dirents;
   try {
     dirents = await fs.readdir(root, { withFileTypes: true });

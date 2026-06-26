@@ -1,5 +1,5 @@
 import { readJson, writeJson } from "./store";
-import type { ParsedUsage } from "./usage-parse";
+import { parseResetLabel, type ParsedUsage } from "./usage-parse";
 
 /**
  * Tracks Claude Code usage/rate-limit state, fed by `rate_limit_event`s from the
@@ -96,7 +96,9 @@ export function applyRateLimit(
  * Pure reducer: merge a scraped `/usage` result (utilization + reset labels)
  * into the usage state. Rebuilds the windows from the scrape — the only source
  * of real utilization — while preserving any active `blockedUntil` set by live
- * rejected `rate_limit_event`s. Marks the scrape successful.
+ * rejected `rate_limit_event`s. The human reset label is also parsed into an
+ * absolute `resetsAt` epoch-ms instant so the UI can show a real date/countdown.
+ * Marks the scrape successful.
  */
 export function applyScrapedUsage(
   state: UsageState,
@@ -106,11 +108,12 @@ export function applyScrapedUsage(
   const windows: Record<string, RlWindow> = { ...state.windows };
   for (const w of parsed.windows) {
     const prev = state.windows[w.rateLimitType];
+    const resetsAt = parseResetLabel(w.resetLabel, nowMs) ?? prev?.resetsAt ?? 0;
     windows[w.rateLimitType] = {
       rateLimitType: w.rateLimitType,
       status: prev?.status ?? "allowed",
       utilization: w.utilization,
-      resetsAt: prev?.resetsAt ?? 0,
+      resetsAt,
       resetLabel: w.resetLabel,
       updatedAt: nowMs,
     };

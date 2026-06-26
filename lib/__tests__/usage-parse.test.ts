@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseUsagePanel } from "../usage-parse";
+import { parseResetLabel, parseUsagePanel } from "../usage-parse";
 
 const fixture = readFileSync(
   join(__dirname, "fixtures", "usage-panel.txt"),

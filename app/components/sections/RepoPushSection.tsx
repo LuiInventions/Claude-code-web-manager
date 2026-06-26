@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Clock, GitPullRequestArrow, RefreshCw, Trash2, Upload } from "lucide-react";
 import type { PushEntry } from "@/lib/repo-push-store";
 import type { SectionCommand } from "../app-commands";
@@ -17,30 +17,6 @@ function formatChangedAt(ms: number): string {
   });
 }
 
-async function speak(text: string) {
-  try {
-    const r = await fetch("/api/voice/tts", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    if (!r.ok) return;
-    const buf = await r.arrayBuffer();
-    const Ctor =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    const ctx = new Ctor();
-    const audio = await ctx.decodeAudioData(buf);
-    const node = ctx.createBufferSource();
-    node.buffer = audio;
-    node.connect(ctx.destination);
-    node.onended = () => ctx.close();
-    node.start();
-  } catch {
-    /* audio not available */
-  }
-}
-
 export default function RepoPushSection({
   command,
 }: {
@@ -51,26 +27,11 @@ export default function RepoPushSection({
   const [active, setActive] = useState<PushEntry | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const knownRef = useRef<Set<string>>(new Set());
-  const seededRef = useRef(false);
-
   const load = useCallback(async () => {
     try {
       const r = await fetch("/api/repo-push");
       const d = (await r.json()) as { queue: PushEntry[] };
       const next = d.queue ?? [];
-      // Announce repos that are newly in the queue (skip the first load).
-      if (seededRef.current) {
-        for (const e of next) {
-          if (!knownRef.current.has(e.repoPath) && e.status === "pending") {
-            void speak(
-              `Repo ${e.repoName} ist fertig bearbeitet. Soll ich die Änderungen pushen?`,
-            );
-          }
-        }
-      }
-      knownRef.current = new Set(next.map((e) => e.repoPath));
-      seededRef.current = true;
       setQueue(next);
     } catch {
       /* keep last */

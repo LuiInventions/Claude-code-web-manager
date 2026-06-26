@@ -7,6 +7,7 @@ import {
   pushSignature,
   filterDismissed,
   pruneDismissed,
+  dedupeByLocalPath,
   type PushEntry,
   type Dismissal,
 } from "../repo-push-store";
@@ -88,6 +89,41 @@ describe("reconcileQueue", () => {
     );
     expect(out[0].status).toBe("error");
     expect(out[0].message).toBe("boom");
+  });
+});
+
+describe("dedupeByLocalPath", () => {
+  it("collapses two store entries that point at the same folder (name collision)", () => {
+    // owner-a/tool and owner-b/tool both clone to <githubDir>/tool.
+    const a = entry("/gh/tool", { repoName: "tool", reason: "scan" });
+    const b = entry("/gh/tool", { repoName: "tool", reason: "scan" });
+    expect(dedupeByLocalPath([a, b])).toHaveLength(1);
+  });
+
+  it("collapses paths that differ only by case (Windows is case-insensitive)", () => {
+    const a = entry("C:/gh/Tool", { repoName: "Tool" });
+    const b = entry("C:/gh/tool", { repoName: "tool" });
+    expect(dedupeByLocalPath([a, b])).toHaveLength(1);
+  });
+
+  it("collapses paths that differ only by separator or trailing slash", () => {
+    const a = entry("C:\\gh\\tool", { repoName: "tool" });
+    const b = entry("C:/gh/tool/", { repoName: "tool" });
+    expect(dedupeByLocalPath([a, b])).toHaveLength(1);
+  });
+
+  it("keeps the first occurrence (stable order, original repoPath preserved)", () => {
+    const a = entry("C:/gh/Tool", { repoName: "Tool", addedAt: 1 });
+    const b = entry("C:/gh/tool", { repoName: "tool", addedAt: 2 });
+    const out = dedupeByLocalPath([a, b]);
+    expect(out[0].repoPath).toBe("C:/gh/Tool");
+    expect(out[0].addedAt).toBe(1);
+  });
+
+  it("leaves genuinely distinct repos untouched", () => {
+    const a = entry("/gh/alpha");
+    const b = entry("/gh/beta");
+    expect(dedupeByLocalPath([a, b])).toHaveLength(2);
   });
 });
 

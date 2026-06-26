@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { readGithubState } from "../github-store";
 import { gitStatus, gitChangedFiles, gitLastCommitTime } from "../git";
-import type { PushEntry } from "../repo-push-store";
+import { dedupeByLocalPath, type PushEntry } from "../repo-push-store";
 
 const SCAN_CONCURRENCY = 4;
 
@@ -76,5 +76,8 @@ export async function scanPushableRepos(addedAt: number): Promise<PushEntry[]> {
   await Promise.all(
     Array.from({ length: Math.min(SCAN_CONCURRENCY, repos.length) || 1 }, worker),
   );
-  return found;
+  // Several GitHub repos can map to one local clone (name collisions across
+  // owners, or case-only path differences) — collapse them so a repo edited
+  // across one or more sessions shows exactly one push card, never duplicates.
+  return dedupeByLocalPath(found);
 }

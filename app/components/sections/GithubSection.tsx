@@ -115,10 +115,10 @@ export default function GithubSection() {
           <Code className="size-6" />
         </div>
         <div className="space-y-1">
-          <h3 className="text-sm font-medium text-ink">Mit GitHub verbinden</h3>
+          <h3 className="text-sm font-medium text-ink">Connect to GitHub</h3>
           <p className="text-sm text-muted">
-            Füge einen Personal Access Token (classic, Scope <code>repo</code>) ein. Er
-            wird nur lokal gespeichert und nie an den Browser zurückgegeben.
+            Paste a Personal Access Token (classic, scope <code>repo</code>). It is
+            stored locally only and never sent to the browser.
           </p>
         </div>
         <Input
@@ -137,7 +137,7 @@ export default function GithubSection() {
           loading={connecting}
           disabled={!token.trim()}
         >
-          Verbinden
+          Connect
         </Button>
         <a
           href="https://github.com/settings/tokens/new?scopes=repo&description=jarvis-control-center"
@@ -145,7 +145,7 @@ export default function GithubSection() {
           rel="noreferrer"
           className="text-xs text-accent hover:underline"
         >
-          Token erstellen →
+          Create token →
         </a>
       </div>
     );
@@ -159,11 +159,11 @@ export default function GithubSection() {
     <div className="min-h-0 flex-1 overflow-auto">
       <div className="flex items-center justify-between gap-3 px-6 py-4">
         <p className="text-sm text-muted">
-          Verbunden als <span className="font-medium text-ink">{state.login}</span>
+          Connected as <span className="font-medium text-ink">{state.login}</span>
           <span className="text-faint"> · {state.repos.length} Repos</span>
           {cloning > 0 && (
             <span className="ml-2 inline-flex items-center gap-1 text-xs text-warn">
-              <Loader2 className="size-3.5 animate-spin" /> {cloning} werden geklont…
+              <Loader2 className="size-3.5 animate-spin" /> {cloning} cloning…
             </span>
           )}
         </p>
@@ -174,7 +174,7 @@ export default function GithubSection() {
             icon={Plus}
             onClick={() => setCreating(true)}
           >
-            Neues Repo
+            New repo
           </Button>
           <Button
             size="sm"
@@ -183,10 +183,10 @@ export default function GithubSection() {
             onClick={refresh}
             loading={refreshing}
           >
-            Aktualisieren
+            Refresh
           </Button>
           <Button size="sm" variant="ghost" icon={Unplug} onClick={disconnect}>
-            Trennen
+            Disconnect
           </Button>
         </div>
       </div>
@@ -198,7 +198,7 @@ export default function GithubSection() {
       )}
 
       {state.repos.length === 0 ? (
-        <EmptyState icon={Code} title="Keine Repos" description="Es wurden keine Repos gefunden." />
+        <EmptyState icon={Code} title="No repos" description="No repositories found." />
       ) : (
         <div className="grid grid-cols-1 gap-4 px-6 pb-8 md:grid-cols-2 xl:grid-cols-3">
           {state.repos.map((r) => (
@@ -259,7 +259,7 @@ function Modal({
           <h3 className="text-sm font-medium text-ink">{title}</h3>
           <button
             onClick={onClose}
-            aria-label="Schließen"
+            aria-label="Close"
             className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md text-faint transition-colors hover:bg-raised hover:text-ink"
           >
             <X className="size-4" />
@@ -309,11 +309,11 @@ function CreateRepoModal({
   };
 
   return (
-    <Modal title="Neues Repo erstellen" onClose={onClose}>
+    <Modal title="Create new repo" onClose={onClose}>
       <div className="flex min-h-0 flex-col gap-3 p-5">
         <div>
           <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-faint">
-            Ordner wählen
+            Choose folder
           </div>
           <div className="h-56 overflow-auto rounded-md border border-line bg-surface py-1">
             <FileTree
@@ -334,7 +334,7 @@ function CreateRepoModal({
 
         <label className="flex flex-col gap-1">
           <span className="text-[11px] font-medium uppercase tracking-wide text-faint">
-            Repo-Name
+            Repo name
           </span>
           <Input
             value={name}
@@ -346,20 +346,20 @@ function CreateRepoModal({
 
         <div className="flex flex-col gap-1">
           <span className="text-[11px] font-medium uppercase tracking-wide text-faint">
-            Sichtbarkeit
+            Visibility
           </span>
           <div className="grid grid-cols-2 gap-2">
             <VisibilityChoice
               icon={Lock}
-              label="Privat"
-              hint="Nur du"
+              label="Private"
+              hint="Only you"
               active={isPrivate}
               onClick={() => setIsPrivate(true)}
             />
             <VisibilityChoice
               icon={Globe}
-              label="Öffentlich"
-              hint="Für alle sichtbar"
+              label="Public"
+              hint="Visible to everyone"
               active={!isPrivate}
               onClick={() => setIsPrivate(false)}
             />
@@ -370,7 +370,7 @@ function CreateRepoModal({
       </div>
       <div className="flex justify-end gap-2 border-t border-line px-5 py-3">
         <Button variant="ghost" onClick={onClose}>
-          Abbrechen
+          Cancel
         </Button>
         <Button
           variant="primary"
@@ -379,7 +379,7 @@ function CreateRepoModal({
           loading={busy}
           disabled={!folder || !name.trim()}
         >
-          Erstellen &amp; pushen
+          Create &amp; push
         </Button>
       </div>
     </Modal>
@@ -421,23 +421,23 @@ function VisibilityModal({
   };
 
   return (
-    <Modal title={`Einstellungen · ${repo.name}`} onClose={onClose}>
+    <Modal title={`Settings · ${repo.name}`} onClose={onClose}>
       <div className="flex flex-col gap-3 p-5">
         <div className="text-[11px] font-medium uppercase tracking-wide text-faint">
-          Sichtbarkeit
+          Visibility
         </div>
         <div className="grid grid-cols-2 gap-2">
           <VisibilityChoice
             icon={Lock}
-            label="Privat"
-            hint="Nur du"
+            label="Private"
+            hint="Only you"
             active={isPrivate}
             onClick={() => setIsPrivate(true)}
           />
           <VisibilityChoice
             icon={Globe}
-            label="Öffentlich"
-            hint="Für alle sichtbar"
+            label="Public"
+            hint="Visible to everyone"
             active={!isPrivate}
             onClick={() => setIsPrivate(false)}
           />
@@ -446,7 +446,7 @@ function VisibilityModal({
       </div>
       <div className="flex justify-end gap-2 border-t border-line px-5 py-3">
         <Button variant="ghost" onClick={onClose}>
-          Abbrechen
+          Cancel
         </Button>
         <Button
           variant="primary"
@@ -454,7 +454,7 @@ function VisibilityModal({
           loading={busy}
           disabled={isPrivate === repo.private}
         >
-          Speichern
+          Save
         </Button>
       </div>
     </Modal>
@@ -494,10 +494,10 @@ function VisibilityChoice({
 }
 
 function CloneBadge({ status }: { status: StoredRepo["cloneStatus"] }) {
-  if (status === "cloned") return <Badge tone="running" dot>geklont</Badge>;
-  if (status === "cloning") return <Badge tone="warn" dot pulse>klont…</Badge>;
-  if (status === "error") return <Badge tone="danger" dot>Fehler</Badge>;
-  return <Badge tone="neutral">wartet</Badge>;
+  if (status === "cloned") return <Badge tone="running" dot>cloned</Badge>;
+  if (status === "cloning") return <Badge tone="warn" dot pulse>cloning…</Badge>;
+  if (status === "error") return <Badge tone="danger" dot>Error</Badge>;
+  return <Badge tone="neutral">waiting</Badge>;
 }
 
 function RepoCard({
@@ -520,12 +520,12 @@ function RepoCard({
           <div className="truncate font-mono text-[11px] text-faint">{repo.fullName}</div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          <Badge tone="neutral">{repo.private ? "privat" : "öffentlich"}</Badge>
+          <Badge tone="neutral">{repo.private ? "private" : "public"}</Badge>
           <CloneBadge status={repo.cloneStatus} />
           <button
             onClick={onSettings}
-            title="Einstellungen · Sichtbarkeit"
-            aria-label="Einstellungen · Sichtbarkeit"
+            title="Settings · Visibility"
+            aria-label="Settings · Visibility"
             className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md text-faint transition-colors hover:bg-raised hover:text-ink"
           >
             <Settings className="size-4" />
@@ -543,7 +543,7 @@ function RepoCard({
           disabled={!ready}
           onClick={() => onOpen(repo.localPath)}
         >
-          Öffnen
+          Open
         </Button>
         <Button
           size="sm"
@@ -552,10 +552,10 @@ function RepoCard({
           className="flex-1"
           disabled={!ready}
           onClick={() =>
-            onEdit(repo.localPath, repo.name, `Arbeite am Repo ${repo.name}.`)
+            onEdit(repo.localPath, repo.name, `Work on repo ${repo.name}.`)
           }
         >
-          Mit Claude bearbeiten
+          Edit with Claude
         </Button>
       </div>
     </div>

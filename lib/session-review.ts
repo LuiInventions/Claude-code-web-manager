@@ -76,24 +76,72 @@ export function parseReviewResult(raw: string): ReviewResult {
   };
 }
 
-const SYSTEM_PROMPT = [
+const SPEECH_SYSTEM_PROMPT = [
   "Du bist der Review-Assistent im Claude Code Control Center.",
-  "Du bekommst den aktuellen Output mehrerer Claude-Code-Sessions, jeweils mit",
-  "Nummer (#1, #2 …), Projekt, Status und Auftrag. Fasse für JEDE Session zusammen,",
-  "was sie gearbeitet hat und was eventuell noch zu tun ist. Stütze dich NUR auf den",
-  "gezeigten Output — erfinde nichts.",
-  "",
-  "Antworte AUSSCHLIESSLICH als JSON-Objekt mit genau zwei Feldern:",
-  '{"markdown": "...", "speech": "..."}',
-  '- "markdown": ein deutscher Markdown-Bericht. Pro Session eine Überschrift',
-  '  "## Session #N · <Projekt>", darunter kurz "Erledigt:" und "Noch offen:".',
-  "  Sauberes Markdown.",
-  '- "speech": eine KURZE, natürliche Fassung zum Vorlesen (1–4 Sätze, KEINE',
-  "  Markdown-Zeichen, keine Aufzählungssymbole) mit den wichtigsten Punkten.",
-  "Gib NUR das JSON zurück, ohne Einleitung und ohne ```-Fences.",
+  "Fasse den Stand ALLER Sessions in 1–4 natürlichen deutschen Sätzen zusammen.",
+  "Keine Markdown-Zeichen, keine Aufzählungssymbole, keine Anführungszeichen.",
+  "Gib NUR den gesprochenen Text zurück — sonst nichts.",
 ].join("\n");
 
-/** Read all sessions and produce the report + spoken summary (one LLM call). */
+const MARKDOWN_SYSTEM_PROMPT = [
+  "Du bist der Review-Assistent im Claude Code Control Center.",
+  "Erstelle einen übersichtlichen deutschen Markdown-Bericht über alle Sessions.",
+  "Stütze dich NUR auf den gezeigten Output — erfinde nichts.",
+  "",
+  "FORMAT (genau einhalten):",
+  "Für jede Session eine Sektion:",
+  "",
+  "## Session #N · <Projektname>",
+  "",
+  "> <Emoji> **<Status>** — <Projektname>",
+  "",
+  "### ✅ Erledigt",
+  "- Punkt 1",
+  "- Punkt 2",
+  "",
+  "### 🔲 Noch offen",
+  "- Punkt 1",
+  "*(oder: Keine offenen Punkte.)*",
+  "",
+  "---",
+  "",
+  "Status-Emojis: ✅ fertig | ⏳ läuft | ❌ Fehler",
+  "Gib ausschließlich den Markdown-Text zurück, ohne Einleitung und ohne ```-Fences.",
+].join("\n");
+
+/** Generate just the spoken summary (fast, streamed first to the client). */
+export async function generateSpeechSummary(items: ReviewItem[]): Promise<string> {
+  if (items.length === 0) {
+    return "Es gibt aktuell keine Sessions zum Reviewen.";
+  }
+  const client = getOpenAI();
+  const model = getModel();
+  const res = await client.responses.create({
+    model,
+    instructions: SPEECH_SYSTEM_PROMPT,
+    input: buildReviewContext(items),
+  });
+  const text = (res.output_text ?? "").trim();
+  return text || "Der Review ist abgeschlossen.";
+}
+
+/** Generate the detailed Markdown report. */
+export async function generateMarkdownReport(items: ReviewItem[]): Promise<string> {
+  if (items.length === 0) {
+    return "_Keine Sessions zum Reviewen._";
+  }
+  const client = getOpenAI();
+  const model = getModel();
+  const res = await client.responses.create({
+    model,
+    instructions: MARKDOWN_SYSTEM_PROMPT,
+    input: buildReviewContext(items),
+  });
+  const text = stripFences((res.output_text ?? "").trim());
+  return text || "_Kein Ergebnis._";
+}
+
+/** Read all sessions and produce the report + spoken summary (two parallel LLM calls). */
 export async function reviewSessions(items: ReviewItem[]): Promise<ReviewResult> {
   if (items.length === 0) {
     return {
@@ -101,12 +149,9 @@ export async function reviewSessions(items: ReviewItem[]): Promise<ReviewResult>
       speech: "Es gibt aktuell keine Sessions zum Reviewen.",
     };
   }
-  const client = getOpenAI();
-  const model = getModel();
-  const res = await client.responses.create({
-    model,
-    instructions: SYSTEM_PROMPT,
-    input: buildReviewContext(items),
-  });
-  return parseReviewResult(res.output_text ?? "");
+  const [speech, markdown] = await Promise.all([
+    generateSpeechSummary(items),
+    generateMarkdownReport(items),
+  ]);
+  return { markdown, speech };
 }

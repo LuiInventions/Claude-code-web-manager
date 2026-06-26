@@ -82,7 +82,7 @@ export default function DashboardSection() {
     <div className="min-h-0 flex-1 overflow-auto">
       <div className="flex items-center justify-between px-6 py-4">
         <p className="text-sm text-muted">
-          {data ? `${data.projects.length} Projekte` : "Scanne…"}{" "}
+          {data ? `${data.projects.length} projects` : "Scanning…"}{" "}
           {data && (
             <span className="font-mono text-xs text-faint">
               · {data.projectsDir}
@@ -97,7 +97,7 @@ export default function DashboardSection() {
               icon={FolderOpen}
               onClick={() => revealInExplorer(data.projectsDir)}
             >
-              Ordner öffnen
+              Open folder
             </Button>
           )}
           <Button
@@ -107,7 +107,7 @@ export default function DashboardSection() {
             onClick={() => load()}
             loading={loading}
           >
-            Aktualisieren
+            Refresh
           </Button>
         </div>
       </div>
@@ -127,8 +127,8 @@ export default function DashboardSection() {
       {data && data.projects.length === 0 && (
         <EmptyState
           icon={FolderGit2}
-          title="Keine Projekte gefunden"
-          description={`In ${data.projectsDir} wurden keine Projekte erkannt. Ändere den Projektordner in den Settings.`}
+          title="No projects found"
+          description={`No projects found in ${data.projectsDir}. Change the projects folder in Settings.`}
         />
       )}
 
@@ -190,8 +190,8 @@ function ProjectCard({
               e.stopPropagation();
               onReveal();
             }}
-            title="In Explorer öffnen"
-            aria-label="In Explorer öffnen"
+            title="Open in Explorer"
+            aria-label="Open in Explorer"
             className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md text-faint opacity-0 transition-all hover:bg-surface hover:text-accent group-hover:opacity-100"
           >
             <FolderOpen className="size-4" />
@@ -235,7 +235,7 @@ function ProjectCard({
             )}
           </>
         ) : (
-          <span className="text-faint">kein Git-Repo</span>
+          <span className="text-faint">not a git repo</span>
         )}
       </div>
 
@@ -262,7 +262,7 @@ function ProjectDetailView({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center gap-3 border-b border-line bg-elevated px-5 py-3">
         <Button size="sm" variant="ghost" icon={ArrowLeft} onClick={onBack}>
-          Zurück
+          Back
         </Button>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -282,7 +282,7 @@ function ProjectDetailView({
             icon={FolderOpen}
             onClick={() => revealInExplorer(project.path)}
           >
-            Im Explorer
+            Show in Explorer
           </Button>
         </div>
       </div>
@@ -290,7 +290,7 @@ function ProjectDetailView({
       <div className="flex min-h-0 flex-1">
         <div className="flex w-72 shrink-0 flex-col border-r border-line bg-elevated">
           <div className="border-b border-line px-4 py-2 text-xs font-medium uppercase tracking-wide text-faint">
-            Dateibaum
+            File tree
           </div>
           <div className="min-h-0 flex-1 overflow-auto py-1.5">
             <FileTree
@@ -308,7 +308,7 @@ function ProjectDetailView({
               <Markdown remarkPlugins={[remarkGfm]}>{project.readmeFull}</Markdown>
             </div>
           ) : (
-            <p className="text-sm text-faint">Keine README gefunden.</p>
+            <p className="text-sm text-faint">No README found.</p>
           )}
         </div>
       </div>
@@ -352,7 +352,7 @@ function GitPanel({ git }: { git: GitStatus }) {
           ))}
         </ul>
       ) : (
-        <p className="text-xs text-faint">Noch keine Commits.</p>
+        <p className="text-xs text-faint">No commits yet.</p>
       )}
     </Card>
   );

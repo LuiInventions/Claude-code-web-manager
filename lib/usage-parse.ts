@@ -72,3 +72,96 @@ export function parseUsagePanel(raw: string): ParsedUsage | null {
 
   return { windows };
 }
+
+const MONTHS: Record<string, number> = {
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+  jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+};
+
+/** Wall-clock components of `utcMs` as seen in IANA `tz` (or the host's local tz). */
+function tzParts(
+  utcMs: number,
+  tz: string | undefined,
+): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
+  if (!tz) {
+    const d = new Date(utcMs);
+    return {
+      year: d.getFullYear(), month: d.getMonth(), day: d.getDate(),
+      hour: d.getHours(), minute: d.getMinutes(), second: d.getSeconds(),
+    };
+  }
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, hour12: false,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+  const m: Record<string, number> = {};
+  for (const p of dtf.formatToParts(new Date(utcMs))) {
+    if (p.type !== "literal") m[p.type] = Number(p.value);
+  }
+  return {
+    year: m.year, month: m.month - 1, day: m.day,
+    hour: m.hour === 24 ? 0 : m.hour, minute: m.minute, second: m.second,
+  };
+}
+
+/**
+ * Epoch ms for a wall-clock time in `tz` (or local when tz is undefined). Day
+ * overflow rolls forward (Date.UTC handles it). Iterates twice so the result is
+ * correct across DST offset changes.
+ */
+function zonedTimeToUtc(
+  year: number, month: number, day: number,
+  hour: number, minute: number, tz: string | undefined,
+): number {
+  if (!tz) return new Date(year, month, day, hour, minute).getTime();
+  const wallUtc = Date.UTC(year, month, day, hour, minute);
+  let utc = wallUtc;
+  for (let i = 0; i < 2; i++) {
+    const p = tzParts(utc, tz);
+    const seenAsUtc = Date.UTC(p.year, p.month, p.day, p.hour, p.minute, p.second);
+    const offset = seenAsUtc - utc; // how far tz is ahead of UTC at this instant
+    utc = wallUtc - offset;
+  }
+  return utc;
+}
+
+/**
+ * Convert a scraped `/usage` reset label into an absolute epoch-ms instant.
+ * The panel surfaces two shapes (optionally suffixed with an IANA "(tz)"):
+ *   "3:30am (Europe/Berlin)"     → next occurrence of that wall-clock time
+ *   "Jul 2, 8pm (Europe/Berlin)" → that calendar date (this year, or next)
+ * `nowMs` anchors "next occurrence". Returns null if no time can be parsed.
+ */
+export function parseResetLabel(label: string, nowMs: number): number | null {
+  if (!label) return null;
+  const tz = label.match(/\(([^)]+)\)/)?.[1]?.trim() || undefined;
+
+  const time = label.match(/(\d{1,2})(?::(\d{2}))?\s*([ap])m/i);
+  if (!time) return null;
+  let hour = Number(time[1]) % 12;
+  const minute = time[2] ? Number(time[2]) : 0;
+  if (/p/i.test(time[3])) hour += 12;
+
+  const date = label.match(/\b([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})\b/);
+  const month = date ? MONTHS[date[1].toLowerCase()] : undefined;
+  const day = date ? Number(date[2]) : undefined;
+
+  const now = tzParts(nowMs, tz);
+
+  if (month !== undefined && day !== undefined) {
+    let ts = zonedTimeToUtc(now.year, month, day, hour, minute, tz);
+    // Tolerate a slightly-past instant (panel lag); only roll a year if clearly past.
+    if (ts < nowMs - 24 * 3600_000) {
+      ts = zonedTimeToUtc(now.year + 1, month, day, hour, minute, tz);
+    }
+    return ts;
+  }
+
+  // Time-only: today in tz; if that instant already passed, use tomorrow.
+  let ts = zonedTimeToUtc(now.year, now.month, now.day, hour, minute, tz);
+  if (ts <= nowMs) {
+    ts = zonedTimeToUtc(now.year, now.month, now.day + 1, hour, minute, tz);
+  }
+  return ts;
+}

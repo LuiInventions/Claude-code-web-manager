@@ -1,4 +1,3 @@
-import os from "node:os";
 import path from "node:path";
 import { readSettings } from "./settings";
 
@@ -10,6 +9,11 @@ import { readSettings } from "./settings";
  *
  * API keys come ONLY from the environment and are never sent to the browser.
  * Voice (STT + TTS) is powered by Cartesia.
+ *
+ * Paths default to folders INSIDE the app directory (not the user's home), so a
+ * fresh checkout is self-contained: Dashboard projects live under `./projects`
+ * and GitHub clones under `./projects/github`. Override either via the Settings
+ * UI or the PROJECTS_DIR / GITHUB_DIR environment variables.
  */
 
 export interface AppConfig {
@@ -46,7 +50,7 @@ export function getConfig(): AppConfig {
   const projectsDir =
     settings.projectsDir?.trim() ||
     process.env.PROJECTS_DIR?.trim() ||
-    os.homedir();
+    path.join(process.cwd(), "projects");
 
   const githubDir =
     settings.githubDir?.trim() ||

@@ -37,6 +37,9 @@ yarn-error.log*
 # local data store (project index, chat history, settings, launcher logs)
 /.data/
 
+# local projects + GitHub clones (default PROJECTS_DIR / GITHUB_DIR live here)
+/projects/
+
 # vercel
 .vercel
 

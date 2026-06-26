@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -368,9 +368,9 @@ export default function LauncherSection({
   // the one destructive action and is confirmed first.
   const closeSession = (id: string) => {
     const ok = window.confirm(
-      "Diese Claude-Session wirklich stoppen?\n\n" +
-        "Sie läuft sonst im Hintergrund weiter (auch nach Neuladen der Seite) " +
-        "bis der PC heruntergefahren wird. Stoppen beendet sie endgültig.",
+      "Really stop this Claude session?\n\n" +
+        "It continues running in the background (even after page reload) " +
+        "until the PC is shut down. Stopping ends it permanently.",
     );
     if (!ok) return;
     void fetch(`/api/launcher/live-sessions?id=${encodeURIComponent(id)}`, {
@@ -385,9 +385,14 @@ export default function LauncherSection({
   const activeBatchId = selected?.batchId ?? sessions[0]?.batchId ?? null;
   const visibleCount = sessions.filter((s) => s.batchId === activeBatchId).length;
   const { cols, rows } = gridShape(visibleCount);
-  // Distinct batches in list order (newest first) — one rail button per batch/page.
+  // Distinct batches oldest-first — one rail button per batch/page. Building in
+  // chronological order keeps existing pages' numbers stable and places each new
+  // session on the next page instead of bumping it to page 1.
   const batchIds: string[] = [];
-  for (const s of sessions) if (!batchIds.includes(s.batchId)) batchIds.push(s.batchId);
+  for (let i = sessions.length - 1; i >= 0; i--) {
+    const s = sessions[i];
+    if (!batchIds.includes(s.batchId)) batchIds.push(s.batchId);
+  }
 
   // Stable per-instance numbers (oldest = #1) so each window can be referenced
   // unambiguously in the list and grid, even as newer ones are added.
@@ -423,20 +428,59 @@ export default function LauncherSection({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ sessions: payload }),
       });
-      const d = await r.json();
-      if (d.error) throw new Error(d.error);
-      const page: ReviewPage = {
-        id: `rev_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`,
-        markdown: String(d.markdown ?? ""),
-        createdAt: Date.now(),
-        title: new Date().toLocaleTimeString("de-DE", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      };
-      setReviews((prev) => [page, ...prev]);
-      setActiveReviewId(page.id);
-      void speak(String(d.speech ?? "")).catch(() => {});
+      if (!r.ok || !r.body) throw new Error(`Review fehlgeschlagen (${r.status})`);
+
+      const pageId = `rev_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+      const pageTitle = new Date().toLocaleTimeString("de-DE", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      let pageCreated = false;
+
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const chunk = JSON.parse(line) as { type: string; text: string };
+            if (chunk.type === "speech") {
+              // Start TTS immediately — before the markdown page is ready.
+              void speak(chunk.text).catch(() => {});
+            } else if (chunk.type === "markdown") {
+              const page: ReviewPage = {
+                id: pageId,
+                markdown: chunk.text,
+                createdAt: Date.now(),
+                title: pageTitle,
+              };
+              setReviews((prev) => [page, ...prev]);
+              setActiveReviewId(page.id);
+              pageCreated = true;
+            }
+          } catch {
+            /* skip malformed lines */
+          }
+        }
+      }
+
+      if (!pageCreated) {
+        const page: ReviewPage = {
+          id: pageId,
+          markdown: "_Kein Ergebnis._",
+          createdAt: Date.now(),
+          title: pageTitle,
+        };
+        setReviews((prev) => [page, ...prev]);
+        setActiveReviewId(page.id);
+      }
     } catch (e) {
       setReviewError((e as Error).message);
     } finally {
@@ -459,9 +503,9 @@ export default function LauncherSection({
                   onChange={(e) => setProjectPath(e.target.value)}
                   className="h-9 min-w-0 flex-1 cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
                 >
-                  <option value="">Projekt wählen…</option>
+                  <option value="">Select project…</option>
                   {projects.length > 0 && (
-                    <optgroup label="Projekte">
+                    <optgroup label="Projects">
                       {projects.map((p) => (
                         <option key={p.path} value={p.path}>
                           {p.name}
@@ -483,7 +527,7 @@ export default function LauncherSection({
                 <input
                   value={projectPath}
                   onChange={(e) => setProjectPath(e.target.value)}
-                  placeholder="Absoluter Pfad … z.B. C:\\Users\\…\\projekt"
+                  placeholder="Absolute path … e.g. C:\\Users\\…\\project"
                   spellCheck={false}
                   className="h-9 min-w-0 flex-1 rounded-md border border-line bg-raised px-2.5 font-mono text-[12.5px] text-ink outline-none focus:border-accent"
                 />
@@ -491,16 +535,16 @@ export default function LauncherSection({
               <button
                 type="button"
                 onClick={() => setPathMode((m) => (m === "list" ? "manual" : "list"))}
-                title={pathMode === "list" ? "Eigenen Pfad eingeben" : "Aus Projektliste wählen"}
+                title={pathMode === "list" ? "Enter custom path" : "Select from project list"}
                 className="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-line bg-raised px-2.5 text-xs text-muted transition-colors hover:text-ink"
               >
                 {pathMode === "list" ? (
                   <>
-                    <FolderOpen className="size-3.5" /> Pfad wählen
+                    <FolderOpen className="size-3.5" /> Enter path
                   </>
                 ) : (
                   <>
-                    <ListTree className="size-3.5" /> Liste
+                    <ListTree className="size-3.5" /> List
                   </>
                 )}
               </button>
@@ -509,7 +553,7 @@ export default function LauncherSection({
             <div className="flex items-center gap-2">
               <label className="flex min-w-0 flex-1 flex-col gap-1">
                 <span className="text-[10px] font-medium uppercase tracking-wide text-faint">
-                  Modell
+                  Model
                 </span>
                 <select
                   value={model}
@@ -543,7 +587,7 @@ export default function LauncherSection({
 
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-medium uppercase tracking-wide text-faint">
-                Boxen
+                Boxes
               </span>
               <div className="flex overflow-hidden rounded-md border border-line">
                 {BOX_COUNTS.map((n) => (
@@ -551,7 +595,7 @@ export default function LauncherSection({
                     key={n}
                     type="button"
                     onClick={() => setBoxCount(n)}
-                    title={`${n} Claude-Box${n > 1 ? "en" : ""} gleichzeitig öffnen`}
+                    title={`Open ${n} Claude box${n > 1 ? "es" : ""} simultaneously`}
                     className={cn(
                       "cursor-pointer px-3 py-1.5 text-xs font-medium transition-colors",
                       boxCount === n
@@ -571,7 +615,7 @@ export default function LauncherSection({
                   value={raw}
                   onChange={(e) => setRaw(e.target.value)}
                   rows={4}
-                  placeholder="Roher Prompt … z.B. 'füge dark mode hinzu'"
+                  placeholder="Raw prompt … e.g. 'add dark mode'"
                 />
                 {improveError && <p className="text-xs text-danger">{improveError}</p>}
                 {splitError && <p className="text-xs text-danger">{splitError}</p>}
@@ -583,7 +627,7 @@ export default function LauncherSection({
                   loading={improving}
                   disabled={!projectPath || !raw.trim()}
                 >
-                  Prompt verbessern
+                  Improve prompt
                 </Button>
                 <Button
                   variant="secondary"
@@ -592,7 +636,7 @@ export default function LauncherSection({
                   onClick={startRaw}
                   disabled={!projectPath || !raw.trim() || blocked}
                 >
-                  Ohne Verbesserung starten ({boxCount}×)
+                  Start without improving ({boxCount}×)
                 </Button>
                 <Button
                   variant="secondary"
@@ -602,7 +646,7 @@ export default function LauncherSection({
                   loading={splitting}
                   disabled={!projectPath || !raw.trim()}
                 >
-                  KI Modus: auf Sessions aufteilen
+                  AI mode: split into sessions
                 </Button>
                 <Button
                   variant="secondary"
@@ -611,7 +655,7 @@ export default function LauncherSection({
                   onClick={openManual}
                   disabled={!projectPath}
                 >
-                  Ohne KI aufteilen
+                  Split without AI
                 </Button>
                 <Button
                   variant="ghost"
@@ -620,7 +664,7 @@ export default function LauncherSection({
                   onClick={startEmpty}
                   disabled={!projectPath || blocked}
                 >
-                  Ohne Prompt starten ({boxCount}×)
+                  Start without prompt ({boxCount}×)
                 </Button>
               </>
             )}
@@ -628,7 +672,7 @@ export default function LauncherSection({
             {phase === "improved" && (
               <>
                 <div className="text-xs font-medium uppercase tracking-wide text-faint">
-                  Verbesserter Prompt (editierbar)
+                  Improved prompt (editable)
                 </div>
                 <Textarea
                   value={improved}
@@ -638,7 +682,7 @@ export default function LauncherSection({
                 />
                 <div className="flex gap-2">
                   <Button variant="ghost" icon={ArrowLeft} onClick={() => setPhase("idle")}>
-                    Zurück
+                    Back
                   </Button>
                   <Button
                     variant="primary"
@@ -647,7 +691,7 @@ export default function LauncherSection({
                     onClick={start}
                     disabled={!improved.trim() || blocked}
                   >
-                    {blocked ? "Limit erreicht" : "Claude Code starten"}
+                    {blocked ? "Limit reached" : "Start Claude Code"}
                   </Button>
                 </div>
               </>
@@ -656,8 +700,8 @@ export default function LauncherSection({
             {phase === "split" && (
               <>
                 <div className="text-xs font-medium uppercase tracking-wide text-faint">
-                  KI-Vorschlag · {splitSessions.length}{" "}
-                  {splitSessions.length === 1 ? "Session" : "Sessions"} (editierbar)
+                  AI suggestion · {splitSessions.length}{" "}
+                  {splitSessions.length === 1 ? "session" : "sessions"} (editable)
                 </div>
                 <div className="max-h-[44vh] space-y-2 overflow-auto pr-1">
                   {splitSessions.map((s, i) => (
@@ -672,8 +716,8 @@ export default function LauncherSection({
                           onClick={() =>
                             setSplitSessions((list) => list.filter((_, j) => j !== i))
                           }
-                          title="Session entfernen"
-                          aria-label="Session entfernen"
+                          title="Remove session"
+                          aria-label="Remove session"
                           className="ml-auto inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-faint transition-colors hover:bg-surface hover:text-danger"
                         >
                           <X className="size-3.5" />
@@ -696,7 +740,7 @@ export default function LauncherSection({
                 </div>
                 <div className="flex gap-2">
                   <Button variant="ghost" icon={ArrowLeft} onClick={() => setPhase("idle")}>
-                    Zurück
+                    Back
                   </Button>
                   <Button
                     variant="primary"
@@ -708,8 +752,8 @@ export default function LauncherSection({
                     }
                   >
                     {blocked
-                      ? "Limit erreicht"
-                      : `Weiter · ${splitSessions.filter((s) => s.prompt.trim()).length} starten`}
+                      ? "Limit reached"
+                      : `Continue · start ${splitSessions.filter((s) => s.prompt.trim()).length}`}
                   </Button>
                 </div>
               </>
@@ -719,8 +763,8 @@ export default function LauncherSection({
               <>
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 truncate text-xs font-medium uppercase tracking-wide text-faint">
-                    Manuell aufteilen · {manualSessions.length}/6{" "}
-                    {manualSessions.length === 1 ? "Session" : "Sessions"}
+                    Manual split · {manualSessions.length}/6{" "}
+                    {manualSessions.length === 1 ? "session" : "sessions"}
                   </div>
                   <button
                     type="button"
@@ -730,8 +774,8 @@ export default function LauncherSection({
                       )
                     }
                     disabled={manualSessions.length >= 6}
-                    title="Session hinzufügen"
-                    aria-label="Session hinzufügen"
+                    title="Add session"
+                    aria-label="Add session"
                     className="inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md border border-line bg-raised text-muted transition-colors hover:border-line-strong hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Plus className="size-4" />
@@ -749,8 +793,8 @@ export default function LauncherSection({
                           onClick={() =>
                             setManualSessions((list) => list.filter((_, j) => j !== i))
                           }
-                          title="Session entfernen"
-                          aria-label="Session entfernen"
+                          title="Remove session"
+                          aria-label="Remove session"
                           className="ml-auto inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-faint transition-colors hover:bg-surface hover:text-danger"
                         >
                           <X className="size-3.5" />
@@ -766,7 +810,7 @@ export default function LauncherSection({
                           )
                         }
                         rows={3}
-                        placeholder={`Prompt für Session #${i + 1}…`}
+                        placeholder={`Prompt for session #${i + 1}…`}
                         className="font-mono text-[12px]"
                       />
                     </div>
@@ -774,7 +818,7 @@ export default function LauncherSection({
                 </div>
                 <div className="flex gap-2">
                   <Button variant="ghost" icon={ArrowLeft} onClick={() => setPhase("idle")}>
-                    Zurück
+                    Back
                   </Button>
                   <Button
                     variant="primary"
@@ -786,8 +830,8 @@ export default function LauncherSection({
                     }
                   >
                     {blocked
-                      ? "Limit erreicht"
-                      : `${manualSessions.filter((s) => s.prompt.trim()).length} starten`}
+                      ? "Limit reached"
+                      : `Start ${manualSessions.filter((s) => s.prompt.trim()).length}`}
                   </Button>
                 </div>
               </>
@@ -802,7 +846,7 @@ export default function LauncherSection({
               onClick={doReview}
               disabled={sessions.length === 0 || reviewing}
             >
-              {reviewing ? "Sessions reviewen …" : "Sessions reviewen"}
+              {reviewing ? "Reviewing sessions…" : "Review sessions"}
             </Button>
             {reviewError && <p className="text-xs text-danger">{reviewError}</p>}
           </div>
@@ -811,7 +855,7 @@ export default function LauncherSection({
           </div>
           <div className="min-h-0 flex-1 overflow-auto px-2 pb-2">
             {sessions.length === 0 && (
-              <p className="px-2 py-3 text-xs text-faint">Noch keine Sessions gestartet.</p>
+              <p className="px-2 py-3 text-xs text-faint">No sessions started yet.</p>
             )}
             {sessions.map((s) => (
               <div
@@ -835,7 +879,7 @@ export default function LauncherSection({
                         title={s.projectPath || s.projectName}
                         className="truncate text-left text-sm text-ink"
                       >
-                        {String.fromCharCode(0x200e) + (s.projectPath || s.projectName || "Projekt")}
+                        {String.fromCharCode(0x200e) + (s.projectPath || s.projectName || "Project")}
                       </span>
                     </span>
                     <StatusPill status={s.status} />
@@ -844,8 +888,8 @@ export default function LauncherSection({
                 </button>
                 <button
                   onClick={() => closeSession(s.id)}
-                  title="Session schließen"
-                  aria-label="Session schließen"
+                  title="Close session"
+                  aria-label="Close session"
                   className="mt-2 inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-faint transition-colors hover:bg-raised hover:text-danger"
                 >
                   <X className="size-3.5" />
@@ -864,7 +908,7 @@ export default function LauncherSection({
               <div className="flex shrink-0 items-center gap-2 border-b border-line bg-elevated px-3 py-2">
                 <SidebarToggle open={sidebarOpen} onToggle={() => setSidebarOpen((v) => !v)} />
                 <span className="text-xs text-faint">
-                  {visibleCount} {visibleCount === 1 ? "Box" : "Boxen"}
+                  {visibleCount} {visibleCount === 1 ? "box" : "boxes"}
                 </span>
               </div>
               <div
@@ -887,8 +931,8 @@ export default function LauncherSection({
                     </div>
                     <button
                       onClick={() => closeSession(s.id)}
-                      title="Box stoppen / schließen"
-                      aria-label="Box schließen"
+                      title="Stop / close box"
+                      aria-label="Close box"
                       className="absolute right-1.5 top-1.5 z-20 inline-flex size-7 cursor-pointer items-center justify-center rounded-md border border-line bg-surface/80 text-faint backdrop-blur transition-colors hover:text-danger"
                     >
                       <X className="size-4" />
@@ -930,8 +974,8 @@ export default function LauncherSection({
                 <div className="space-y-1">
                   <h3 className="text-sm font-medium text-ink">Claude Code Launcher</h3>
                   <p className="mx-auto max-w-sm text-sm text-muted">
-                    Projekt wählen, Prompt schreiben, Anzahl der Boxen wählen, starten —
-                    dann laufen die Sessions live als Terminal-Grid hier.
+                    Select a project, write a prompt, choose the number of boxes, start —
+                    sessions then run live as a terminal grid here.
                   </p>
                 </div>
               </div>
