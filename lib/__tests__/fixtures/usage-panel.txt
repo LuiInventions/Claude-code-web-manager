@@ -1,0 +1,51 @@
+[?9001h[?1004h[?25l[2J[m[H]0;claude[?25h[?25l[?2004h[?1004h[?2031h[>0q[?1049h[2J[?1000h[?1002h[?1003h[?1006h[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K[120C]0;✳ Claude Code[38;2;215;119;87m[2;1H ▐[48;2;0;0;0m▛███▜[49m▌[m[1m[3CClaude Code[38;2;153;153;153m[22m[1Cv2.1.193[38;2;215;119;87m
+▝▜[48;2;0;0;0m█████[49m▛▘[38;2;153;153;153m[2COpus 4.8 (1M context) with high effort · Claude Max[38;2;215;119;87m
+  ▘▘ ▝▝  [38;2;153;153;153m[2C~\jarvis-control-center[35;104H● high · /effort[38;2;136;136;136m
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[m❯ [2mTry "fix typecheck errors"[38;2;136;136;136m[22m
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[38;2;255;107;128m[40;3H⏵⏵ bypass permissions on [38;2;153;153;153m(shift+tab to cycle) · ← for agents[37;3H[?25h[m[?1000h[?1002h[?1003h[?1006h[?25l[38;2;177;185;249m[14;1H▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔[1m[15;4HSettings[m[2CStatus[3CConfig[38;2;0;0;0m[48;2;177;185;249m[1m[2C Usage [m[2CStats[1m[17;4HSession[38;2;153;153;153m[22m[19;4HTotal cost:            $0.0000[20;4HTotal duration (API):  0s[21;4HTotal duration (wall): 7s[22;4HTotal code changes:    0 lines added, 0 lines removed[23;4HUsage:                 0 input, 0 output, 0 cache read, 0 cache write[m[1m[25;4HCurrent session[38;2;177;185;249m[48;2;80;83;112m[22m[26;4H████████████████████████[26X[m[27C48%[1Cused[38;2;153;153;153m[27;4HResets 3:30am (Europe/Berlin)[m[1m[29;4HCurrent week (all models)[38;2;177;185;249m[48;2;80;83;112m[22m[30;4H███▌[46X[m[47C7%[1Cused[38;2;153;153;153m[31;4HResets Jul 2, 8pm (Europe/Berlin)[m[1m[33;4HWhat's contributing to your limits usage?[38;2;153;153;153m[22m[34;4HApproximate, based on local sessions on this machine — does not include other devices or claude.ai[m[35;104H[K
+   [38;2;153;153;153mScanning local sessions…                                                                                             [m
+[K
+   [38;2;153;153;153mRefreshing…                                                                                                          [m[40;3H [38;2;153;153;153mEsc to cancel[K[104C[m[38;2;177;185;249m[10;1H▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔[1m[11;4HSettings[m[2CStatus[3CConfig[38;2;0;0;0m[48;2;177;185;249m[1m[2C Usage [m[2CStats[1m[13;4HSession[22m
+                                                                                                                        [38;2;153;153;153m[15;4HTotal cost:            $0.0000[K[16;4HTotal duration (API):  0s[17;4HTotal duration (wall): 7s[18;4HTotal code changes:    0 lines added, 0 lines removed[19;4HUsage:     [12C0 input, 0 output, 0 cache read, 0 cache write[m[20;4H[K[1m
+Current session[22m[K[38;2;177;185;249m[48;2;80;83;112m[22;4H████████████████████████▌[25X[m[25C 49%[1Cused[38;2;153;153;153m[23;4HResets[1C3:29am[1C(Europe/Berlin)[K[m[1m[25;12Hw[1Cek (all models)[38;2;177;185;249m[48;2;80;83;112m[22m[26;7H▌[20X[m[47C7% used[K[38;2;153;153;153m[27;11HJul 2,[1C7:59pm (Eu[1Cope/Berlin)[m[1m[29;18HSonnet only)[38;2;177;185;249m[48;2;80;83;112m[22m[30;4H    [m[47C0[31;4H[K[1m
+What's contributing to your limits usage?[38;2;153;153;153m[22m[33;4HApproximate, based on local sessions on this machine — does not include other devices or claude.ai[m[34;4H[K[38;2;153;153;153m
+Scanning local sessions…[m[36;4H                                                                                                                     [1m[37;4HUsage credits[38;2;153;153;153m[22m[38;4HUsag[1C credits are off · /usage-credits to turn them on[m
