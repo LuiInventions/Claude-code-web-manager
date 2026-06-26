@@ -9,7 +9,7 @@ import {
   Lock,
   Plus,
   RefreshCw,
-  Rocket,
+  UploadCloud,
   Plug,
   Settings,
   Unplug,
@@ -18,7 +18,6 @@ import {
 import type { GithubState, StoredRepo } from "@/lib/github-store";
 import { Badge, Button, EmptyState, Input, Spinner, cn } from "../ui";
 import { FileTree } from "../FileTree";
-import { useAppCommands } from "../app-commands";
 
 const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? "";
 
@@ -30,7 +29,6 @@ const revealInExplorer = (path: string) =>
   }).catch(() => {});
 
 export default function GithubSection() {
-  const { launchClaudeInRepo } = useAppCommands();
   const [state, setState] = useState<GithubState | null>(null);
   const [token, setToken] = useState("");
   const [connecting, setConnecting] = useState(false);
@@ -205,7 +203,6 @@ export default function GithubSection() {
             <RepoCard
               key={r.fullName}
               repo={r}
-              onEdit={launchClaudeInRepo}
               onOpen={revealInExplorer}
               onSettings={() => setVisRepo(r)}
             />
@@ -502,16 +499,36 @@ function CloneBadge({ status }: { status: StoredRepo["cloneStatus"] }) {
 
 function RepoCard({
   repo,
-  onEdit,
   onOpen,
   onSettings,
 }: {
   repo: StoredRepo;
-  onEdit: (path: string, name: string, prompt: string) => void;
   onOpen: (path: string) => void;
   onSettings: () => void;
 }) {
   const ready = repo.cloneStatus === "cloned";
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const update = async () => {
+    setBusy(true);
+    setResult(null);
+    try {
+      const r = await fetch("/api/github/update", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fullName: repo.fullName }),
+      });
+      const d = await r.json();
+      if (d.error) setResult({ ok: false, text: d.error });
+      else setResult({ ok: true, text: d.message ?? "Updated ✓" });
+    } catch (e) {
+      setResult({ ok: false, text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-4">
       <div className="flex items-start justify-between gap-2">
@@ -548,16 +565,20 @@ function RepoCard({
         <Button
           size="sm"
           variant="primary"
-          icon={Rocket}
+          icon={UploadCloud}
           className="flex-1"
           disabled={!ready}
-          onClick={() =>
-            onEdit(repo.localPath, repo.name, `Work on repo ${repo.name}.`)
-          }
+          loading={busy}
+          onClick={update}
         >
-          Edit with Claude
+          Update
         </Button>
       </div>
+      {result && (
+        <p className={cn("text-[11px]", result.ok ? "text-accent" : "text-danger")}>
+          {result.text}
+        </p>
+      )}
     </div>
   );
 }
