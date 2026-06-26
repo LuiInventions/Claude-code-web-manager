@@ -138,6 +138,83 @@ export async function gitChangedFiles(dir: string): Promise<string[]> {
     .filter(Boolean);
 }
 
+export interface ChangedFile {
+  path: string;
+  /** Normalized single-letter status: M·A·D·R·C·U·T·? */
+  status: string;
+}
+
+/** Collapse a porcelain XY code to one normalized status letter. */
+function normalizeStatus(code: string): string {
+  if (code.includes("?")) return "?";
+  if (code.includes("U")) return "U";
+  const c = code.trim()[0] ?? "M";
+  return "MADRCT".includes(c) ? c : "M";
+}
+
+/**
+ * Parse `git status --porcelain` into changed-file entries. Renames
+ * (`R  old -> new`) are reported under their new path.
+ */
+export function parsePorcelainStatus(porcelain: string): ChangedFile[] {
+  return porcelain
+    .split("\n")
+    .filter((l) => l.length > 3)
+    .map((line) => {
+      const code = line.slice(0, 2);
+      let path = line.slice(3).trim();
+      const arrow = path.indexOf(" -> ");
+      if (arrow !== -1) path = path.slice(arrow + 4).trim();
+      return { path, status: normalizeStatus(code) };
+    })
+    .filter((f) => f.path.length > 0);
+}
+
+/** Parse `git diff --name-status` (committed-but-unpushed files). */
+export function parseDiffNameStatus(diff: string): ChangedFile[] {
+  return diff
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const parts = line.split("\t");
+      const status = (parts[0]?.trim()[0] ?? "M").toUpperCase();
+      // Renames/copies carry both old and new paths; report the new one.
+      const path = (parts[parts.length - 1] ?? "").trim();
+      return { path, status: "MADRCT".includes(status) ? status : "M" };
+    })
+    .filter((f) => f.path.length > 0);
+}
+
+/**
+ * List every file the Update button would push: uncommitted working-tree
+ * changes plus any already-committed-but-unpushed files. No network access —
+ * compares against the last-known `origin/<branch>` ref.
+ */
+export async function gitPushPreview(
+  dir: string,
+): Promise<{ branch: string | null; files: ChangedFile[] }> {
+  const branch = await gitCurrentBranch(dir);
+  const porcelain = (await git(dir, ["status", "--porcelain"])) ?? "";
+  const working = parsePorcelainStatus(porcelain);
+
+  let committed: ChangedFile[] = [];
+  if (branch) {
+    const diff = await git(dir, [
+      "diff",
+      "--name-status",
+      `origin/${branch}..HEAD`,
+    ]);
+    if (diff) committed = parseDiffNameStatus(diff);
+  }
+
+  // Union by path; working-tree status wins (it is the most recent state).
+  const byPath = new Map<string, ChangedFile>();
+  for (const f of committed) byPath.set(f.path, f);
+  for (const f of working) byPath.set(f.path, f);
+  const files = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
+  return { branch, files };
+}
+
 export async function gitCommitAll(dir: string, message: string): Promise<boolean> {
   const added = await git(dir, ["add", "-A"]);
   if (added === null) return false;

@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { parseGitLog, parseAheadBehind, buildAuthHeaderArg } from "../git";
+import {
+  parseGitLog,
+  parseAheadBehind,
+  buildAuthHeaderArg,
+  parsePorcelainStatus,
+  parseDiffNameStatus,
+} from "../git";
 
 const US = "\x1f"; // field separator used in the git pretty-format
 
@@ -34,6 +40,45 @@ describe("parseAheadBehind", () => {
   });
   it("defaults to zero on null", () => {
     expect(parseAheadBehind(null)).toEqual({ ahead: 0, behind: 0 });
+  });
+});
+
+describe("parsePorcelainStatus", () => {
+  it("parses status codes into normalized entries", () => {
+    const raw = [" M src/a.ts", "A  src/b.ts", " D src/c.ts", "?? new.txt"].join("\n");
+    expect(parsePorcelainStatus(raw)).toEqual([
+      { path: "src/a.ts", status: "M" },
+      { path: "src/b.ts", status: "A" },
+      { path: "src/c.ts", status: "D" },
+      { path: "new.txt", status: "?" },
+    ]);
+  });
+  it("reports renames under their new path", () => {
+    expect(parsePorcelainStatus("R  old/name.ts -> new/name.ts")).toEqual([
+      { path: "new/name.ts", status: "R" },
+    ]);
+  });
+  it("returns [] for empty input", () => {
+    expect(parsePorcelainStatus("")).toEqual([]);
+  });
+});
+
+describe("parseDiffNameStatus", () => {
+  it("parses tab-separated name-status lines", () => {
+    const raw = ["M\tsrc/a.ts", "A\tsrc/b.ts", "D\tsrc/c.ts"].join("\n");
+    expect(parseDiffNameStatus(raw)).toEqual([
+      { path: "src/a.ts", status: "M" },
+      { path: "src/b.ts", status: "A" },
+      { path: "src/c.ts", status: "D" },
+    ]);
+  });
+  it("reports renames under the new path", () => {
+    expect(parseDiffNameStatus("R100\told.ts\tnew.ts")).toEqual([
+      { path: "new.ts", status: "R" },
+    ]);
+  });
+  it("returns [] for empty input", () => {
+    expect(parseDiffNameStatus("")).toEqual([]);
   });
 });
 

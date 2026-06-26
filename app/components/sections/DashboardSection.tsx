@@ -13,7 +13,7 @@ import {
 import type { ProjectDetail, ProjectSummary } from "@/lib/projects";
 import type { GitStatus } from "@/lib/git";
 import { formatBytes, formatRelativeTime } from "@/lib/format";
-import { Badge, Button, Card, EmptyState, Spinner } from "../ui";
+import { Badge, Button, Card, cn, EmptyState, Spinner } from "../ui";
 import { FileTree } from "../FileTree";
 
 interface ScanResult {
@@ -163,6 +163,9 @@ function ProjectCard({
   onClick: () => void;
   onReveal: () => void;
 }) {
+  const lang = langStyle(p.stack.primary);
+  const blurb = p.readme ? cleanReadme(p.readme) : null;
+
   return (
     <div
       role="button"
@@ -174,81 +177,140 @@ function ProjectCard({
           onClick();
         }
       }}
-      className="group flex cursor-pointer flex-col gap-3 rounded-lg border border-line bg-surface p-4 text-left transition-colors hover:border-line-strong hover:bg-raised"
+      className="group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border border-line bg-surface text-left transition-all hover:-translate-y-0.5 hover:border-line-strong hover:shadow-lg hover:shadow-black/30"
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate font-medium text-ink transition-colors group-hover:text-accent">
+      {/* language accent rail */}
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-0.5 opacity-60 transition-opacity group-hover:opacity-100"
+        style={{ background: lang.color }}
+      />
+
+      {/* header */}
+      <div className="flex items-start gap-3 px-4 pt-4">
+        <div
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg border text-[11px] font-bold tracking-tight"
+          style={{
+            color: lang.color,
+            background: `${lang.color}14`,
+            borderColor: `${lang.color}33`,
+          }}
+        >
+          {lang.glyph}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-semibold text-ink transition-colors group-hover:text-accent">
             {p.name}
           </div>
-          <div className="truncate font-mono text-[11px] text-faint">{p.path}</div>
+          <div className="truncate font-mono text-[11px] text-faint">
+            {shortenPath(p.path)}
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onReveal();
-            }}
-            title="Open in Explorer"
-            aria-label="Open in Explorer"
-            className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md text-faint opacity-0 transition-all hover:bg-surface hover:text-accent group-hover:opacity-100"
-          >
-            <FolderOpen className="size-4" />
-          </button>
-          {p.stack.primary !== "Unknown" && (
-            <Badge tone="accent">{p.stack.primary}</Badge>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onReveal();
+          }}
+          title="Open in Explorer"
+          aria-label="Open in Explorer"
+          className="-mr-1 -mt-1 inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-faint opacity-0 transition-all hover:bg-raised hover:text-accent group-hover:opacity-100"
+        >
+          <FolderOpen className="size-4" />
+        </button>
       </div>
 
-      {p.stack.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {p.stack.tags.slice(0, 5).map((t) => (
-            <Badge key={t} tone="neutral">
+      {/* stack: prominent language block + framework tags */}
+      <div className="flex flex-wrap items-center gap-1.5 px-4 pt-3">
+        {p.stack.primary !== "Unknown" && (
+          <span
+            className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold"
+            style={{
+              color: lang.color,
+              background: `${lang.color}14`,
+              borderColor: `${lang.color}33`,
+            }}
+          >
+            {p.stack.primary}
+          </span>
+        )}
+        {p.stack.tags
+          .filter((t) => t !== p.stack.primary)
+          .slice(0, 4)
+          .map((t) => (
+            <span
+              key={t}
+              className="inline-flex items-center rounded-md border border-line bg-raised px-2 py-0.5 text-xs text-muted"
+            >
               {t}
-            </Badge>
+            </span>
           ))}
-        </div>
+      </div>
+
+      {blurb && (
+        <p className="line-clamp-2 px-4 pt-3 text-xs leading-relaxed text-muted">
+          {blurb}
+        </p>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+      {/* footer status bar */}
+      <div className="mt-auto flex items-center justify-between gap-2 border-t border-line/70 px-4 py-2.5 text-xs">
         {p.git.isRepo ? (
-          <>
-            <span className="inline-flex items-center gap-1">
-              <GitBranch className="size-3.5 text-faint" />
-              {p.git.branch ?? "—"}
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="inline-flex min-w-0 items-center gap-1 font-mono text-muted">
+              <GitBranch className="size-3.5 shrink-0 text-faint" />
+              <span className="truncate">{p.git.branch ?? "—"}</span>
             </span>
-            {p.git.dirty ? (
-              <Badge tone="warn" dot>
-                dirty
-              </Badge>
-            ) : (
-              <Badge tone="running" dot>
-                clean
-              </Badge>
-            )}
+            <span
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 font-medium",
+                p.git.dirty
+                  ? "bg-warn/10 text-warn"
+                  : "bg-running/10 text-running",
+              )}
+            >
+              <span className="size-1.5 rounded-full bg-current" />
+              {p.git.dirty ? "dirty" : "clean"}
+            </span>
             {(p.git.ahead > 0 || p.git.behind > 0) && (
-              <span className="text-faint">
+              <span className="shrink-0 font-mono text-faint">
                 ↑{p.git.ahead} ↓{p.git.behind}
               </span>
             )}
-          </>
+          </span>
         ) : (
-          <span className="text-faint">not a git repo</span>
+          <span className="text-faint">no git</span>
         )}
+        <span className="shrink-0 whitespace-nowrap text-faint">
+          {formatRelativeTime(p.mtimeMs)}
+          {p.sizeBytes != null && ` · ${formatBytes(p.sizeBytes)}`}
+        </span>
       </div>
-
-      <div className="flex items-center gap-2 text-xs text-faint">
-        <span>{formatRelativeTime(p.mtimeMs)}</span>
-        {p.sizeBytes != null && <span>· {formatBytes(p.sizeBytes)}</span>}
-      </div>
-
-      {p.readme && (
-        <p className="line-clamp-2 text-xs text-muted">{cleanReadme(p.readme)}</p>
-      )}
     </div>
   );
+}
+
+/** Per-language accent color + short glyph for the project tile. */
+function langStyle(primary: string): { color: string; glyph: string } {
+  const map: Record<string, { color: string; glyph: string }> = {
+    "Node.js": { color: "#8cc84b", glyph: "JS" },
+    Python: { color: "#4b8bbe", glyph: "Py" },
+    Rust: { color: "#f97316", glyph: "Rs" },
+    Go: { color: "#22d3ee", glyph: "Go" },
+    ".NET": { color: "#a78bfa", glyph: ".N" },
+    JVM: { color: "#ef4444", glyph: "Jv" },
+    Flutter: { color: "#42a5f5", glyph: "Fl" },
+    Ruby: { color: "#e0566f", glyph: "Rb" },
+    PHP: { color: "#8893d8", glyph: "Php" },
+  };
+  return map[primary] ?? { color: "#6b7b8c", glyph: "·" };
+}
+
+/** Collapse a long absolute path to its last two segments. */
+function shortenPath(full: string): string {
+  const parts = full.split(/[\\/]+/).filter(Boolean);
+  if (parts.length <= 2) return full;
+  return `…/${parts.slice(-2).join("/")}`;
 }
 
 function ProjectDetailView({

@@ -870,7 +870,12 @@ export default function LauncherSection({
             {sessions.length === 0 && (
               <p className="px-2 py-3 text-xs text-faint">No sessions started yet.</p>
             )}
-            {sessions.map((s) => (
+            {[...sessions]
+              .sort(
+                (a, b) =>
+                  (numberById.get(a.id) ?? 0) - (numberById.get(b.id) ?? 0),
+              )
+              .map((s) => (
               <div
                 key={s.id}
                 className={cn(
@@ -1002,7 +1007,14 @@ export default function LauncherSection({
                   Review {activeReview.title}
                 </span>
                 <button
-                  onClick={() => setActiveReviewId(null)}
+                  onClick={() => {
+                    // Close the review for good: drop its page from the rail too,
+                    // not just hide the overlay (which only switched back to the
+                    // first window and left the page sitting in the rail).
+                    const id = activeReview.id;
+                    setReviews((prev) => prev.filter((r) => r.id !== id));
+                    setActiveReviewId(null);
+                  }}
                   title="Close review"
                   aria-label="Close review"
                   className="ml-auto inline-flex size-7 cursor-pointer items-center justify-center rounded-md text-faint transition-colors hover:bg-raised hover:text-danger"

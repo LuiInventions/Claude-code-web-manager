@@ -507,27 +507,7 @@ function RepoCard({
   onSettings: () => void;
 }) {
   const ready = repo.cloneStatus === "cloned";
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
-
-  const update = async () => {
-    setBusy(true);
-    setResult(null);
-    try {
-      const r = await fetch("/api/github/update", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ fullName: repo.fullName }),
-      });
-      const d = await r.json();
-      if (d.error) setResult({ ok: false, text: d.error });
-      else setResult({ ok: true, text: d.message ?? "Updated ✓" });
-    } catch (e) {
-      setResult({ ok: false, text: (e as Error).message });
-    } finally {
-      setBusy(false);
-    }
-  };
+  const [confirming, setConfirming] = useState(false);
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-4">
@@ -568,17 +548,161 @@ function RepoCard({
           icon={UploadCloud}
           className="flex-1"
           disabled={!ready}
-          loading={busy}
-          onClick={update}
+          onClick={() => setConfirming(true)}
         >
           Update
         </Button>
       </div>
-      {result && (
-        <p className={cn("text-[11px]", result.ok ? "text-accent" : "text-danger")}>
-          {result.text}
-        </p>
+      {confirming && (
+        <UpdateModal repo={repo} onClose={() => setConfirming(false)} />
       )}
     </div>
+  );
+}
+
+interface ChangedFile {
+  path: string;
+  status: string;
+}
+
+const STATUS_META: Record<string, { label: string; tone: string }> = {
+  M: { label: "M", tone: "text-warn" },
+  A: { label: "A", tone: "text-accent" },
+  D: { label: "D", tone: "text-danger" },
+  R: { label: "R", tone: "text-accent" },
+  C: { label: "C", tone: "text-accent" },
+  T: { label: "T", tone: "text-warn" },
+  U: { label: "U", tone: "text-danger" },
+  "?": { label: "+", tone: "text-muted" },
+};
+
+/**
+ * Confirmation window for the Update button: lists the files that would be
+ * pushed, then commits + pushes them only after the user confirms.
+ */
+function UpdateModal({ repo, onClose }: { repo: StoredRepo; onClose: () => void }) {
+  const [loading, setLoading] = useState(true);
+  const [files, setFiles] = useState<ChangedFile[]>([]);
+  const [branch, setBranch] = useState<string | null>(null);
+  const [pushing, setPushing] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch("/api/github/changes", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ fullName: repo.fullName }),
+        });
+        const d = await r.json();
+        if (!alive) return;
+        if (d.error) setErr(d.error);
+        else {
+          setFiles(d.files ?? []);
+          setBranch(d.branch ?? null);
+        }
+      } catch (e) {
+        if (alive) setErr((e as Error).message);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [repo.fullName]);
+
+  const push = async () => {
+    setPushing(true);
+    setErr(null);
+    try {
+      const r = await fetch("/api/github/update", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fullName: repo.fullName }),
+      });
+      const d = await r.json();
+      if (d.error) setErr(d.error);
+      else setDone(d.message ?? "Updated ✓");
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setPushing(false);
+    }
+  };
+
+  const nothing = !loading && files.length === 0;
+
+  return (
+    <Modal title={`Update · ${repo.name}`} onClose={onClose}>
+      <div className="flex min-h-0 flex-col gap-3 p-5">
+        <p className="text-xs text-muted">
+          {branch ? (
+            <>
+              Diese Dateien werden nach{" "}
+              <span className="font-mono text-ink">origin/{branch}</span> gepusht:
+            </>
+          ) : (
+            "Diese Dateien werden gepusht:"
+          )}
+        </p>
+        <div className="max-h-72 overflow-auto rounded-md border border-line bg-surface">
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 px-4 py-8 text-sm text-muted">
+              <Spinner className="size-4" /> Lade Änderungen…
+            </div>
+          ) : nothing ? (
+            <div className="px-4 py-8 text-center text-sm text-muted">
+              Keine Änderungen zum Pushen.
+            </div>
+          ) : (
+            <ul className="divide-y divide-line">
+              {files.map((f) => {
+                const meta = STATUS_META[f.status] ?? STATUS_META.M;
+                return (
+                  <li
+                    key={f.path}
+                    className="flex items-center gap-2 px-3 py-1.5 font-mono text-[11px]"
+                  >
+                    <span className={cn("w-3 shrink-0 text-center font-semibold", meta.tone)}>
+                      {meta.label}
+                    </span>
+                    <span className="truncate text-ink" title={f.path}>
+                      {f.path}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+        {!loading && !nothing && (
+          <p className="text-[11px] text-faint">
+            {files.length} {files.length === 1 ? "Datei" : "Dateien"}
+          </p>
+        )}
+        {done && <p className="text-xs text-accent">{done}</p>}
+        {err && <p className="text-xs text-danger">{err}</p>}
+      </div>
+      <div className="flex justify-end gap-2 border-t border-line px-5 py-3">
+        <Button variant="ghost" onClick={onClose}>
+          {done ? "Schließen" : "Abbrechen"}
+        </Button>
+        {!done && (
+          <Button
+            variant="primary"
+            icon={UploadCloud}
+            onClick={push}
+            loading={pushing}
+            disabled={loading || nothing}
+          >
+            Pushen
+          </Button>
+        )}
+      </div>
+    </Modal>
   );
 }
