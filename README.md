@@ -14,13 +14,41 @@ Claude Code sessions.
 
 ## Features
 
-| Area | Description |
-|---|---|
-| **Dashboard** | Scans `PROJECTS_DIR` and shows a card per project: name, path, last modified, size, detected stack, Git status (branch, dirty/clean, recent commits), README excerpt. Click → detail view with file tree + rendered README. Auto & manual refresh. |
-| **Launcher** | Pick a project + raw prompt → GPT improves/sharpens the prompt for that project (or no AI / manually split into up to 6 sessions) → starts **Claude Code** in the project folder with `--dangerously-skip-permissions` as a **live terminal grid** (1–6 boxes, stably numbered #1–#6). Sessions survive page reloads (server-side PTY). **"Review sessions"** lets the review assistant summarize each session's output (*done / still open*), opens a Markdown report as its own page, and reads the summary aloud via TTS. |
-| **GitHub** | Clone connected repos and edit them directly with Claude Code. |
-| **Repo Push** | Push edited repos after confirmation (never automatically). |
-| **Settings** | Runtime configuration (model, voice, key status …). |
+### Dashboard
+
+The dashboard scans your configured `PROJECTS_DIR` and shows a card for every
+direct subfolder — including project name, path, last-modified date, size,
+detected tech stack, Git status (branch, dirty/clean state, most recent
+commits), and a README excerpt. Clicking a card opens a detail view with a
+full file tree and rendered README. The list refreshes automatically and on
+demand.
+
+### Claude Code Session Management
+
+The **Launcher** is where you start and supervise Claude Code sessions. You
+choose a project, write a prompt, and optionally let an OpenAI model sharpen
+it before work begins. Claude Code then opens in a live terminal grid of up to
+six parallel sessions — each box stably numbered #1–#6. Sessions are backed by
+real server-side PTYs, so they survive browser reloads without losing output.
+
+Once sessions are running, the built-in **review assistant** reads each
+terminal's scrollback, asks a language model to classify what is already done
+and what is still open, and presents the result as a formatted Markdown report
+on its own page. The report can optionally be read aloud via text-to-speech
+(Cartesia Sonic).
+
+### GitHub Integration
+
+The GitHub section lets you clone any repository you have access to and work
+on it with Claude Code exactly like a local project. When Claude Code has
+finished its changes, the **Repo Push** page lets you push the result back —
+but only after an explicit confirmation step. Pushing never happens
+automatically.
+
+### Settings
+
+Model, voice, API key status, and other runtime options can be adjusted at any
+time through the Settings page — no server restart required.
 
 ---
 
@@ -48,6 +76,15 @@ Claude Code sessions.
 ---
 
 ## Setup
+
+### 1 — Repository klonen
+
+```powershell
+git clone https://github.com/LuiInventions/Claude-code-web-manager.git
+cd Claude-code-web-manager
+```
+
+### 2 — Installation & Konfiguration
 
 A PowerShell script handles installation and API-key configuration end to end:
 
