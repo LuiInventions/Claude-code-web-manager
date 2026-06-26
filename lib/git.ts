@@ -213,3 +213,61 @@ export async function gitPush(
     ? { ok: false, message: "git push fehlgeschlagen (Konflikt, kein Remote oder Auth?)." }
     : { ok: true, message: `Gepusht nach origin/${branch}.` };
 }
+
+/**
+ * Commit any local changes, integrate new remote commits (merge), then push.
+ * Backs the GitHub tab's "Update" button. The token is passed per-invocation via
+ * an auth header (never written to .git/config). On a merge conflict the merge is
+ * aborted so the working tree is left clean and nothing is lost.
+ */
+export async function gitSyncAndPush(
+  dir: string,
+  token: string,
+  message: string,
+): Promise<{ ok: boolean; message: string; conflict?: boolean }> {
+  const branch = await gitCurrentBranch(dir);
+  if (!branch) return { ok: false, message: "Kein Branch gefunden." };
+
+  // 1. Commit local changes if the working tree is dirty.
+  const porcelain = await git(dir, ["status", "--porcelain"]);
+  const dirty = !!porcelain && porcelain.trim().length > 0;
+  let committed = false;
+  if (dirty) {
+    if (!(await gitCommitAll(dir, message)))
+      return { ok: false, message: "Commit fehlgeschlagen (git user.name/email gesetzt?)." };
+    committed = true;
+  }
+
+  // 2. Fetch the latest remote state.
+  if ((await git(dir, [...buildAuthHeaderArg(token), "fetch", "origin"])) === null)
+    return { ok: false, message: "git fetch fehlgeschlagen (kein Remote oder Auth?)." };
+
+  // 3. If the remote gained commits, merge them in.
+  let merged = false;
+  const behindRaw = await git(dir, ["rev-list", "--count", `HEAD..origin/${branch}`]);
+  const behind = Number.parseInt((behindRaw ?? "0").trim(), 10) || 0;
+  if (behind > 0) {
+    if ((await git(dir, ["merge", "--no-edit", `origin/${branch}`])) === null) {
+      await git(dir, ["merge", "--abort"]);
+      return {
+        ok: false,
+        conflict: true,
+        message: "Merge-Konflikt — bitte Dateien manuell lösen.",
+      };
+    }
+    merged = true;
+  }
+
+  // 4. Push.
+  if ((await git(dir, [...buildAuthHeaderArg(token), "push", "origin", branch])) === null)
+    return { ok: false, message: "git push fehlgeschlagen (Auth oder Konflikt?)." };
+
+  // 5. Describe what happened.
+  if (!committed && !merged) {
+    const aheadRaw = await git(dir, ["rev-list", "--count", `origin/${branch}..HEAD`]);
+    const ahead = Number.parseInt((aheadRaw ?? "0").trim(), 10) || 0;
+    if (ahead === 0) return { ok: true, message: "Nichts zu pushen." };
+  }
+  const parts = [committed && "committed", merged && "merged", "pushed"].filter(Boolean);
+  return { ok: true, message: `${parts.join(" + ")} ✓` };
+}
