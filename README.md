@@ -77,10 +77,12 @@ time through the Settings page — no server restart required.
 
 ## Setup
 
+Open powershell terminal
+
 ### 1 — Clone the repository
 
 ```powershell
-git clone https://github.com/LuiInventions/Claude-code-web-manager.git
+git clone https://github.com/LuiInventions/Claude-code-web-manager
 ```
 
 ```powershell
