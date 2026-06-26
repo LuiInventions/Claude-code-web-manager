@@ -98,3 +98,8 @@ export function upsertRepo(repo: StoredRepo): void {
 export function clearGithubState(): void {
   writeGithubState(EMPTY_STATE);
 }
+
+/** Resolve a known repo's local clone path by its `owner/name`, or null. */
+export function findRepoPath(repos: StoredRepo[], fullName: string): string | null {
+  return repos.find((r) => r.fullName === fullName)?.localPath ?? null;
+}

@@ -3,6 +3,7 @@ import {
   setRepoStatus,
   setRepoPrivate,
   addOrReplaceRepo,
+  findRepoPath,
   type StoredRepo,
 } from "../github-store";
 
@@ -59,5 +60,18 @@ describe("addOrReplaceRepo", () => {
     const next = addOrReplaceRepo(repos, updated);
     expect(next).toHaveLength(2);
     expect(next.find((r) => r.fullName === "u/b")?.private).toBe(true);
+  });
+});
+
+describe("findRepoPath", () => {
+  const repos = [
+    { ...repo("octo/a"), localPath: "C:/repos/a" },
+    { ...repo("octo/b"), localPath: "C:/repos/b" },
+  ];
+  it("returns the localPath for a known fullName", () => {
+    expect(findRepoPath(repos, "octo/b")).toBe("C:/repos/b");
+  });
+  it("returns null for an unknown fullName", () => {
+    expect(findRepoPath(repos, "octo/zzz")).toBeNull();
   });
 });
