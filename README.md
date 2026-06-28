@@ -6,12 +6,6 @@ Claude Code sessions.
 
 <img width="1920" height="1080" alt="Desktop Screenshot 2026 06 28 - 19 27 23 07" src="https://github.com/user-attachments/assets/961f27e3-c90e-4594-bbbc-ce2fa462e56b" />
 
-> ⚠️ **Security warning — this app is intentionally powerful.**
-> It can launch **Claude Code in `--dangerously-skip-permissions` mode** and push
-> repositories. It is meant **for local, personal use only** and therefore binds
-> **exclusively to the loopback address** (`127.0.0.1`). **Never** expose it
-> externally (no `0.0.0.0`, no reverse proxy, no port forwarding).
-
 ---
 
 ## Features
