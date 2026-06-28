@@ -129,6 +129,7 @@ async function boot(): Promise<void> {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
   });
 
@@ -146,8 +147,20 @@ async function boot(): Promise<void> {
     return { action: "allow" };
   });
 
-  mainWindow.webContents.on("did-fail-load", (_e, code, desc, url) => {
-    log("did-fail-load", code, desc, url);
+  mainWindow.webContents.on("did-fail-load", (_e, code, desc, url, isMainFrame) => {
+    log("did-fail-load", code, desc, url, "mainFrame=" + isMainFrame);
+    // -3 is ERR_ABORTED (benign: redirects/cancelled loads). Only surface real
+    // main-frame failures so the user isn't left staring at a blank window.
+    if (isMainFrame && code !== -3) {
+      try {
+        dialog.showErrorBox(
+          "Seite konnte nicht geladen werden",
+          `URL: ${url}\nFehler: ${desc} (${code})\n\nLog: ${LOG_FILE}`,
+        );
+      } catch {
+        /* ignore */
+      }
+    }
   });
   mainWindow.webContents.on("render-process-gone", (_e, details) => {
     log("render-process-gone", JSON.stringify(details));

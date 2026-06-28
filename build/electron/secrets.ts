@@ -18,14 +18,36 @@ const STORE = () => path.join(app.getPath("userData"), "secrets.enc");
 
 let cache: Secrets = {};
 
+/** Best-effort diagnostic line into the same startup log main.ts writes. */
+function note(msg: string): void {
+  try {
+    fs.appendFileSync(
+      path.join(app.getPath("userData"), "startup.log"),
+      `[${new Date().toISOString()}] [secrets] ${msg}\n`,
+    );
+  } catch {
+    /* ignore */
+  }
+  // eslint-disable-next-line no-console
+  console.warn("[secrets] " + msg);
+}
+
 export function loadSecretStore(): Secrets {
+  if (!safeStorage.isEncryptionAvailable()) {
+    note("OS encryption (DPAPI) unavailable — secrets will be stored as PLAINTEXT on disk");
+  }
   try {
     const buf = fs.readFileSync(STORE());
     const json = safeStorage.isEncryptionAvailable()
       ? safeStorage.decryptString(buf)
       : buf.toString("utf8");
     cache = JSON.parse(json) as Secrets;
-  } catch {
+  } catch (err) {
+    // ENOENT is normal (no secrets saved yet). Anything else means the store is
+    // unreadable/corrupt — surface it instead of silently dropping all keys.
+    if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") {
+      note("failed to read/decrypt secrets.enc — keys reset this session: " + String(err));
+    }
     cache = {};
   }
   return cache;

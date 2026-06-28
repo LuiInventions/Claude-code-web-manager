@@ -45,8 +45,14 @@ export async function startServer(
     console.error("[control-center] server error:", err);
   });
 
-  await new Promise<void>((resolve) => {
+  // Reject (not hang) if listen() fails — e.g. the port is taken. Without this
+  // the startup promise would never settle and the Electron app would hang with
+  // no window and no error dialog.
+  await new Promise<void>((resolve, reject) => {
+    const onListenError = (err: Error) => reject(err);
+    server.once("error", onListenError);
     server.listen(port, host, () => {
+      server.removeListener("error", onListenError);
       if (!opts.quiet) {
         console.log(
           `\n  ▸ Claude Code Control Center  →  http://${host}:${port}   (loopback only)\n`,

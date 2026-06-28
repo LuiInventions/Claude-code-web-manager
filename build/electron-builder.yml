@@ -14,6 +14,7 @@ directories:
 files:
   - build/electron/**/*.js
   - build/electron/dist/**/*
+  - build/resources/**/*
   - .next/**/*
   - next.config.mjs
   - package.json
@@ -25,6 +26,10 @@ win:
     - portable
 nsis:
   oneClick: false
+  # Per-user install (default LOCALAPPDATA\Programs\...) so the app dir stays
+  # writable — the Next server and node-pty need to write there at runtime, and
+  # it keeps installs from requiring admin rights.
+  perMachine: false
   allowToChangeInstallationDirectory: true
   installerIcon: build/resources/icon.ico
   uninstallerIcon: build/resources/icon.ico
