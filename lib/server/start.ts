@@ -14,11 +14,15 @@ export interface RunningServer {
  * Boots Next + the ws hub on the loopback interface. Used by the CLI entry
  * (server.ts) and by the Electron main process.
  */
-export async function startServer(opts: { quiet?: boolean } = {}): Promise<RunningServer> {
+export async function startServer(
+  opts: { quiet?: boolean; dir?: string } = {},
+): Promise<RunningServer> {
   const { host, port } = getConfig();
   const dev = process.env.NODE_ENV !== "production";
 
-  const app = next({ dev, hostname: host, port });
+  // `dir` lets the Electron main process point Next at the app root (where
+  // `.next` lives) independently of the working directory. Defaults to cwd.
+  const app = next({ dev, dir: opts.dir, hostname: host, port });
   await app.prepare();
 
   const handle = app.getRequestHandler();
