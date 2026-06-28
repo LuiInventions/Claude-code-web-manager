@@ -1,5 +1,5 @@
-import Shell from "./components/Shell";
+import AppGate from "./components/AppGate";
 
 export default function Home() {
-  return <Shell />;
+  return <AppGate />;
 }

@@ -20,7 +20,6 @@ export interface SecretsBridge {
 }
 
 declare global {
-  // eslint-disable-next-line no-var
   var __ccc_secrets: SecretsBridge | undefined;
 }
 
