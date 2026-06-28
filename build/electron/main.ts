@@ -17,7 +17,9 @@ function ensureDepsFromSource() {
 async function boot() {
   ensureDepsFromSource();
   installBridge();
-  process.env.NODE_ENV = "production";
+  // Packaged app runs the prebuilt Next production server; unpackaged dev runs
+  // Next in dev mode (no prior `next build` required).
+  if (app.isPackaged) process.env.NODE_ENV = "production";
 
   // server.cjs is produced by the build step (bundle-server.mjs) from lib/server/start.ts.
   const { startServer } = require(path.join(__dirname, "dist", "server.cjs")) as {

@@ -2,6 +2,7 @@
   "name": "claude-code-control-center",
   "version": "0.1.0",
   "private": true,
+  "main": "build/electron/main.js",
   "scripts": {
     "dev": "tsx watch server.ts",
     "build": "next build",
@@ -9,7 +10,10 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "bundle:server": "node build/scripts/bundle-server.mjs",
+    "electron:dev": "npm run bundle:server && electron build/electron/main.js",
+    "electron:build": "next build && npm run bundle:server && electron-builder --config build/electron-builder.yml"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
