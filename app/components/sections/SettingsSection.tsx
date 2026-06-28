@@ -10,6 +10,8 @@ interface PublicConfig {
   openaiModel: string;
   hasApiKey: boolean;
   hasCartesiaKey: boolean;
+  hasPicovoiceKey: boolean;
+  ready: boolean;
   cartesiaVoice: string;
   host: string;
   port: number;
@@ -28,6 +30,9 @@ export default function SettingsSection() {
   const [projectsDir, setProjectsDir] = useState("");
   const [model, setModel] = useState("");
   const [voice, setVoice] = useState("");
+  const [openaiKey, setOpenaiKey] = useState("");
+  const [cartesiaKey, setCartesiaKey] = useState("");
+  const [picovoiceKey, setPicovoiceKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +70,29 @@ export default function SettingsSection() {
       const d = await r.json();
       if (d.error) throw new Error(d.error);
       setCfg(d);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveKey = async (
+    field: "openaiApiKey" | "cartesiaApiKey" | "picovoiceAccessKey",
+    value: string,
+  ) => {
+    setSaving(true);
+    setError(null);
+    try {
+      await fetch("/api/secrets", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      });
+      const c = await fetch("/api/settings").then((r) => r.json());
+      setCfg(c);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (e) {
@@ -150,31 +178,47 @@ export default function SettingsSection() {
         </Card>
 
         <Card className="space-y-4 p-5">
-          <div className="flex items-center justify-between gap-3">
-            <Label icon={KeyRound} title="OpenAI API key" hint="Reasoning + prompt improver. Server-side only." />
-            {cfg.hasApiKey ? (
-              <Badge tone="running" dot>
-                set
-              </Badge>
-            ) : (
-              <Badge tone="danger" dot>
-                missing
-              </Badge>
-            )}
-          </div>
+          <KeyRow
+            icon={KeyRound}
+            title="OpenAI API key"
+            hint="Reasoning + prompt improver. Encrypted at rest."
+            has={cfg.hasApiKey}
+            value={openaiKey}
+            onChange={setOpenaiKey}
+            onSave={() => {
+              saveKey("openaiApiKey", openaiKey);
+              setOpenaiKey("");
+            }}
+            onClear={() => saveKey("openaiApiKey", "")}
+          />
           <div className="h-px bg-line" />
-          <div className="flex items-center justify-between gap-3">
-            <Label icon={AudioLines} title="Cartesia API key" hint="Speech (STT + TTS). Server-side only." />
-            {cfg.hasCartesiaKey ? (
-              <Badge tone="running" dot>
-                set
-              </Badge>
-            ) : (
-              <Badge tone="danger" dot>
-                missing
-              </Badge>
-            )}
-          </div>
+          <KeyRow
+            icon={AudioLines}
+            title="Cartesia API key"
+            hint="Speech (STT + TTS). Encrypted at rest."
+            has={cfg.hasCartesiaKey}
+            value={cartesiaKey}
+            onChange={setCartesiaKey}
+            onSave={() => {
+              saveKey("cartesiaApiKey", cartesiaKey);
+              setCartesiaKey("");
+            }}
+            onClear={() => saveKey("cartesiaApiKey", "")}
+          />
+          <div className="h-px bg-line" />
+          <KeyRow
+            icon={KeyRound}
+            title="Picovoice Access key"
+            hint="Local wake-word. Encrypted at rest."
+            has={cfg.hasPicovoiceKey}
+            value={picovoiceKey}
+            onChange={setPicovoiceKey}
+            onSave={() => {
+              saveKey("picovoiceAccessKey", picovoiceKey);
+              setPicovoiceKey("");
+            }}
+            onClear={() => saveKey("picovoiceAccessKey", "")}
+          />
           <div className="h-px bg-line" />
           <div className="flex items-center justify-between gap-3">
             <Label icon={Server} title="Server" hint="Local access only." />
@@ -193,6 +237,52 @@ export default function SettingsSection() {
           </Button>
           <span className="text-xs text-faint">Changes apply immediately — no restart needed.</span>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function KeyRow({
+  icon,
+  title,
+  hint,
+  has,
+  value,
+  onChange,
+  onSave,
+  onClear,
+}: {
+  icon: LucideIcon;
+  title: string;
+  hint: string;
+  has: boolean;
+  value: string;
+  onChange: (v: string) => void;
+  onSave: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <Label icon={icon} title={title} hint={hint} />
+        <Badge tone={has ? "running" : "danger"} dot>
+          {has ? "set" : "missing"}
+        </Badge>
+      </div>
+      <div className="flex gap-2">
+        <Input
+          type="password"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={has ? "•••••••• (leer lassen, um zu behalten)" : "Key eingeben"}
+          className="font-mono text-[13px]"
+        />
+        <Button variant="secondary" onClick={onSave} disabled={!value.trim()}>
+          Save
+        </Button>
+        <Button variant="ghost" onClick={onClear} disabled={!has}>
+          Clear
+        </Button>
       </div>
     </div>
   );
