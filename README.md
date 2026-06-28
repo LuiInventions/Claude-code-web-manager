@@ -1,3 +1,4 @@
+<img width="1920" height="1080" alt="Desktop Screenshot 2026 06 28 - 19 25 12 92" src="https://github.com/user-attachments/assets/caeaec6c-d540-40f6-8e7f-71bd01b2f9c2" />
 # Claude Code Control Center
 
 A local **control center** for your projects and **Claude Code** — a web app that
