@@ -1,5 +1,7 @@
 import path from "node:path";
+import { existsSync } from "node:fs";
 import { readSettings } from "./settings";
+import { readSecrets } from "./secrets";
 
 /**
  * Central configuration. Precedence (highest first):
@@ -43,6 +45,7 @@ export const DEFAULT_CARTESIA_VOICE = "b7187e84-fe22-4344-ba4a-bc013fcb533e";
 
 export function getConfig(): AppConfig {
   const settings = readSettings();
+  const secrets = readSecrets();
 
   const host = process.env.HOST?.trim() || "127.0.0.1";
   const port = Number.parseInt(process.env.PORT || "3100", 10) || 3100;
@@ -72,16 +75,16 @@ export function getConfig(): AppConfig {
     port,
     projectsDir: path.resolve(projectsDir),
     githubDir: path.resolve(githubDir),
-    openaiApiKey: process.env.OPENAI_API_KEY?.trim() || undefined,
+    openaiApiKey: secrets.openaiApiKey,
     openaiModel,
     openaiSummaryModel: process.env.OPENAI_SUMMARY_MODEL?.trim() || "gpt-4o-mini",
-    cartesiaApiKey: process.env.CARTESIA_API_KEY?.trim() || undefined,
+    cartesiaApiKey: secrets.cartesiaApiKey,
     cartesiaVersion: process.env.CARTESIA_VERSION?.trim() || "2026-03-01",
     cartesiaTtsModel: process.env.CARTESIA_TTS_MODEL?.trim() || "sonic-turbo",
     cartesiaSttModel: process.env.CARTESIA_STT_MODEL?.trim() || "ink-whisper",
     cartesiaVoice,
     voiceLanguage: process.env.VOICE_LANGUAGE?.trim() || "de",
-    picovoiceAccessKey: process.env.PICOVOICE_ACCESS_KEY?.trim() || undefined,
+    picovoiceAccessKey: secrets.picovoiceAccessKey,
     claudeBin: process.env.CLAUDE_BIN?.trim() || "claude",
     dataDir: path.join(process.cwd(), ".data"),
   };
@@ -93,6 +96,8 @@ export interface PublicConfig {
   openaiModel: string;
   hasApiKey: boolean;
   hasCartesiaKey: boolean;
+  hasPicovoiceKey: boolean;
+  ready: boolean;
   cartesiaVoice: string;
   host: string;
   port: number;
@@ -100,11 +105,14 @@ export interface PublicConfig {
 
 export function getPublicConfig(): PublicConfig {
   const c = getConfig();
+  const hasApiKey = Boolean(c.openaiApiKey);
   return {
     projectsDir: c.projectsDir,
     openaiModel: c.openaiModel,
-    hasApiKey: Boolean(c.openaiApiKey),
+    hasApiKey,
     hasCartesiaKey: Boolean(c.cartesiaApiKey),
+    hasPicovoiceKey: Boolean(c.picovoiceAccessKey),
+    ready: hasApiKey && existsSync(c.projectsDir),
     cartesiaVoice: c.cartesiaVoice,
     host: c.host,
     port: c.port,

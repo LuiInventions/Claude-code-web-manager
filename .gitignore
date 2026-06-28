@@ -17,8 +17,11 @@
 /.next/
 /out/
 
-# production
-/build
+# electron build output (keep build/ source tracked)
+/build/dist/
+/build/electron/dist/
+/build/electron/out/
+/build/electron/*.js
 
 # misc
 .DS_Store

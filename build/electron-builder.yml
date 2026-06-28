@@ -1,0 +1,27 @@
+appId: com.luis.claudecontrolcenter
+productName: Claude Code Control Center
+# node-pty ships runtime-agnostic N-API prebuilds (prebuilds/win32-x64), so no
+# native rebuild against Electron's ABI is needed — skip it to avoid requiring a
+# C++ toolchain. The prebuilt .node files are asarUnpacked below.
+npmRebuild: false
+# Keep the app unpacked on disk (no asar) so the custom Next server can read
+# `.next`/`next.config.ts` and node-pty can load its prebuilt .node files via
+# plain filesystem paths.
+asar: false
+directories:
+  output: build/dist
+  buildResources: build/resources
+files:
+  - build/electron/**/*.js
+  - build/electron/dist/**/*
+  - .next/**/*
+  - next.config.ts
+  - package.json
+  - node_modules/**/*
+win:
+  target:
+    - nsis
+    - portable
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

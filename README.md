@@ -50,7 +50,8 @@ time through the Settings page — no server restart required.
 
 ## Tech stack
 
-- **Next.js 16** (App Router) + **TypeScript** + **React 19** + **Tailwind CSS v4**
+- **Next.js 15** (App Router) + **TypeScript** + **React 19** + **Tailwind CSS v4**
+- **Electron** desktop shell (optional) — packages the whole thing as a Windows `.exe`
 - **Custom Node server** (`server.ts`) — binds to `127.0.0.1`, hosts Next plus a
   **`ws` WebSocket server**; HMR upgrades go to Next, `/ws/*` to us.
 - **`node-pty`** (real PTYs for the Claude sessions), **`child_process`** (Git)
@@ -154,13 +155,44 @@ Priority order (highest first): `.data/settings.json` (Settings UI) →
 ## Scripts
 
 ```powershell
-npm run dev        # Dev server (custom server.ts, watch mode)
-npm run build      # Production build (Next)
-npm run start      # Production server
-npm run test       # Unit tests (vitest)
-npm run typecheck  # tsc --noEmit
-npm run lint       # ESLint
+npm run dev            # Dev server (custom server.ts, watch mode)
+npm run build          # Production build (Next, compile mode)
+npm run start          # Production server
+npm run test           # Unit tests (vitest)
+npm run typecheck      # tsc --noEmit
+npm run lint           # ESLint
+npm run electron:dev   # Desktop app from source (own window, DevTools)
+npm run electron:build # Self-contained Windows .exe -> build/dist/
 ```
+
+---
+
+## Desktop app (.exe)
+
+The control center can be packaged as a standalone **Windows desktop app** that
+renders the whole UI in its own window while still running the server on
+`127.0.0.1` internally.
+
+```powershell
+npm run electron:build
+```
+
+This produces, in `build/dist/`, an **NSIS installer** and a **portable**
+`.exe` — both self-contained (no `npm install` or internet needed at runtime).
+On first launch the app shows a **setup screen** asking for your projects folder
+(with a native folder picker) and API keys. Keys are stored **encrypted**
+(Windows DPAPI via Electron `safeStorage`) in your user profile — never in the
+project folder — and remain editable later under **Settings**. User data
+(`settings.json`) is written to the per-user `userData` directory, so an
+installed app keeps working across updates.
+
+For development with the desktop shell (runs from source, Next in dev mode):
+
+```powershell
+npm run electron:dev
+```
+
+All Electron wrapper code and the build output live under `build/`.
 
 ---
 
