@@ -5,7 +5,7 @@ productName: Claude Code Control Center
 # C++ toolchain. The prebuilt .node files are asarUnpacked below.
 npmRebuild: false
 # Keep the app unpacked on disk (no asar) so the custom Next server can read
-# `.next`/`next.config.ts` and node-pty can load its prebuilt .node files via
+# `.next`/`next.config.mjs` and node-pty can load its prebuilt .node files via
 # plain filesystem paths.
 asar: false
 directories:
@@ -15,13 +15,18 @@ files:
   - build/electron/**/*.js
   - build/electron/dist/**/*
   - .next/**/*
-  - next.config.ts
+  - next.config.mjs
   - package.json
   - node_modules/**/*
 win:
+  icon: build/resources/icon.ico
   target:
     - nsis
     - portable
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  installerIcon: build/resources/icon.ico
+  uninstallerIcon: build/resources/icon.ico
+  installerHeaderIcon: build/resources/icon.ico
+  shortcutName: Claude Code Control Center
