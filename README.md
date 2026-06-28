@@ -1,9 +1,10 @@
-<img width="1920" height="1080" alt="Desktop Screenshot 2026 06 28 - 19 25 12 92" src="https://github.com/user-attachments/assets/caeaec6c-d540-40f6-8e7f-71bd01b2f9c2" />
 # Claude Code Control Center
 
 A local **control center** for your projects and **Claude Code** — a web app that
 runs **exclusively on `127.0.0.1`** and starts, manages, and reviews multiple
 Claude Code sessions.
+
+<img width="1920" height="1080" alt="Desktop Screenshot 2026 06 28 - 19 27 23 07" src="https://github.com/user-attachments/assets/961f27e3-c90e-4594-bbbc-ce2fa462e56b" />
 
 > ⚠️ **Security warning — this app is intentionally powerful.**
 > It can launch **Claude Code in `--dangerously-skip-permissions` mode** and push
