@@ -4,6 +4,21 @@
 > launches, supervises, and reviews up to six Claude Code sessions at once.
 > Runs **exclusively on `127.0.0.1`**, for you and only you.
 
+<p align="center">
+  <a href="https://github.com/LuiInventions/Claude-code-web-manager/releases/latest">
+    <img alt="Download the Windows installer" src="https://img.shields.io/badge/⬇%20Download-Windows%20Installer%20(.exe)-2ea44f?style=for-the-badge&logo=windows&logoColor=white" />
+  </a>
+  &nbsp;
+  <a href="https://github.com/LuiInventions/Claude-code-web-manager/releases/latest">
+    <img alt="Latest release" src="https://img.shields.io/github/v/release/LuiInventions/Claude-code-web-manager?style=for-the-badge&label=latest&color=24292e" />
+  </a>
+</p>
+
+<p align="center">
+  <b>No Node, no terminal, no setup</b> — grab the installer and you're running in two
+  clicks. Prefer source? Jump to <a href="#option-b--from-source">Option B</a>.
+</p>
+
 <img width="1920" height="1080" alt="Desktop Screenshot 2026 06 28 - 19 27 23 07" src="https://github.com/user-attachments/assets/961f27e3-c90e-4594-bbbc-ce2fa462e56b" />
 
 ---
@@ -23,9 +38,10 @@ no overview of your projects, and no memory of what each run actually accomplish
 - **Work on GitHub repos** as if they were local: clone, edit with Claude, then
   commit + pull + push with one click.
 
-It ships two ways: as a **web app** you run from source, or as a packaged **Windows
-desktop app** (`.exe`) that bundles everything. Either way the server binds hard to
-loopback — nothing is ever exposed to your network.
+It ships two ways: as a ready-to-install **Windows desktop app** — just
+[**download the `.exe`**](https://github.com/LuiInventions/Claude-code-web-manager/releases/latest)
+and run it — or as a **web app** you start from source. Either way the server binds hard
+to loopback, so nothing is ever exposed to your network.
 
 ---
 
@@ -65,8 +81,8 @@ loopback — nothing is ever exposed to your network.
   **wake-word**, plus text-to-speech for reviews (Cartesia + Picovoice).
 - 🐙 **GitHub built in** — connect a token, clone, create repos, flip visibility, and
   **commit + pull + push** in one click (never automatically).
-- 🖥️ **Desktop build** — one self-contained Windows `.exe`, keys stored encrypted via
-  Windows DPAPI, no internet needed at runtime.
+- 🖥️ **One-click desktop app** — [download a self-contained Windows `.exe`](https://github.com/LuiInventions/Claude-code-web-manager/releases/latest);
+  no Node, no terminal, keys encrypted at rest via Windows DPAPI.
 
 ---
 
@@ -152,8 +168,27 @@ contributors want **Option B** (run from source).
 
 ### Option A — Desktop app (.exe)
 
-A standalone **Windows desktop app** that renders the whole UI in its own window while
-running the loopback server internally. Build it yourself:
+**This is the easiest way to run the app — no Node.js, no terminal, no `npm install`.**
+
+1. **Download the installer** from the
+   [**latest release**](https://github.com/LuiInventions/Claude-code-web-manager/releases/latest):
+   **`Claude-Code-Control-Center-Setup-<version>.exe`**.
+2. **Run it.** It installs per-user (no admin rights required) and adds a Start-menu
+   shortcut. The whole UI runs in its own window while the loopback server stays internal.
+3. **First launch → setup screen.** Pick your projects folder (native folder picker) and
+   enter your API keys.
+
+The installer is **fully self-contained** — Node, Next.js, and Claude Code's runtime
+dependencies are bundled, so nothing else is downloaded at runtime. Your API keys are
+stored **encrypted** (Windows DPAPI via Electron `safeStorage`) in your user profile,
+never in the app folder, and stay editable later under **Settings**. User data lives in
+the per-user `userData` directory, so the app keeps your settings across updates.
+
+> You still need the **Claude Code CLI** installed and logged in, plus an **OpenAI API
+> key** — see [Requirements](#requirements).
+
+<details>
+<summary><strong>Build the installer yourself instead</strong></summary>
 
 ```powershell
 npm install
@@ -161,17 +196,10 @@ npm run electron:build
 ```
 
 This produces, in `build/dist/`, an **NSIS installer** and a **portable** `.exe` — both
-self-contained (no `npm install` or internet needed at runtime). Prebuilt installers, when
-published, are on the repo's **Releases** page.
+self-contained. For developing the desktop shell, `npm run electron:dev` runs it from
+source with Next.js in dev mode and DevTools available.
 
-On **first launch** the app shows a **setup screen** asking for your projects folder (with
-a native folder picker) and API keys. Keys are stored **encrypted** (Windows DPAPI via
-Electron `safeStorage`) in your user profile — never in the project folder — and stay
-editable later under **Settings**. User data lives in the per-user `userData` directory,
-so an installed app keeps working across updates.
-
-> Prefer to develop the desktop shell? `npm run electron:dev` runs it from source with
-> Next.js in dev mode and DevTools available.
+</details>
 
 ### Option B — From source
 
