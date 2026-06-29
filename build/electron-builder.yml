@@ -1,5 +1,12 @@
 appId: com.luis.claudecontrolcenter
 productName: Claude Code Control Center
+# Publisher identity written into the executable + installer version info. The
+# Windows "Unknown publisher" (SmartScreen / UAC) warning only disappears once
+# the build is signed with a certificate issued by a real Certificate Authority
+# — see build/SIGNING.md. Signing is OPT-IN via env vars (CSC_LINK +
+# CSC_KEY_PASSWORD, or a win.azureSignOptions block); with none set,
+# electron-builder produces an UNSIGNED build carrying this metadata only.
+copyright: © 2026 LT Digital Concepts (Luis Kleemann)
 # node-pty ships runtime-agnostic N-API prebuilds (prebuilds/win32-x64), so no
 # native rebuild against Electron's ABI is needed — skip it to avoid requiring a
 # C++ toolchain. The prebuilt .node files are asarUnpacked below.
@@ -21,6 +28,13 @@ files:
   - node_modules/**/*
 win:
   icon: build/resources/icon.ico
+  # electron-builder v26 nests signing options under `signtoolOptions`. The
+  # publisher name matches the certificate subject once signing is enabled
+  # (CSC_LINK + CSC_KEY_PASSWORD env, or an `azureSignOptions` block). With no
+  # certificate present the build is unsigned but keeps this publisher metadata.
+  # See build/SIGNING.md.
+  signtoolOptions:
+    publisherName: LT Digital Concepts
   target:
     - nsis
     - portable
@@ -35,3 +49,8 @@ nsis:
   uninstallerIcon: build/resources/icon.ico
   installerHeaderIcon: build/resources/icon.ico
   shortcutName: Claude Code Control Center
+  # Downloadable installer file name: cc-control-center-Setup-<version>.exe
+  artifactName: cc-control-center-Setup-${version}.${ext}
+portable:
+  # Downloadable portable file name: cc-control-center-<version>.exe
+  artifactName: cc-control-center-${version}.${ext}

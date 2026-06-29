@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FolderOpen, KeyRound, Rocket, Sparkles } from "lucide-react";
+import { Cpu, FolderOpen, KeyRound, Rocket, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button, Card, Input } from "./ui";
 
@@ -10,12 +10,15 @@ interface ProviderOpt {
   label: string;
   keysUrl: string;
   listModels: boolean;
+  defaultModel: string;
+  models: string[];
 }
 
 export default function SetupScreen({ onReady }: { onReady: () => void }) {
   const [projectsDir, setProjectsDir] = useState("");
   const [providers, setProviders] = useState<ProviderOpt[]>([]);
   const [provider, setProvider] = useState("openai");
+  const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,9 +28,10 @@ export default function SetupScreen({ onReady }: { onReady: () => void }) {
   useEffect(() => {
     fetch("/api/settings")
       .then((r) => r.json())
-      .then((c: { providers?: ProviderOpt[]; aiProvider?: string }) => {
+      .then((c: { providers?: ProviderOpt[]; aiProvider?: string; aiModel?: string }) => {
         setProviders(c.providers ?? []);
         if (c.aiProvider) setProvider(c.aiProvider);
+        if (c.aiModel) setModel(c.aiModel);
       })
       .catch(() => {});
   }, []);
@@ -35,6 +39,14 @@ export default function SetupScreen({ onReady }: { onReady: () => void }) {
   const pick = async () => {
     const dir = await desktop?.pickFolder();
     if (dir) setProjectsDir(dir);
+  };
+
+  // Switching provider resets the model to that provider's default so the
+  // dropdown never shows a model that belongs to a different provider.
+  const onProvider = (id: string) => {
+    setProvider(id);
+    const p = providers.find((x) => x.id === id);
+    if (p) setModel(p.defaultModel);
   };
 
   const submit = async () => {
@@ -56,7 +68,14 @@ export default function SetupScreen({ onReady }: { onReady: () => void }) {
       const set = await fetch("/api/settings", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ projectsDir: projectsDir.trim(), aiProvider: provider }),
+        body: JSON.stringify({
+          projectsDir: projectsDir.trim(),
+          aiProvider: provider,
+          aiModel: model.trim() || undefined,
+          // Stamp this version so the welcome screen doesn't reappear until the
+          // next update (config.ready gate). The GitHub token is left intact.
+          setupComplete: true,
+        }),
       });
       const d = await set.json();
       if (d.error) throw new Error(d.error);
@@ -70,6 +89,7 @@ export default function SetupScreen({ onReady }: { onReady: () => void }) {
   };
 
   const current = providers.find((p) => p.id === provider);
+  const modelOptions = current?.models ?? [];
 
   return (
     <div className="flex h-screen items-center justify-center overflow-auto bg-elevated p-6">
@@ -110,7 +130,7 @@ export default function SetupScreen({ onReady }: { onReady: () => void }) {
           />
           <select
             value={provider}
-            onChange={(e) => setProvider(e.target.value)}
+            onChange={(e) => onProvider(e.target.value)}
             className="h-9 w-full cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
           >
             {providers.map((p) => (
@@ -119,6 +139,27 @@ export default function SetupScreen({ onReady }: { onReady: () => void }) {
               </option>
             ))}
           </select>
+
+          {modelOptions.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Cpu className="size-4 shrink-0 text-faint" />
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="h-9 w-full cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
+              >
+                {model && !modelOptions.includes(model) && (
+                  <option value={model}>{model} (aktuell)</option>
+                )}
+                {modelOptions.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="flex items-center gap-2">
             <KeyRound className="size-4 shrink-0 text-faint" />
             <Input

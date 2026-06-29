@@ -53,3 +53,21 @@ export async function listChatModels(): Promise<string[]> {
   }
   return [...new Set(ids)].sort();
 }
+
+/**
+ * Models for the Settings/Setup dropdown of the ACTIVE provider: the provider's
+ * curated list first (always available, no key required), enriched with the
+ * live `/models` result when a key is present. Deduplicated, curated order kept.
+ * Never throws — a live-listing failure degrades to the curated list.
+ */
+export async function listModelsForUi(): Promise<string[]> {
+  const { aiProvider } = getConfig();
+  const curated = getProvider(aiProvider).models ?? [];
+  let live: string[] = [];
+  try {
+    live = await listChatModels();
+  } catch {
+    live = [];
+  }
+  return [...new Set([...curated, ...live])];
+}

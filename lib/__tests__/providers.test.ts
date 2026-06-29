@@ -35,6 +35,17 @@ describe("AI provider registry", () => {
     }
   });
 
+  it("every provider ships a curated model list containing its default model", () => {
+    for (const p of PROVIDERS) {
+      expect(Array.isArray(p.models)).toBe(true);
+      expect(p.models.length).toBeGreaterThan(0);
+      // The default must be selectable from the dropdown.
+      expect(p.models).toContain(p.defaultModel);
+      // No duplicate entries within a provider's list.
+      expect(new Set(p.models).size).toBe(p.models.length);
+    }
+  });
+
   it("default provider is openai and present", () => {
     expect(DEFAULT_PROVIDER_ID).toBe("openai");
     expect(getProvider(DEFAULT_PROVIDER_ID).id).toBe("openai");

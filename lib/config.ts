@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { readSettings } from "./settings";
 import { readSecrets, secretsStatus } from "./secrets";
 import { PROVIDERS, DEFAULT_PROVIDER_ID, getProvider } from "./providers";
+import { appVersion } from "./version";
 
 /**
  * Central configuration. Precedence (highest first):
@@ -121,14 +122,29 @@ export interface PublicConfig {
   aiModel: string;
   /** Whether the ACTIVE provider has a key (drives optional AI features). */
   hasAiKey: boolean;
-  /** All providers for the dropdown. */
-  providers: { id: string; label: string; keysUrl: string; listModels: boolean }[];
+  /** All providers for the dropdown, each with its curated current models. */
+  providers: {
+    id: string;
+    label: string;
+    keysUrl: string;
+    listModels: boolean;
+    defaultModel: string;
+    models: string[];
+  }[];
   /** Which provider ids currently have a key set. */
   providerStatus: Record<string, boolean>;
   hasCartesiaKey: boolean;
   hasPicovoiceKey: boolean;
-  /** Ready = a valid projects folder exists. AI keys are optional. */
+  /**
+   * Ready = a valid projects folder exists AND setup was completed on THIS app
+   * version. A version bump (e.g. 1.1 → 1.2) flips this false so the
+   * welcome/provider screen runs again; the GitHub token is left untouched.
+   */
   ready: boolean;
+  /** Running app version (drives the setup-after-update gate). */
+  appVersion: string;
+  /** Selected Sessions-tab visualization ("pixel" office | "flow" graph). */
+  sessionsView: "pixel" | "flow";
   cartesiaVoice: string;
   host: string;
   port: number;
@@ -137,6 +153,8 @@ export interface PublicConfig {
 export function getPublicConfig(): PublicConfig {
   const c = getConfig();
   const status = secretsStatus();
+  const settings = readSettings();
+  const version = appVersion();
   return {
     projectsDir: c.projectsDir,
     aiProvider: c.aiProvider,
@@ -147,11 +165,18 @@ export function getPublicConfig(): PublicConfig {
       label: p.label,
       keysUrl: p.keysUrl,
       listModels: p.listModels,
+      defaultModel: p.defaultModel,
+      models: p.models,
     })),
     providerStatus: status.providers,
     hasCartesiaKey: status.hasCartesia,
     hasPicovoiceKey: status.hasPicovoice,
-    ready: existsSync(c.projectsDir),
+    // Setup is (re)required when no folder exists OR the stamped setupVersion
+    // doesn't match this build — the version gate forces the welcome screen
+    // after an update while leaving the GitHub token + other userData in place.
+    ready: existsSync(c.projectsDir) && settings.setupVersion === version,
+    appVersion: version,
+    sessionsView: settings.sessionsView === "flow" ? "flow" : "pixel",
     cartesiaVoice: c.cartesiaVoice,
     host: c.host,
     port: c.port,

@@ -20,6 +20,14 @@ export interface Settings {
   openaiModel?: string;
   /** Cartesia voice id override (German voice for Jarvis). */
   cartesiaVoice?: string;
+  /**
+   * App version that last completed first-run setup. When it differs from the
+   * running version the welcome/provider screen runs again after an update.
+   * The GitHub token (separate `.data/github-secret.json`) is never touched.
+   */
+  setupVersion?: string;
+  /** Which Sessions-tab visualization is selected ("pixel" office | "flow" graph). */
+  sessionsView?: "pixel" | "flow";
 }
 
 const DATA_DIR = path.join(process.cwd(), ".data");

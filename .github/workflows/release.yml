@@ -1,0 +1,57 @@
+name: Release
+
+# Builds the self-contained Windows installer and publishes it to a GitHub
+# Release whenever a v* tag is pushed (e.g. `git tag v1.2.0 && git push --tags`).
+#
+# Signing is optional: if the repo secrets CSC_LINK (base64 of a .pfx) and
+# CSC_KEY_PASSWORD are present, electron-builder signs the build and the
+# "Unknown publisher" warning goes away. Without them the build is unsigned but
+# carries the LT Digital Concepts publisher metadata. See build/SIGNING.md.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build installer (.exe)
+        run: npm run electron:build
+        env:
+          # Forwarded to electron-builder. Empty when the secrets are unset →
+          # an unsigned build. Set both repo secrets to sign (build/SIGNING.md).
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $assets = Get-ChildItem build/dist -Filter "cc-control-center-*.exe" | ForEach-Object { $_.FullName }
+          if (-not $assets) { throw "No cc-control-center-*.exe produced in build/dist" }
+          gh release create "$env:GITHUB_REF_NAME" $assets `
+            --title "cc-control-center $env:GITHUB_REF_NAME" `
+            --notes "Self-contained Windows build of Claude Code Control Center ($env:GITHUB_REF_NAME). Download the Setup .exe below and run it. See build/SIGNING.md regarding the publisher signature."

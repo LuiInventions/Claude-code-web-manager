@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Code,
+  Gamepad2,
   LayoutDashboard,
   PanelLeftClose,
   PanelLeftOpen,
@@ -20,6 +21,7 @@ import {
 } from "./app-commands";
 import DashboardSection from "./sections/DashboardSection";
 import LauncherSection from "./sections/LauncherSection";
+import SessionsSection from "./sections/SessionsSection";
 import SettingsSection from "./sections/SettingsSection";
 import GithubSection from "./sections/GithubSection";
 
@@ -32,6 +34,7 @@ interface SectionDef {
 
 const MAIN_SECTIONS: SectionDef[] = [
   { id: "launcher", label: "Launcher", desc: "Improve prompt & launch Claude Code", icon: Rocket },
+  { id: "sessions", label: "Sessions", desc: "Live Claude Code sessions, visualized", icon: Gamepad2 },
   { id: "dashboard", label: "Local Projects", desc: "All your local projects at a glance", icon: LayoutDashboard },
   { id: "github", label: "GitHub", desc: "Connect repos & edit with Claude", icon: Code },
 ];
@@ -149,6 +152,8 @@ function renderSection(id: SectionId, command: SectionCommand | null) {
       return <DashboardSection />;
     case "launcher":
       return <LauncherSection command={command} />;
+    case "sessions":
+      return <SessionsSection />;
     case "github":
       return <GithubSection />;
     case "settings":

@@ -51,6 +51,7 @@ to loopback, so nothing is ever exposed to your network.
 - [Features](#features)
   - [Local Projects](#local-projects)
   - [Launcher — run Claude Code](#launcher--run-claude-code)
+  - [Sessions — visualize your agents](#sessions--visualize-your-agents)
   - [GitHub](#github)
   - [Settings](#settings)
 - [A typical session](#a-typical-session)
@@ -71,6 +72,10 @@ to loopback, so nothing is ever exposed to your network.
 - 🗂️ **Local Projects** — every folder in your projects directory at a glance.
 - 🚀 **Up to 6 parallel Claude Code sessions** in a live terminal grid, backed by real
   server-side PTYs that survive page reloads.
+- 🎮 **Sessions, visualized** — a dedicated tab renders every launcher session graphically,
+  live: a **pixel-art office** (a character per agent, inspired by *pixel-agents*) or a
+  **flow graph** (a node per session, inspired by *agent-flow*) — your pick, switchable
+  any time.
 - 🧠 **Prompt improver & "KI Modus"** — let any of **11 AI providers** (OpenAI, Groq,
   xAI/Grok, OpenRouter, DeepSeek, Mistral, Together, Fireworks, Perplexity, Gemini,
   Cerebras) sharpen your prompt, or split one big task into focused sub-sessions. Fully
@@ -122,6 +127,25 @@ scrollback, asks a language model to classify what is **already done** and what 
 **still open**, and presents the result as a formatted **Markdown report** on its own
 page. Reports can optionally be **read aloud** via text-to-speech (Cartesia Sonic).
 
+### Sessions — visualize your agents
+
+The **Sessions** tab turns the launcher's live Claude Code sessions into a graphical view —
+every session you start in the Launcher shows up here within a couple of seconds, and
+disappears when it's stopped. Pick the look you prefer (the choice is remembered):
+
+- **Pixel office** — a homage to
+  [**pixel-agents**](https://github.com/pixel-agents-hq/pixel-agents): each session becomes
+  its own little **animated character** at a desk. It types while the agent is running,
+  sits calmly when the run is done, and flags red on error.
+- **Flow graph** — a homage to
+  [**agent-flow**](https://github.com/patoles/agent-flow): the Launcher is the root node and
+  each session **branches off as a node**; **KI-Modus** splits fan out from a shared batch
+  hub, so a parallel run reads as one tree.
+
+Both views are **built into the app** (offline, no extra install) and are driven by the same
+live session registry the Launcher uses, so what you see always matches what's actually
+running. Full credit to the two upstream projects that inspired each style.
+
 ### GitHub
 
 The GitHub section lets you connect a personal access token and work with remote
@@ -141,7 +165,9 @@ repositories as if they were local projects:
 
 Choose your **AI provider** — OpenAI, Groq, xAI (Grok), OpenRouter, DeepSeek, Mistral,
 Together, Fireworks, Perplexity, Google Gemini, or Cerebras (11 in all) — enter its key,
-and pick a model (auto-filled from the provider, or typed in). Voice, projects directory,
+and **pick a model from a dropdown of that provider's current models**. The dropdown is
+shown for **every** provider, even before you add a key, and is enriched with the
+provider's live model list once a key is set. Voice, projects directory,
 and **API-key status** are adjustable here too — **no server restart required**. The AI
 provider is **optional**: without a key the prompt improver and session review are simply
 disabled and everything else keeps working. Keys are entered here (or on the first-run
@@ -180,11 +206,23 @@ contributors want **Option B** (run from source).
 
 1. **Download the installer** from the
    [**latest release**](https://github.com/LuiInventions/Claude-code-web-manager/releases/latest):
-   **`Claude-Code-Control-Center-Setup-<version>.exe`**.
+   **`cc-control-center-Setup-<version>.exe`**.
 2. **Run it.** It installs per-user (no admin rights required) and adds a Start-menu
    shortcut. The whole UI runs in its own window while the loopback server stays internal.
-3. **First launch → setup screen.** Pick your projects folder (native folder picker) and
-   enter your API keys.
+3. **First launch → setup screen.** Pick your projects folder (native folder picker),
+   choose an AI provider and model from the dropdowns, and (optionally) enter its key.
+
+> **Publisher & the "Unknown publisher" prompt.** The app is published by
+> **LT Digital Concepts (Luis Kleemann)** — you'll see that name in the file's
+> Details. Until the build is signed with a CA-issued certificate, Windows
+> SmartScreen may still show an "Unknown publisher" prompt; click **More info →
+> Run anyway**. The signing pipeline is wired and ready — see
+> [`build/SIGNING.md`](build/SIGNING.md).
+
+> **Updating is safe.** After installing a new version the welcome/setup screen
+> runs once more (so you can re-confirm provider + model), but your data in the
+> per-user profile — including your **connected GitHub token** and saved keys —
+> is **kept**.
 
 The installer is **fully self-contained** — Node, Next.js, and Claude Code's runtime
 dependencies are bundled, so nothing else is downloaded at runtime. Your API keys are
@@ -192,8 +230,9 @@ stored **encrypted** (Windows DPAPI via Electron `safeStorage`) in your user pro
 never in the app folder, and stay editable later under **Settings**. User data lives in
 the per-user `userData` directory, so the app keeps your settings across updates.
 
-> You still need the **Claude Code CLI** installed and logged in, plus an **OpenAI API
-> key** — see [Requirements](#requirements).
+> You still need the **Claude Code CLI** installed and logged in. An **AI provider key**
+> is **optional** (any one of 11 providers) and only powers the prompt improver, KI Modus,
+> and reviews — see [Requirements](#requirements).
 
 <details>
 <summary><strong>Build the installer yourself instead</strong></summary>
@@ -318,9 +357,9 @@ A **custom Node server** (`server.ts`) binds to `127.0.0.1` and hosts both Next.
 **`ws` WebSocket server** on the same port: HMR upgrades go to Next, everything under
 `/ws/*` goes to us. Claude Code sessions stream over WebSocket (`/ws/claude-pty`,
 `/ws/claude`) and run as real **`node-pty`** PTYs on the server, which is why they survive
-reloads. Git runs via `child_process`; the **OpenAI SDK** (Responses API) powers prompt
-improvement, splitting, and review; **Cartesia** handles voice; the desktop shell is
-**Electron**.
+reloads. Git runs via `child_process`; an **OpenAI-compatible SDK** (Chat Completions,
+across all 11 providers) powers prompt improvement, splitting, and review; **Cartesia**
+handles voice; the desktop shell is **Electron**.
 
 ```text
 server.ts                Custom server: Next + ws, binds 127.0.0.1
@@ -351,7 +390,8 @@ app/
                          [improve, split, review, sessions, usage], settings,
                          models, secrets, open, github [+ create, update,
                          visibility, changes], voice [tts, voices])
-  components/            Shell, sections (Local Projects/Launcher/GitHub/Settings), setup
+  components/            Shell, sections (Local Projects/Launcher/Sessions/GitHub/Settings),
+                         sessions/ (pixel-office + flow-graph views), setup
 build/                   Electron wrapper + electron-builder config + build scripts
 .data/                   Local storage (gitignored): settings.json, secrets.json,
                          index.json, launcher.json

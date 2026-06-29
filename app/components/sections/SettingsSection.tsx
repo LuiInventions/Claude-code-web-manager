@@ -10,6 +10,8 @@ interface ProviderOpt {
   label: string;
   keysUrl: string;
   listModels: boolean;
+  defaultModel: string;
+  models: string[];
 }
 
 interface PublicConfig {
@@ -124,7 +126,10 @@ export default function SettingsSection() {
   };
 
   const changeProvider = async (id: string) => {
-    await saveSettings({ aiProvider: id });
+    const next = cfg?.providers.find((p) => p.id === id);
+    // Reset the model to the new provider's default so it never carries over a
+    // model id that belongs to a different provider.
+    await saveSettings({ aiProvider: id, aiModel: next?.defaultModel });
     setAiKey("");
     await loadModels();
   };
@@ -137,7 +142,9 @@ export default function SettingsSection() {
     );
 
   const provider = cfg.providers.find((p) => p.id === cfg.aiProvider);
-  const canList = Boolean(provider?.listModels) && models.length > 0;
+  // Every provider now ships a curated model list, so the dropdown shows
+  // whenever we have any models (curated baseline + live /models when keyed).
+  const canList = models.length > 0;
 
   return (
     <div className="min-h-0 flex-1 overflow-auto">

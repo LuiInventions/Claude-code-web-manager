@@ -89,6 +89,11 @@ async function boot(): Promise<void> {
   log("boot start", "version=" + app.getVersion(), "packaged=" + app.isPackaged);
   log("ROOT=" + ROOT, "__dirname=" + __dirname, "electron=" + process.versions.electron);
 
+  // Expose the running version to the Next server (lib/version.ts) so it can
+  // gate first-run setup after an update — the welcome/provider screen reappears
+  // on a version bump while the GitHub token + other userData stay intact.
+  process.env.CCC_APP_VERSION = app.getVersion();
+
   ensureDepsFromSource();
   installBridge();
   log("secret bridge installed");
