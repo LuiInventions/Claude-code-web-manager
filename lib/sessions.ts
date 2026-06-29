@@ -5,10 +5,14 @@
  * launcher's live Claude Code PTY sessions; each one gets a stable visual
  * identity here so a session keeps the same character/colour across refreshes.
  *
- * The two views are homages to the upstream projects:
+ * The two views are native re-creations of the upstream projects' designs:
  *   - pixel-agents  — https://github.com/pixel-agents-hq/pixel-agents
  *   - agent-flow    — https://github.com/patoles/agent-flow
  */
+
+import type { LiveActivity, DetectedSubagent } from "./session-activity";
+
+export type { LiveActivity, DetectedSubagent } from "./session-activity";
 
 export type SessionStatus = "running" | "done" | "error";
 
@@ -27,18 +31,42 @@ export interface VisualSession {
   startedAt: number;
   /** KI-Modus splits share a batchId; used to group sessions in the flow view. */
   batchId?: string;
+  /** Rich live activity parsed server-side from the output tail. */
+  activity?: LiveActivity;
+  /** In-session subagents (Task tool) detected server-side. */
+  subagents?: DetectedSubagent[];
+  /** ms timestamp of the last output byte. */
+  lastActivityAt?: number;
 }
 
 /** Which visualization the Sessions tab renders. */
 export type SessionView = "pixel" | "flow";
 
-/** Coarse activity derived from status — drives the character animation. */
+/** Coarse activity derived from status — kept for back-compat. */
 export type Activity = "working" | "done" | "error";
 
 export function statusActivity(status: SessionStatus): Activity {
   if (status === "running") return "working";
   if (status === "error") return "error";
   return "done";
+}
+
+/**
+ * Rich activity for a session: prefers the server-parsed live activity, falling
+ * back to the coarse status (older payloads / before the first parse tick).
+ */
+export function sessionActivity(
+  s: Pick<VisualSession, "status" | "activity">,
+): LiveActivity {
+  if (s.activity) return s.activity;
+  if (s.status === "running") return "working";
+  if (s.status === "error") return "error";
+  return "done";
+}
+
+/** Whether a session is asking for the user's attention (≈ needs approval). */
+export function needsAttention(s: Pick<VisualSession, "status" | "activity">): boolean {
+  return sessionActivity(s) === "waiting";
 }
 
 /** Character/node palette — distinct hues, readable on the dark theme. */

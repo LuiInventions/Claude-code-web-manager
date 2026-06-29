@@ -9,6 +9,11 @@ import {
   type ConsoleSummary,
   type ConsoleSnapshot,
 } from "../console-read";
+import {
+  detectActivity,
+  type LiveActivity,
+  type DetectedSubagent,
+} from "../session-activity";
 import type { SessionOutput } from "../session-review";
 
 /**
@@ -47,6 +52,8 @@ interface PtySession {
   buffer: string;
   status: "running" | "done" | "error";
   exitCode?: number;
+  /** ms timestamp of the last byte received — feeds the idle/activity heuristic. */
+  lastDataAt: number;
   meta: PtyMeta;
   clients: Set<WebSocket>;
 }
@@ -65,12 +72,35 @@ export interface PtySessionInfo extends PtyMeta {
   id: string;
   status: "running" | "done" | "error";
   exitCode?: number;
+  /** Live activity derived from the output tail (thinking/working/waiting/…). */
+  activity: LiveActivity;
+  /** In-session subagents (Task tool) detected in the output. */
+  subagents: DetectedSubagent[];
+  /** ms timestamp of the last output byte (for the idle heuristic on the client). */
+  lastActivityAt: number;
 }
 
 /** Live sessions, newest first — lets the launcher re-list after a refresh. */
 export function listPtySessions(): PtySessionInfo[] {
+  const now = Date.now();
   return Array.from(SESSIONS.values())
-    .map((s) => ({ id: s.id, status: s.status, exitCode: s.exitCode, ...s.meta }))
+    .map((s) => {
+      const { activity, subagents } = detectActivity({
+        tail: tailText(s.buffer),
+        status: s.status,
+        lastDataAtMs: s.lastDataAt,
+        now,
+      });
+      return {
+        id: s.id,
+        status: s.status,
+        exitCode: s.exitCode,
+        activity,
+        subagents,
+        lastActivityAt: s.lastDataAt,
+        ...s.meta,
+      };
+    })
     .sort((a, b) => b.startedAt - a.startedAt);
 }
 
@@ -228,6 +258,7 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
     term,
     buffer: "",
     status: "running",
+    lastDataAt: Date.now(),
     meta: {
       cwd,
       prompt,
@@ -247,6 +278,7 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
     session.buffer += d;
     if (session.buffer.length > BUFFER_CAP)
       session.buffer = session.buffer.slice(-BUFFER_CAP);
+    session.lastDataAt = Date.now();
     broadcast(session, { t: "out", d });
   });
 
