@@ -49,7 +49,7 @@ to loopback, so nothing is ever exposed to your network.
 
 - [Highlights](#highlights)
 - [Features](#features)
-  - [Dashboard](#dashboard)
+  - [Local Projects](#local-projects)
   - [Launcher — run Claude Code](#launcher--run-claude-code)
   - [GitHub](#github)
   - [Settings](#settings)
@@ -68,11 +68,13 @@ to loopback, so nothing is ever exposed to your network.
 
 ## Highlights
 
-- 🗂️ **Project dashboard** — every folder in your projects directory at a glance.
+- 🗂️ **Local Projects** — every folder in your projects directory at a glance.
 - 🚀 **Up to 6 parallel Claude Code sessions** in a live terminal grid, backed by real
   server-side PTYs that survive page reloads.
-- 🧠 **Prompt improver & "KI Modus"** — let an OpenAI model sharpen your prompt, or split
-  one big task into several focused sub-sessions automatically.
+- 🧠 **Prompt improver & "KI Modus"** — let any of **11 AI providers** (OpenAI, Groq,
+  xAI/Grok, OpenRouter, DeepSeek, Mistral, Together, Fireworks, Perplexity, Gemini,
+  Cerebras) sharpen your prompt, or split one big task into focused sub-sessions. Fully
+  **optional** — without a key the app still launches and supervises Claude.
 - 🎛️ **Per-launch model & effort** — pick Opus / Sonnet / Haiku / Fable and a reasoning
   effort, or keep Claude Code's defaults.
 - 📋 **Session review** — an LLM reads each terminal's scrollback and reports what's done
@@ -88,9 +90,9 @@ to loopback, so nothing is ever exposed to your network.
 
 ## Features
 
-### Dashboard
+### Local Projects
 
-The dashboard scans your configured projects directory and renders a card for every
+The Local Projects view scans your configured projects directory and renders a card for every
 direct subfolder, showing the project **name, path, last-modified date, size, detected
 tech stack**, and **Git status** (branch, clean/dirty, latest commits) plus a short
 README excerpt. Click any card to open a detail view with the **full file tree** and the
@@ -101,8 +103,9 @@ README excerpt. Click any card to open a detail view with the **full file tree**
 The Launcher is the heart of the app. The flow:
 
 1. **Pick a project** and write a prompt.
-2. **(Optional) Improve it** — an OpenAI model rewrites the prompt to be clearer and more
-   actionable before any code runs.
+2. **(Optional) Improve it** — your chosen AI provider rewrites the prompt to be clearer
+   and more actionable before any code runs. Pick from 11 providers in Settings, or skip
+   it entirely with **Start without improvement**.
 3. **(Optional) KI Modus** — instead of one session, let the model **split** your task
    into 1–6 structured sub-prompts that run in parallel (e.g. "tests", "docs", "refactor").
 4. **Choose model & effort** — Opus 4.8 / Sonnet 4.6 / Haiku 4.5 / Fable 5 and a reasoning
@@ -125,7 +128,7 @@ The GitHub section lets you connect a personal access token and work with remote
 repositories as if they were local projects:
 
 - **Clone** any repo you have access to, then launch Claude Code on it just like a
-  dashboard project.
+  local project.
 - **Create** a new repository or **change its visibility** (public ↔ private) without
   leaving the app.
 - **Update** — each repo card has one button that **commits** the local changes,
@@ -136,17 +139,22 @@ repositories as if they were local projects:
 
 ### Settings
 
-Model, voice, projects directory, and **API-key status** are all adjustable at runtime
-from the Settings page — **no server restart required**. Keys are entered here (or on the
-first-run setup screen) and stored server-side; the UI only ever shows **whether** a key
-is set, never its value.
+Choose your **AI provider** — OpenAI, Groq, xAI (Grok), OpenRouter, DeepSeek, Mistral,
+Together, Fireworks, Perplexity, Google Gemini, or Cerebras (11 in all) — enter its key,
+and pick a model (auto-filled from the provider, or typed in). Voice, projects directory,
+and **API-key status** are adjustable here too — **no server restart required**. The AI
+provider is **optional**: without a key the prompt improver and session review are simply
+disabled and everything else keeps working. Keys are entered here (or on the first-run
+setup screen) and stored server-side — encrypted in the desktop app — and the UI only ever
+shows **whether** a key is set, never its value. The app opens on the **Launcher** by
+default.
 
 ---
 
 ## A typical session
 
 ```text
-Dashboard ──▶ open project        Launcher ──▶ prompt ──▶ (improve / split) ──▶ Start
+Local Projects ──▶ open project   Launcher ──▶ prompt ──▶ (improve / split) ──▶ Start
                                                                                   │
                                           ┌───────────────────────────────────────┘
                                           ▼
@@ -260,7 +268,10 @@ npm run dev
 - **Windows 11**, **Node.js ≥ 20.9** (developed/tested on Node 24)
 - **git** on your `PATH`
 - **Claude Code CLI** (`claude`) installed and logged in
-- An **OpenAI API key** — required for the prompt improver, KI Modus, and reviews.
+- *(Optional)* an API key for **any one of 11 AI providers** (OpenAI, Groq, xAI/Grok,
+  OpenRouter, DeepSeek, Mistral, Together, Fireworks, Perplexity, Gemini, Cerebras) —
+  powers the prompt improver, KI Modus, and reviews. Without one the app still launches
+  and supervises Claude; only these AI features are disabled.
 - *(Optional)* a **Cartesia API key** for voice (speech-to-text input + reading reviews
   aloud), and a **Picovoice access key** for the local wake-word. Everything else works
   without them.
@@ -275,8 +286,9 @@ Precedence, highest first: **Settings UI** (`.data/settings.json`) → **environ
 
 | Variable | What it controls | Default |
 |---|---|---|
-| `OPENAI_API_KEY` | OpenAI key — prompt improver, KI Modus, reviews. **Server-side only.** | – *(required)* |
-| `OPENAI_MODEL` | Model used for prompt improving, splitting & review | `gpt-5.4-mini` |
+| `OPENAI_API_KEY` | OpenAI key — prompt improver, KI Modus, reviews. **Server-side only.** | – *(optional)* |
+| `GROQ_API_KEY`, `XAI_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `MISTRAL_API_KEY`, `TOGETHER_API_KEY`, `FIREWORKS_API_KEY`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`, `CEREBRAS_API_KEY` | Keys for the other 10 AI providers. Server-side only. | – *(optional)* |
+| `OPENAI_MODEL` | Legacy OpenAI model (provider + model are normally chosen in Settings → `aiProvider` / `aiModel`) | `gpt-5.4-mini` |
 | `CARTESIA_API_KEY` | Cartesia key — voice in (STT) + out (TTS). Server-side only. | – *(optional)* |
 | `CARTESIA_VOICE` | TTS voice (selectable in Settings) | Sebastian – Orator |
 | `CARTESIA_TTS_MODEL` | Text-to-speech model | `sonic-turbo` |
@@ -339,7 +351,7 @@ app/
                          [improve, split, review, sessions, usage], settings,
                          models, secrets, open, github [+ create, update,
                          visibility, changes], voice [tts, voices])
-  components/            Shell, sections (Dashboard/Launcher/GitHub/Settings), setup
+  components/            Shell, sections (Local Projects/Launcher/GitHub/Settings), setup
 build/                   Electron wrapper + electron-builder config + build scripts
 .data/                   Local storage (gitignored): settings.json, secrets.json,
                          index.json, launcher.json
