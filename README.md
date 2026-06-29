@@ -1,114 +1,228 @@
 # Claude Code Control Center
 
-A local **control center** for your projects and **Claude Code** — a web app that
-runs **exclusively on `127.0.0.1`** and starts, manages, and reviews multiple
-Claude Code sessions.
+> A local mission control for **Claude Code** and your projects — a single app that
+> launches, supervises, and reviews up to six Claude Code sessions at once.
+> Runs **exclusively on `127.0.0.1`**, for you and only you.
+
+<p align="center">
+  <a href="https://github.com/LuiInventions/Claude-code-web-manager/releases/latest">
+    <img alt="Download the Windows installer" src="https://img.shields.io/badge/⬇%20Download-Windows%20Installer%20(.exe)-2ea44f?style=for-the-badge&logo=windows&logoColor=white" />
+  </a>
+  &nbsp;
+  <a href="https://github.com/LuiInventions/Claude-code-web-manager/releases/latest">
+    <img alt="Latest release" src="https://img.shields.io/github/v/release/LuiInventions/Claude-code-web-manager?style=for-the-badge&label=latest&color=24292e" />
+  </a>
+</p>
+
+<p align="center">
+  <b>No Node, no terminal, no setup</b> — grab the installer and you're running in two
+  clicks. Prefer source? Jump to <a href="#option-b--from-source">Option B</a>.
+</p>
 
 <img width="1920" height="1080" alt="Desktop Screenshot 2026 06 28 - 19 27 23 07" src="https://github.com/user-attachments/assets/961f27e3-c90e-4594-bbbc-ce2fa462e56b" />
 
 ---
 
+## What it is
+
+Claude Code is powerful on the command line, but a terminal gives you one session,
+no overview of your projects, and no memory of what each run actually accomplished.
+
+**Claude Code Control Center** wraps it in a real interface:
+
+- **Browse your projects** as cards — stack, Git status, size, README — and drill into any of them.
+- **Launch Claude Code** with a prompt (optionally AI-improved or split into parallel
+  sub-tasks) into a grid of live terminals that survive browser reloads.
+- **Review** what each session did — a language model reads the terminal output and
+  tells you what's done and what's still open, optionally read aloud.
+- **Work on GitHub repos** as if they were local: clone, edit with Claude, then
+  commit + pull + push with one click.
+
+It ships two ways: as a ready-to-install **Windows desktop app** — just
+[**download the `.exe`**](https://github.com/LuiInventions/Claude-code-web-manager/releases/latest)
+and run it — or as a **web app** you start from source. Either way the server binds hard
+to loopback, so nothing is ever exposed to your network.
+
+---
+
+## Table of contents
+
+- [Highlights](#highlights)
+- [Features](#features)
+  - [Dashboard](#dashboard)
+  - [Launcher — run Claude Code](#launcher--run-claude-code)
+  - [GitHub](#github)
+  - [Settings](#settings)
+- [A typical session](#a-typical-session)
+- [Quick start](#quick-start)
+  - [Option A — Desktop app (.exe)](#option-a--desktop-app-exe)
+  - [Option B — From source](#option-b--from-source)
+- [Requirements](#requirements)
+- [Configuration](#configuration)
+- [How it works](#how-it-works)
+- [Scripts](#scripts)
+- [Security](#security)
+- [License](#license)
+
+---
+
+## Highlights
+
+- 🗂️ **Project dashboard** — every folder in your projects directory at a glance.
+- 🚀 **Up to 6 parallel Claude Code sessions** in a live terminal grid, backed by real
+  server-side PTYs that survive page reloads.
+- 🧠 **Prompt improver & "KI Modus"** — let an OpenAI model sharpen your prompt, or split
+  one big task into several focused sub-sessions automatically.
+- 🎛️ **Per-launch model & effort** — pick Opus / Sonnet / Haiku / Fable and a reasoning
+  effort, or keep Claude Code's defaults.
+- 📋 **Session review** — an LLM reads each terminal's scrollback and reports what's done
+  vs. open, as Markdown you can also have **read aloud**.
+- 🎙️ **Voice in and out** — dictate prompts (speech-to-text) and an optional local
+  **wake-word**, plus text-to-speech for reviews (Cartesia + Picovoice).
+- 🐙 **GitHub built in** — connect a token, clone, create repos, flip visibility, and
+  **commit + pull + push** in one click (never automatically).
+- 🖥️ **One-click desktop app** — [download a self-contained Windows `.exe`](https://github.com/LuiInventions/Claude-code-web-manager/releases/latest);
+  no Node, no terminal, keys encrypted at rest via Windows DPAPI.
+
+---
+
 ## Features
 
-### Local Projects
+### Dashboard
 
-The Local Projects view scans your configured `PROJECTS_DIR` and shows a card for every
-direct subfolder — including project name, path, last-modified date, size,
-detected tech stack, Git status (branch, dirty/clean state, most recent
-commits), and a README excerpt. Clicking a card opens a detail view with a
-full file tree and rendered README. The list refreshes automatically and on
-demand.
+The dashboard scans your configured projects directory and renders a card for every
+direct subfolder, showing the project **name, path, last-modified date, size, detected
+tech stack**, and **Git status** (branch, clean/dirty, latest commits) plus a short
+README excerpt. Click any card to open a detail view with the **full file tree** and the
+**rendered README**. The list refreshes automatically and on demand.
 
-### Claude Code Session Management
+### Launcher — run Claude Code
 
-The **Launcher** is where you start and supervise Claude Code sessions. You
-choose a project, write a prompt, and optionally let an OpenAI model sharpen
-it before work begins. Claude Code then opens in a live terminal grid of up to
-six parallel sessions — each box stably numbered #1–#6. Sessions are backed by
-real server-side PTYs, so they survive browser reloads without losing output.
+The Launcher is the heart of the app. The flow:
 
-Once sessions are running, the built-in **review assistant** reads each
-terminal's scrollback, asks a language model to classify what is already done
-and what is still open, and presents the result as a formatted Markdown report
-on its own page. The report can optionally be read aloud via text-to-speech
-(Cartesia Sonic).
+1. **Pick a project** and write a prompt.
+2. **(Optional) Improve it** — an OpenAI model rewrites the prompt to be clearer and more
+   actionable before any code runs.
+3. **(Optional) KI Modus** — instead of one session, let the model **split** your task
+   into 1–6 structured sub-prompts that run in parallel (e.g. "tests", "docs", "refactor").
+4. **Choose model & effort** — Opus 4.8 / Sonnet 4.6 / Haiku 4.5 / Fable 5 and a reasoning
+   effort (`low` → `max`), or leave both on *Standard* to use Claude Code's own defaults.
+5. **Start** — Claude Code opens in a **live terminal grid of up to six sessions**, each
+   box stably numbered #1–#6.
 
-### GitHub Integration
+Sessions are backed by **real server-side PTYs**, so they keep running — and keep their
+output — even if you reload the browser or close and reopen the desktop window. A
+**usage bar** keeps token consumption visible while you work.
 
-The GitHub section lets you clone any repository you have access to and work
-on it with Claude Code exactly like a local project. Each repo card has an
-**Update** button that commits the local folder's changes, merges in anything
-the remote gained in the meantime, and pushes — one click, one repo. Pushing
-only happens when you press it; it never happens automatically.
+When a run is underway, the built-in **review assistant** reads each terminal's
+scrollback, asks a language model to classify what is **already done** and what is
+**still open**, and presents the result as a formatted **Markdown report** on its own
+page. Reports can optionally be **read aloud** via text-to-speech (Cartesia Sonic).
+
+### GitHub
+
+The GitHub section lets you connect a personal access token and work with remote
+repositories as if they were local projects:
+
+- **Clone** any repo you have access to, then launch Claude Code on it just like a
+  dashboard project.
+- **Create** a new repository or **change its visibility** (public ↔ private) without
+  leaving the app.
+- **Update** — each repo card has one button that **commits** the local changes,
+  **merges in** anything the remote gained meanwhile, and **pushes**. One click, one repo.
+
+> Pushing only ever happens when *you* press Update. Nothing is committed or pushed
+> automatically.
 
 ### Settings
 
-Choose your **AI provider** (OpenAI, Groq, xAI/Grok, OpenRouter, DeepSeek,
-Mistral, Together, Fireworks, Perplexity, Google Gemini, Cerebras — 11 in all),
-enter its API key, and pick a model. Voice and other runtime options are here
-too — no server restart required. The AI provider is **optional**: without a key
-the prompt improver and session review are simply disabled, and everything else
-keeps working. The app opens on the **Launcher** by default.
+Model, voice, projects directory, and **API-key status** are all adjustable at runtime
+from the Settings page — **no server restart required**. Keys are entered here (or on the
+first-run setup screen) and stored server-side; the UI only ever shows **whether** a key
+is set, never its value.
 
 ---
 
-## Tech stack
+## A typical session
 
-- **Next.js 15** (App Router) + **TypeScript** + **React 19** + **Tailwind CSS v4**
-- **Electron** desktop shell (optional) — packages the whole thing as a Windows `.exe`
-- **Custom Node server** (`server.ts`) — binds to `127.0.0.1`, hosts Next plus a
-  **`ws` WebSocket server**; HMR upgrades go to Next, `/ws/*` to us.
-- **`node-pty`** (real PTYs for the Claude sessions), **`child_process`** (Git)
-- **OpenAI SDK** — chat completions across **11 OpenAI-compatible providers**
-  (OpenAI, Groq, xAI, OpenRouter, DeepSeek, Mistral, Together, Fireworks,
-  Perplexity, Gemini, Cerebras) for prompt improvement + session review
-- **Cartesia** — TTS (Sonic) for reading the reviews aloud
-- **`xterm.js`**, **`highlight.js`**, **`react-markdown`**, **`lucide-react`**
+```text
+Dashboard ──▶ open project        Launcher ──▶ prompt ──▶ (improve / split) ──▶ Start
+                                                                                  │
+                                          ┌───────────────────────────────────────┘
+                                          ▼
+                        live terminal grid  #1  #2  #3   …  (real PTYs)
+                                          │
+                                          ▼
+                          Review ──▶ "done / open" Markdown report ──▶ 🔊 read aloud
+```
 
----
-
-## Requirements
-
-- **Windows 11**, **Node.js ≥ 20.9** (developed/tested with Node 24)
-- **git** on your `PATH`
-- **Claude Code CLI** (`claude`) installed and logged in
-- **Optional:** an API key for any one of the 11 AI providers (prompt improver +
-  review). Without it the app still launches and supervises Claude sessions —
-  only the AI-assisted features are disabled. For reading reviews aloud you also
-  need a **Cartesia API key** (TTS).
+You browse to a project, hand Claude Code a task, watch it work across one or more
+terminals, then ask for a review to see — in plain language — what actually got done.
 
 ---
 
-## Setup
+## Quick start
 
-Open powershell terminal
+There are two ways to run it. Most people want **Option A** (just an app); developers and
+contributors want **Option B** (run from source).
 
-### 1 — Clone the repository
+### Option A — Desktop app (.exe)
+
+**This is the easiest way to run the app — no Node.js, no terminal, no `npm install`.**
+
+1. **Download the installer** from the
+   [**latest release**](https://github.com/LuiInventions/Claude-code-web-manager/releases/latest):
+   **`Claude-Code-Control-Center-Setup-<version>.exe`**.
+2. **Run it.** It installs per-user (no admin rights required) and adds a Start-menu
+   shortcut. The whole UI runs in its own window while the loopback server stays internal.
+3. **First launch → setup screen.** Pick your projects folder (native folder picker) and
+   enter your API keys.
+
+The installer is **fully self-contained** — Node, Next.js, and Claude Code's runtime
+dependencies are bundled, so nothing else is downloaded at runtime. Your API keys are
+stored **encrypted** (Windows DPAPI via Electron `safeStorage`) in your user profile,
+never in the app folder, and stay editable later under **Settings**. User data lives in
+the per-user `userData` directory, so the app keeps your settings across updates.
+
+> You still need the **Claude Code CLI** installed and logged in, plus an **OpenAI API
+> key** — see [Requirements](#requirements).
+
+<details>
+<summary><strong>Build the installer yourself instead</strong></summary>
+
+```powershell
+npm install
+npm run electron:build
+```
+
+This produces, in `build/dist/`, an **NSIS installer** and a **portable** `.exe` — both
+self-contained. For developing the desktop shell, `npm run electron:dev` runs it from
+source with Next.js in dev mode and DevTools available.
+
+</details>
+
+### Option B — From source
+
+Open a **PowerShell** terminal.
+
+**1. Clone**
 
 ```powershell
 git clone https://github.com/LuiInventions/Claude-code-web-manager
-```
-
-```powershell
 cd Claude-code-web-manager
 ```
 
-### 2 — Install & configure
+**2. Install & configure (guided)**
 
-A PowerShell script handles installation and API-key configuration end to end:
+A PowerShell script handles install and API-key configuration end to end:
 
 ```powershell
-# From the project root, in PowerShell:
 .\setup.ps1
 ```
 
-The script will:
-
-1. Verify Node.js and git are available.
-2. Run `npm install`.
-3. Create `.env.local` from `.env.example` if it does not exist yet.
-4. Interactively prompt for your `OPENAI_API_KEY`, optional `CARTESIA_API_KEY`,
-   and `PROJECTS_DIR`, then write them into `.env.local`.
+It will: verify Node.js and git are available → run `npm install` → create `.env.local`
+from `.env.example` → interactively prompt for `OPENAI_API_KEY`, an optional
+`CARTESIA_API_KEY`, and your projects folder, and write them into `.env.local`.
 
 If PowerShell blocks the script, run it once for the current process only:
 
@@ -116,48 +230,120 @@ If PowerShell blocks the script, run it once for the current process only:
 powershell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
-Then start the dev server and open the app:
+**3. Start**
 
 ```powershell
 npm run dev
 ```
 
-Open in your browser: **http://127.0.0.1:3100**
+Then open **http://127.0.0.1:3100**. If any required setting is missing, the app greets you
+with the same **first-run setup screen** as the desktop build, so you can finish
+configuration in the browser.
 
-### Manual setup (alternative)
+<details>
+<summary><strong>Manual install (instead of <code>setup.ps1</code>)</strong></summary>
 
 ```powershell
 npm install
 copy .env.example .env.local
-#   -> set OPENAI_API_KEY (or have it set in the shell environment)
-#   -> set PROJECTS_DIR to your projects folder
+#   -> set OPENAI_API_KEY (or have it in the shell environment)
+#   -> set PROJECTS_DIR if you want a folder other than ./projects
 npm run dev
 ```
+
+</details>
+
+---
+
+## Requirements
+
+- **Windows 11**, **Node.js ≥ 20.9** (developed/tested on Node 24)
+- **git** on your `PATH`
+- **Claude Code CLI** (`claude`) installed and logged in
+- An **OpenAI API key** — required for the prompt improver, KI Modus, and reviews.
+- *(Optional)* a **Cartesia API key** for voice (speech-to-text input + reading reviews
+  aloud), and a **Picovoice access key** for the local wake-word. Everything else works
+  without them.
 
 ---
 
 ## Configuration
 
-Configured via `.env.local` **or** at runtime via the **Settings page**.
-Priority order (highest first): `.data/settings.json` (Settings UI) →
-`.env.local` → default.
+Settings come from `.env.local` **or** the in-app **Settings page** / first-run screen.
+Precedence, highest first: **Settings UI** (`.data/settings.json`) → **environment**
+(`.env.local`) → **built-in default**.
 
-| Variable | Meaning | Default |
+| Variable | What it controls | Default |
 |---|---|---|
-| `OPENAI_API_KEY` | OpenAI key — **server-side only**, never in the frontend | – (optional) |
-| `GROQ_API_KEY`, `XAI_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `MISTRAL_API_KEY`, `TOGETHER_API_KEY`, `FIREWORKS_API_KEY`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`, `CEREBRAS_API_KEY` | Keys for the other AI providers — server-side only | – (optional) |
-| `CARTESIA_API_KEY` | Cartesia key — TTS (read reviews aloud); server-side only | – (for speech output) |
-| `CARTESIA_VOICE` | Cartesia voice; selectable in Settings | Sebastian – Orator |
-| `CARTESIA_TTS_MODEL` | TTS model | `sonic-turbo` |
-| `PROJECTS_DIR` | Folder whose direct subfolders are treated as projects | your home folder |
+| `OPENAI_API_KEY` | OpenAI key — prompt improver, KI Modus, reviews. **Server-side only.** | – *(required)* |
+| `OPENAI_MODEL` | Model used for prompt improving, splitting & review | `gpt-5.4-mini` |
+| `CARTESIA_API_KEY` | Cartesia key — voice in (STT) + out (TTS). Server-side only. | – *(optional)* |
+| `CARTESIA_VOICE` | TTS voice (selectable in Settings) | Sebastian – Orator |
+| `CARTESIA_TTS_MODEL` | Text-to-speech model | `sonic-turbo` |
+| `CARTESIA_STT_MODEL` | Speech-to-text model | `ink-whisper` |
+| `VOICE_LANGUAGE` | Voice language | `de` |
+| `PICOVOICE_ACCESS_KEY` | Local wake-word (Porcupine) — optional | – |
+| `PROJECTS_DIR` | Folder whose direct subfolders are treated as projects | `./projects` (inside the app) |
+| `GITHUB_DIR` | Where cloned GitHub repos land | `./projects/github` |
 | `HOST` | Bind address — **do not change** | `127.0.0.1` |
 | `PORT` | Port | `3100` |
-| `CLAUDE_BIN` | Optional explicit path to the Claude CLI | auto (`where claude`) |
+| `CLAUDE_BIN` | Explicit path to the Claude CLI | auto (`where claude`) |
 
-> The active provider + model are chosen in **Settings** (stored in
-> `.data/settings.json` as `aiProvider` / `aiModel`). API keys are used
-> **server-side only** and never reach the frontend — the Settings page only
-> shows **whether** a key is set. In the desktop app keys are encrypted.
+> **Keys never reach the frontend.** They are used server-side only; the UI shows just
+> *whether* each key is set. In a source checkout, keys entered via the setup/Settings
+> screens are written to a gitignored `.data/secrets.json`; in the desktop build they are
+> encrypted with Windows DPAPI.
+
+Paths default to folders **inside the app directory** (not your home folder), so a fresh
+checkout is self-contained. Point `PROJECTS_DIR` / `GITHUB_DIR` elsewhere via the Settings
+UI or environment variables (use absolute paths).
+
+---
+
+## How it works
+
+A **custom Node server** (`server.ts`) binds to `127.0.0.1` and hosts both Next.js and a
+**`ws` WebSocket server** on the same port: HMR upgrades go to Next, everything under
+`/ws/*` goes to us. Claude Code sessions stream over WebSocket (`/ws/claude-pty`,
+`/ws/claude`) and run as real **`node-pty`** PTYs on the server, which is why they survive
+reloads. Git runs via `child_process`; the **OpenAI SDK** (Responses API) powers prompt
+improvement, splitting, and review; **Cartesia** handles voice; the desktop shell is
+**Electron**.
+
+```text
+server.ts                Custom server: Next + ws, binds 127.0.0.1
+lib/
+  config.ts              Configuration (env + settings.json + secrets)
+  secrets.ts             API-key storage (DPAPI in desktop, .data file in dev)
+  paths.ts, store.ts     Path / JSON helpers
+  projects.ts            Project scan
+  stack-detect.ts        Stack / framework detection
+  git.ts                 Git status
+  indexer.ts             Persistent project index
+  openai.ts              OpenAI client + model list
+  prompt-improver.ts     Prompt improvement for Claude
+  prompt-splitter.ts     "KI Modus" — split one prompt into sub-sessions
+  session-review.ts      Session review: output context + LLM → {markdown, speech}
+  console-read.ts        PTY scrollback → readable text tail
+  usage-store.ts         Token-usage tracking for the launcher
+  voice.ts               Cartesia STT + TTS
+  launcher-store.ts      Launcher history
+  window-instances.ts    Stable #1–#N numbering
+  server/
+    ws-hub.ts            WebSocket dispatch (/ws/*)
+    claude-pty.ts        Server-side Claude sessions (PTY registry)
+    claude-runner.ts     Spawns Claude Code, parses stream-json
+    bot-collect.ts       Collects live + persisted sessions
+app/
+  api/                   Route handlers (fs, projects, index, launcher
+                         [improve, split, review, sessions, usage], settings,
+                         models, secrets, open, github [+ create, update,
+                         visibility, changes], voice [tts, voices])
+  components/            Shell, sections (Dashboard/Launcher/GitHub/Settings), setup
+build/                   Electron wrapper + electron-builder config + build scripts
+.data/                   Local storage (gitignored): settings.json, secrets.json,
+                         index.json, launcher.json
+```
 
 ---
 
@@ -174,84 +360,22 @@ npm run electron:dev   # Desktop app from source (own window, DevTools)
 npm run electron:build # Self-contained Windows .exe -> build/dist/
 ```
 
----
-
-## Desktop app (.exe)
-
-The control center can be packaged as a standalone **Windows desktop app** that
-renders the whole UI in its own window while still running the server on
-`127.0.0.1` internally.
-
-```powershell
-npm run electron:build
-```
-
-This produces, in `build/dist/`, an **NSIS installer** and a **portable**
-`.exe` — both self-contained (no `npm install` or internet needed at runtime).
-On first launch the app shows a **setup screen** asking for your projects folder
-(with a native folder picker) and API keys. Keys are stored **encrypted**
-(Windows DPAPI via Electron `safeStorage`) in your user profile — never in the
-project folder — and remain editable later under **Settings**. User data
-(`settings.json`) is written to the per-user `userData` directory, so an
-installed app keeps working across updates.
-
-For development with the desktop shell (runs from source, Next in dev mode):
-
-```powershell
-npm run electron:dev
-```
-
-All Electron wrapper code and the build output live under `build/`.
+**Tech stack:** Next.js 15 (App Router) · React 19 · TypeScript · Tailwind CSS v4 ·
+Electron · `ws` · `node-pty` · OpenAI SDK · Cartesia · `xterm.js` · `highlight.js` ·
+`react-markdown` · `lucide-react`.
 
 ---
 
-## Architecture
+## Security
 
-```
-server.ts                Custom server: Next + ws, binds 127.0.0.1
-lib/
-  config.ts              Configuration (env + settings.json)
-  paths.ts, store.ts     Path / JSON helpers
-  projects.ts            Project scan
-  stack-detect.ts        Stack / framework detection
-  git.ts                 Git status
-  indexer.ts             Persistent project index
-  openai.ts              OpenAI client + model list
-  prompt-improver.ts     Prompt improvement for Claude
-  session-review.ts      Session review: output context + LLM → {markdown, speech}
-  console-read.ts        PTY scrollback → readable text tail
-  bot-summary.ts         Structured session overview (pure)
-  voice.ts               Cartesia TTS
-  launcher-store.ts      Launcher history
-  window-instances.ts    Stable #1–#N numbering
-  server/
-    ws-hub.ts            WebSocket dispatch (/ws/*)
-    claude-pty.ts        Server-side Claude sessions (PTY registry)
-    claude-runner.ts     Spawns Claude Code, parses stream-json
-    bot-collect.ts       Collects live + persisted sessions
-app/
-  api/                   Route handlers (fs, projects, index, launcher
-                         [incl. /launcher/review], settings, models, open,
-                         github [incl. /github/update], voice [tts, voices])
-  components/            Shell, UI primitives, sections
-.data/                   Local storage (gitignored):
-                         settings.json, index.json, launcher.json
-```
-
-Live streaming: **WebSocket** for the Claude sessions (`/ws/claude-pty`,
-`/ws/claude`).
-
----
-
-## Security notes
-
-- **Loopback only:** the server binds hard to `127.0.0.1`. Do not change `HOST`.
-- **Full privileges:** the Claude launcher runs commands with your user
-  privileges. This is intentional — run the app locally and only for yourself.
-- **Claude Code** is started with `--dangerously-skip-permissions` and can modify
-  files in the selected project folder. Review the (improved) prompt before
-  starting.
-- **No secrets in the frontend:** API keys stay server-side.
+- **Loopback only** — the server binds hard to `127.0.0.1`. Do not set `HOST` to
+  `0.0.0.0`; this app has no authentication and is meant for one local user.
+- **Full privileges** — the Launcher runs commands with *your* user privileges, by design.
+  Run it locally, only for yourself.
+- **Claude Code runs with `--dangerously-skip-permissions`** and can modify files in the
+  selected project folder. Review the (improved) prompt before you press Start.
+- **No secrets in the frontend** — API keys stay server-side; the UI only reports whether
+  a key is set. In the desktop build keys are encrypted at rest (Windows DPAPI).
 
 ---
 
