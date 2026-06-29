@@ -18,7 +18,7 @@
     "test:watch": "vitest",
     "bundle:server": "node build/scripts/bundle-server.mjs",
     "electron:dev": "npm run bundle:server && electron build/electron/main.js",
-    "electron:build": "npm run build && npm run bundle:server && electron-builder --config build/electron-builder.yml"
+    "electron:build": "npm run build && npm run bundle:server && electron-builder --config build/electron-builder.yml --publish never"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
