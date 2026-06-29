@@ -1,4 +1,4 @@
-import { getModel, getOpenAI } from "./openai";
+import { getAiClient, getModel } from "./openai";
 
 /**
  * Session-Review: turns the launcher's numbered Claude consoles into a
@@ -114,14 +114,16 @@ export async function generateSpeechSummary(items: ReviewItem[]): Promise<string
   if (items.length === 0) {
     return "Es gibt aktuell keine Sessions zum Reviewen.";
   }
-  const client = getOpenAI();
+  const client = getAiClient();
   const model = getModel();
-  const res = await client.responses.create({
+  const res = await client.chat.completions.create({
     model,
-    instructions: SPEECH_SYSTEM_PROMPT,
-    input: buildReviewContext(items),
+    messages: [
+      { role: "system", content: SPEECH_SYSTEM_PROMPT },
+      { role: "user", content: buildReviewContext(items) },
+    ],
   });
-  const text = (res.output_text ?? "").trim();
+  const text = (res.choices[0]?.message?.content ?? "").trim();
   return text || "Der Review ist abgeschlossen.";
 }
 
@@ -130,14 +132,16 @@ export async function generateMarkdownReport(items: ReviewItem[]): Promise<strin
   if (items.length === 0) {
     return "_Keine Sessions zum Reviewen._";
   }
-  const client = getOpenAI();
+  const client = getAiClient();
   const model = getModel();
-  const res = await client.responses.create({
+  const res = await client.chat.completions.create({
     model,
-    instructions: MARKDOWN_SYSTEM_PROMPT,
-    input: buildReviewContext(items),
+    messages: [
+      { role: "system", content: MARKDOWN_SYSTEM_PROMPT },
+      { role: "user", content: buildReviewContext(items) },
+    ],
   });
-  const text = stripFences((res.output_text ?? "").trim());
+  const text = stripFences((res.choices[0]?.message?.content ?? "").trim());
   return text || "_Kein Ergebnis._";
 }
 

@@ -1,7 +1,8 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { readSettings } from "./settings";
-import { readSecrets } from "./secrets";
+import { readSecrets, secretsStatus } from "./secrets";
+import { PROVIDERS, DEFAULT_PROVIDER_ID, getProvider } from "./providers";
 
 /**
  * Central configuration. Precedence (highest first):
@@ -23,6 +24,15 @@ export interface AppConfig {
   port: number;
   projectsDir: string;
   githubDir: string;
+  /** Active AI provider id (e.g. "openai", "groq"). */
+  aiProvider: string;
+  /** OpenAI-compatible base URL for the active provider. */
+  aiBaseUrl: string;
+  /** API key for the active provider (undefined → AI features disabled). */
+  aiApiKey: string | undefined;
+  /** Active model id for the selected provider. */
+  aiModel: string;
+  /** Back-compat alias of the active provider's key when provider is OpenAI. */
   openaiApiKey: string | undefined;
   openaiModel: string;
   openaiSummaryModel: string;
@@ -60,6 +70,16 @@ export function getConfig(): AppConfig {
     process.env.GITHUB_DIR?.trim() ||
     path.join(path.resolve(projectsDir), "github");
 
+  const aiProvider = settings.aiProvider?.trim() || DEFAULT_PROVIDER_ID;
+  const provider = getProvider(aiProvider);
+  const aiApiKey = secrets.providerKeys?.[provider.id];
+  const aiModel =
+    settings.aiModel?.trim() ||
+    (provider.id === "openai"
+      ? settings.openaiModel?.trim() || process.env.OPENAI_MODEL?.trim()
+      : undefined) ||
+    provider.defaultModel;
+
   const openaiModel =
     settings.openaiModel?.trim() ||
     process.env.OPENAI_MODEL?.trim() ||
@@ -75,7 +95,11 @@ export function getConfig(): AppConfig {
     port,
     projectsDir: path.resolve(projectsDir),
     githubDir: path.resolve(githubDir),
-    openaiApiKey: secrets.openaiApiKey,
+    aiProvider: provider.id,
+    aiBaseUrl: provider.baseUrl,
+    aiApiKey,
+    aiModel,
+    openaiApiKey: secrets.providerKeys?.openai,
     openaiModel,
     openaiSummaryModel: process.env.OPENAI_SUMMARY_MODEL?.trim() || "gpt-4o-mini",
     cartesiaApiKey: secrets.cartesiaApiKey,
@@ -93,10 +117,17 @@ export function getConfig(): AppConfig {
 /** Browser-safe subset. NEVER contains API keys. */
 export interface PublicConfig {
   projectsDir: string;
-  openaiModel: string;
-  hasApiKey: boolean;
+  aiProvider: string;
+  aiModel: string;
+  /** Whether the ACTIVE provider has a key (drives optional AI features). */
+  hasAiKey: boolean;
+  /** All providers for the dropdown. */
+  providers: { id: string; label: string; keysUrl: string; listModels: boolean }[];
+  /** Which provider ids currently have a key set. */
+  providerStatus: Record<string, boolean>;
   hasCartesiaKey: boolean;
   hasPicovoiceKey: boolean;
+  /** Ready = a valid projects folder exists. AI keys are optional. */
   ready: boolean;
   cartesiaVoice: string;
   host: string;
@@ -105,14 +136,22 @@ export interface PublicConfig {
 
 export function getPublicConfig(): PublicConfig {
   const c = getConfig();
-  const hasApiKey = Boolean(c.openaiApiKey);
+  const status = secretsStatus();
   return {
     projectsDir: c.projectsDir,
-    openaiModel: c.openaiModel,
-    hasApiKey,
-    hasCartesiaKey: Boolean(c.cartesiaApiKey),
-    hasPicovoiceKey: Boolean(c.picovoiceAccessKey),
-    ready: hasApiKey && existsSync(c.projectsDir),
+    aiProvider: c.aiProvider,
+    aiModel: c.aiModel,
+    hasAiKey: Boolean(c.aiApiKey),
+    providers: PROVIDERS.map((p) => ({
+      id: p.id,
+      label: p.label,
+      keysUrl: p.keysUrl,
+      listModels: p.listModels,
+    })),
+    providerStatus: status.providers,
+    hasCartesiaKey: status.hasCartesia,
+    hasPicovoiceKey: status.hasPicovoice,
+    ready: existsSync(c.projectsDir),
     cartesiaVoice: c.cartesiaVoice,
     host: c.host,
     port: c.port,

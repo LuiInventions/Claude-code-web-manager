@@ -1,17 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { AudioLines, Check, Cpu, FolderOpen, KeyRound, Save, Server } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { AudioLines, Check, FolderOpen, KeyRound, Save, Server, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Badge, Button, Card, Input, Spinner } from "../ui";
 
+interface ProviderOpt {
+  id: string;
+  label: string;
+  keysUrl: string;
+  listModels: boolean;
+}
+
 interface PublicConfig {
   projectsDir: string;
-  openaiModel: string;
-  hasApiKey: boolean;
+  aiProvider: string;
+  aiModel: string;
+  hasAiKey: boolean;
+  providers: ProviderOpt[];
+  providerStatus: Record<string, boolean>;
   hasCartesiaKey: boolean;
   hasPicovoiceKey: boolean;
-  ready: boolean;
   cartesiaVoice: string;
   host: string;
   port: number;
@@ -25,53 +34,70 @@ interface VoiceOption {
 
 export default function SettingsSection() {
   const [cfg, setCfg] = useState<PublicConfig | null>(null);
-  const [models, setModels] = useState<string[]>([]);
-  const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [projectsDir, setProjectsDir] = useState("");
   const [model, setModel] = useState("");
+  const [models, setModels] = useState<string[]>([]);
   const [voice, setVoice] = useState("");
-  const [openaiKey, setOpenaiKey] = useState("");
+  const [voices, setVoices] = useState<VoiceOption[]>([]);
+  const [aiKey, setAiKey] = useState("");
   const [cartesiaKey, setCartesiaKey] = useState("");
   const [picovoiceKey, setPicovoiceKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const loadConfig = useCallback(
+    () =>
+      fetch("/api/settings")
+        .then((r) => r.json())
+        .then((c: PublicConfig) => {
+          setCfg(c);
+          setProjectsDir(c.projectsDir);
+          setModel(c.aiModel);
+          setVoice(c.cartesiaVoice);
+        }),
+    [],
+  );
+
+  const loadModels = useCallback(
+    () =>
+      fetch("/api/models")
+        .then((r) => r.json())
+        .then((d) => setModels(d.models ?? []))
+        .catch(() => setModels([])),
+    [],
+  );
+
   useEffect(() => {
-    fetch("/api/settings")
-      .then((r) => r.json())
-      .then((c: PublicConfig) => {
-        setCfg(c);
-        setProjectsDir(c.projectsDir);
-        setModel(c.openaiModel);
-        setVoice(c.cartesiaVoice);
-      })
-      .catch(() => {});
-    fetch("/api/models")
-      .then((r) => r.json())
-      .then((d) => setModels(d.models ?? []))
-      .catch(() => {});
+    loadConfig().catch(() => {});
+    loadModels();
     fetch("/api/voice/voices")
       .then((r) => r.json())
       .then((d) => setVoices(d.voices ?? []))
       .catch(() => {});
-  }, []);
+  }, [loadConfig, loadModels]);
 
-  const save = async () => {
+  const flashSaved = () => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const saveSettings = async (patch: Record<string, unknown>) => {
     setSaving(true);
     setError(null);
-    setSaved(false);
     try {
       const r = await fetch("/api/settings", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ projectsDir, openaiModel: model, cartesiaVoice: voice }),
+        body: JSON.stringify(patch),
       });
       const d = await r.json();
       if (d.error) throw new Error(d.error);
       setCfg(d);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
+      setModel(d.aiModel);
+      setVoice(d.cartesiaVoice);
+      setProjectsDir(d.projectsDir);
+      flashSaved();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -79,27 +105,28 @@ export default function SettingsSection() {
     }
   };
 
-  const saveKey = async (
-    field: "openaiApiKey" | "cartesiaApiKey" | "picovoiceAccessKey",
-    value: string,
-  ) => {
+  const saveSecret = async (patch: Record<string, unknown>) => {
     setSaving(true);
     setError(null);
     try {
       await fetch("/api/secrets", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ [field]: value }),
+        body: JSON.stringify(patch),
       });
-      const c = await fetch("/api/settings").then((r) => r.json());
-      setCfg(c);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
+      await loadConfig();
+      flashSaved();
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setSaving(false);
     }
+  };
+
+  const changeProvider = async (id: string) => {
+    await saveSettings({ aiProvider: id });
+    setAiKey("");
+    await loadModels();
   };
 
   if (!cfg)
@@ -109,41 +136,133 @@ export default function SettingsSection() {
       </div>
     );
 
+  const provider = cfg.providers.find((p) => p.id === cfg.aiProvider);
+  const canList = Boolean(provider?.listModels) && models.length > 0;
+
   return (
     <div className="min-h-0 flex-1 overflow-auto">
       <div className="mx-auto max-w-2xl space-y-4 p-6">
         <Card className="space-y-3 p-5">
           <Label
             icon={FolderOpen}
-            title="Projects folder"
-            hint="Direct subfolders are listed as projects (Dashboard & index)."
+            title="Local Projects folder"
+            hint="Direct subfolders are listed as projects (Local Projects & index)."
           />
-          <Input
-            value={projectsDir}
-            onChange={(e) => setProjectsDir(e.target.value)}
-            placeholder="C:\Users\you\projects"
-            className="font-mono text-[13px]"
-          />
+          <div className="flex gap-2">
+            <Input
+              value={projectsDir}
+              onChange={(e) => setProjectsDir(e.target.value)}
+              placeholder="C:\Users\you\projects"
+              className="font-mono text-[13px]"
+            />
+            <Button
+              variant="secondary"
+              onClick={() => saveSettings({ projectsDir })}
+              disabled={!projectsDir.trim()}
+            >
+              Save
+            </Button>
+          </div>
         </Card>
 
-        <Card className="space-y-3 p-5">
-          <Label icon={Cpu} title="OpenAI model" hint="For reasoning and the prompt improver." />
-          {models.length > 0 ? (
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="h-9 w-full cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
+        <Card className="space-y-4 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <Label
+              icon={Sparkles}
+              title="AI provider"
+              hint="Prompt improver + session review. Optional — without a key these are disabled."
+            />
+            <Badge tone={cfg.hasAiKey ? "running" : "neutral"} dot>
+              {cfg.hasAiKey ? "active" : "no key"}
+            </Badge>
+          </div>
+
+          <select
+            value={cfg.aiProvider}
+            onChange={(e) => changeProvider(e.target.value)}
+            className="h-9 w-full cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
+          >
+            {cfg.providers.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+                {cfg.providerStatus[p.id] ? " ✓" : ""}
+              </option>
+            ))}
+          </select>
+
+          <div className="flex gap-2">
+            <Input
+              type="password"
+              value={aiKey}
+              onChange={(e) => setAiKey(e.target.value)}
+              placeholder={`${provider?.label ?? "API"} key${cfg.hasAiKey ? " (set — leave blank to keep)" : ""}`}
+              className="font-mono text-[13px]"
+            />
+            <Button
+              variant="secondary"
+              onClick={() => {
+                saveSecret({ providerKeys: { [cfg.aiProvider]: aiKey } });
+                setAiKey("");
+              }}
+              disabled={!aiKey.trim()}
             >
-              {model && !models.includes(model) && <option value={model}>{model} (current)</option>}
-              {models.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <Input value={model} onChange={(e) => setModel(e.target.value)} className="font-mono text-[13px]" />
+              Save
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => saveSecret({ providerKeys: { [cfg.aiProvider]: "" } })}
+              disabled={!cfg.hasAiKey}
+            >
+              Clear
+            </Button>
+          </div>
+
+          {provider && (
+            <p className="text-xs text-faint">
+              Get a key:{" "}
+              <a
+                href={provider.keysUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="cursor-pointer text-accent hover:underline"
+              >
+                {provider.keysUrl}
+              </a>
+            </p>
           )}
+
+          <div className="h-px bg-line" />
+          <Label icon={Sparkles} title="Model" hint="Used for prompt improvement & review." />
+          <div className="flex gap-2">
+            {canList ? (
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="h-9 w-full cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
+              >
+                {model && !models.includes(model) && <option value={model}>{model} (current)</option>}
+                {models.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <Input
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="model id"
+                className="font-mono text-[13px]"
+              />
+            )}
+            <Button
+              variant="secondary"
+              onClick={() => saveSettings({ aiModel: model })}
+              disabled={!model.trim()}
+            >
+              Save
+            </Button>
+          </div>
         </Card>
 
         <Card className="space-y-3 p-5">
@@ -153,45 +272,34 @@ export default function SettingsSection() {
             hint="Voice for text-to-speech output. Default: Sebastian – Orator."
           />
           {voices.length > 0 ? (
-            <select
-              value={voice}
-              onChange={(e) => setVoice(e.target.value)}
-              className="h-9 w-full cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
-            >
-              {voice && !voices.some((v) => v.id === voice) && (
-                <option value={voice}>{voice} (current)</option>
-              )}
-              {voices.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
-                  {v.gender ? ` · ${v.gender}` : ""}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                value={voice}
+                onChange={(e) => setVoice(e.target.value)}
+                className="h-9 w-full cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
+              >
+                {voice && !voices.some((v) => v.id === voice) && (
+                  <option value={voice}>{voice} (current)</option>
+                )}
+                {voices.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                    {v.gender ? ` · ${v.gender}` : ""}
+                  </option>
+                ))}
+              </select>
+              <Button variant="secondary" onClick={() => saveSettings({ cartesiaVoice: voice })}>
+                Save
+              </Button>
+            </div>
           ) : (
             <p className="text-xs text-faint">
-              {cfg.hasCartesiaKey
-                ? "Loading voices…"
-                : "No Cartesia key set — voices unavailable."}
+              {cfg.hasCartesiaKey ? "Loading voices…" : "No Cartesia key set — voices unavailable."}
             </p>
           )}
         </Card>
 
         <Card className="space-y-4 p-5">
-          <KeyRow
-            icon={KeyRound}
-            title="OpenAI API key"
-            hint="Reasoning + prompt improver. Encrypted at rest."
-            has={cfg.hasApiKey}
-            value={openaiKey}
-            onChange={setOpenaiKey}
-            onSave={() => {
-              saveKey("openaiApiKey", openaiKey);
-              setOpenaiKey("");
-            }}
-            onClear={() => saveKey("openaiApiKey", "")}
-          />
-          <div className="h-px bg-line" />
           <KeyRow
             icon={AudioLines}
             title="Cartesia API key"
@@ -200,10 +308,10 @@ export default function SettingsSection() {
             value={cartesiaKey}
             onChange={setCartesiaKey}
             onSave={() => {
-              saveKey("cartesiaApiKey", cartesiaKey);
+              saveSecret({ cartesiaApiKey: cartesiaKey });
               setCartesiaKey("");
             }}
-            onClear={() => saveKey("cartesiaApiKey", "")}
+            onClear={() => saveSecret({ cartesiaApiKey: "" })}
           />
           <div className="h-px bg-line" />
           <KeyRow
@@ -214,10 +322,10 @@ export default function SettingsSection() {
             value={picovoiceKey}
             onChange={setPicovoiceKey}
             onSave={() => {
-              saveKey("picovoiceAccessKey", picovoiceKey);
+              saveSecret({ picovoiceAccessKey: picovoiceKey });
               setPicovoiceKey("");
             }}
-            onClear={() => saveKey("picovoiceAccessKey", "")}
+            onClear={() => saveSecret({ picovoiceAccessKey: "" })}
           />
           <div className="h-px bg-line" />
           <div className="flex items-center justify-between gap-3">
@@ -231,11 +339,18 @@ export default function SettingsSection() {
 
         {error && <p className="text-sm text-danger">{error}</p>}
 
-        <div className="flex items-center gap-3">
-          <Button variant="primary" icon={saved ? Check : Save} onClick={save} loading={saving}>
-            {saved ? "Saved" : "Save"}
-          </Button>
-          <span className="text-xs text-faint">Changes apply immediately — no restart needed.</span>
+        <div className="flex items-center gap-3 text-xs text-faint">
+          {saved ? (
+            <span className="flex items-center gap-1.5 text-running">
+              <Check className="size-3.5" /> Saved
+            </span>
+          ) : saving ? (
+            <span className="flex items-center gap-1.5">
+              <Save className="size-3.5" /> Saving…
+            </span>
+          ) : (
+            <span>Changes apply immediately — no restart needed.</span>
+          )}
         </div>
       </div>
     </div>
@@ -274,7 +389,7 @@ function KeyRow({
           type="password"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={has ? "•••••••• (leer lassen, um zu behalten)" : "Key eingeben"}
+          placeholder={has ? "•••••••• (leave blank to keep)" : "enter key"}
           className="font-mono text-[13px]"
         />
         <Button variant="secondary" onClick={onSave} disabled={!value.trim()}>

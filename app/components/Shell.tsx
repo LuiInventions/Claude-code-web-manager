@@ -31,8 +31,8 @@ interface SectionDef {
 }
 
 const MAIN_SECTIONS: SectionDef[] = [
-  { id: "dashboard", label: "Dashboard", desc: "All your projects at a glance", icon: LayoutDashboard },
   { id: "launcher", label: "Launcher", desc: "Improve prompt & launch Claude Code", icon: Rocket },
+  { id: "dashboard", label: "Local Projects", desc: "All your local projects at a glance", icon: LayoutDashboard },
   { id: "github", label: "GitHub", desc: "Connect repos & edit with Claude", icon: Code },
 ];
 
@@ -46,9 +46,9 @@ const SETTINGS_SECTION: SectionDef = {
 const ALL_SECTIONS = [...MAIN_SECTIONS, SETTINGS_SECTION];
 
 export default function Shell() {
-  const [active, setActive] = useState<SectionId>("dashboard");
+  const [active, setActive] = useState<SectionId>("launcher");
   const [opened, setOpened] = useState<Set<SectionId>>(
-    () => new Set<SectionId>(["dashboard"]),
+    () => new Set<SectionId>(["launcher"]),
   );
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [host, setHost] = useState("127.0.0.1:3000");

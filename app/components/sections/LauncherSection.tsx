@@ -110,6 +110,7 @@ export default function LauncherSection({
   const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const [hasAiKey, setHasAiKey] = useState(false);
   const { speak } = useSpeak();
 
   const blocked = !!(usage?.blockedUntil && usage.blockedUntil > nowTs);
@@ -117,11 +118,20 @@ export default function LauncherSection({
   // origin/repoFullName carried from a Jarvis/GitHub prefill into the next start.
   const pendingOriginRef = useRef<{ origin: "github"; repoFullName?: string } | null>(null);
 
-  // Load the Dashboard project list for the dropdown.
+  // Load the Local Projects list for the dropdown.
   useEffect(() => {
     fetch("/api/projects")
       .then((r) => r.json())
       .then((d) => setProjects(d.projects ?? []))
+      .catch(() => {});
+  }, []);
+
+  // Whether an AI provider key is configured — gates the prompt-improver and
+  // session-review actions (they need an AI provider).
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((c: { hasAiKey?: boolean }) => setHasAiKey(Boolean(c.hasAiKey)))
       .catch(() => {});
   }, []);
 
@@ -518,7 +528,7 @@ export default function LauncherSection({
                 >
                   <option value="">Select project…</option>
                   {projects.length > 0 && (
-                    <optgroup label="Projects">
+                    <optgroup label="Local Projects">
                       {projects.map((p) => (
                         <option key={p.path} value={p.path}>
                           {p.name}
@@ -638,10 +648,21 @@ export default function LauncherSection({
                   className="w-full"
                   onClick={improve}
                   loading={improving}
-                  disabled={!projectPath || !raw.trim()}
+                  disabled={!projectPath || !raw.trim() || !hasAiKey}
+                  title={
+                    !hasAiKey
+                      ? "Kein AI-Provider konfiguriert — in den Einstellungen einen Key hinterlegen."
+                      : undefined
+                  }
                 >
                   Improve prompt
                 </Button>
+                {!hasAiKey && (
+                  <p className="text-xs text-faint">
+                    Kein AI-Provider konfiguriert — Prompt-Verbesserung & Review sind aus. Du kannst
+                    trotzdem „Start without improvement“ nutzen.
+                  </p>
+                )}
                 <Button
                   variant="secondary"
                   icon={Zap}
@@ -857,7 +878,12 @@ export default function LauncherSection({
               icon={reviewing ? Loader2 : FileText}
               className="w-full"
               onClick={doReview}
-              disabled={sessions.length === 0 || reviewing}
+              disabled={sessions.length === 0 || reviewing || !hasAiKey}
+              title={
+                !hasAiKey
+                  ? "Kein AI-Provider konfiguriert — in den Einstellungen einen Key hinterlegen."
+                  : undefined
+              }
             >
               {reviewing ? "Reviewing sessions…" : "Review sessions"}
             </Button>

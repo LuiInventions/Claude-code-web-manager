@@ -12,7 +12,11 @@ export interface Settings {
   projectsDir?: string;
   /** Absolute path where GitHub repos are cloned (default <projectsDir>/github). */
   githubDir?: string;
-  /** OpenAI model id used by Jarvis + the prompt improver. */
+  /** Active AI provider id (e.g. "openai", "groq"). */
+  aiProvider?: string;
+  /** Model id for the active AI provider. */
+  aiModel?: string;
+  /** Legacy OpenAI model id (still honoured when provider is OpenAI). */
   openaiModel?: string;
   /** Cartesia voice id override (German voice for Jarvis). */
   cartesiaVoice?: string;

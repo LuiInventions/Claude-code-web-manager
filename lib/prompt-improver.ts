@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { getModel, getOpenAI } from "./openai";
+import { getAiClient, getModel } from "./openai";
 import { getOrBuildIndex } from "./indexer";
 import { detectStackFromFiles, frameworksFromPackageJson } from "./stack-detect";
 
@@ -117,7 +117,7 @@ export async function improvePrompt(
   projectPath: string,
   rawPrompt: string,
 ): Promise<string> {
-  const client = getOpenAI();
+  const client = getAiClient();
   const model = getModel();
 
   const context = JSON.stringify(await projectContext(projectPath));
@@ -136,10 +136,12 @@ export async function improvePrompt(
     context,
   ].join("\n");
 
-  const res = await client.responses.create({
+  const res = await client.chat.completions.create({
     model,
-    instructions,
-    input: `Roh-Prompt des Nutzers:\n${rawPrompt}`,
+    messages: [
+      { role: "system", content: instructions },
+      { role: "user", content: `Roh-Prompt des Nutzers:\n${rawPrompt}` },
+    ],
   });
-  return (res.output_text ?? "").trim();
+  return (res.choices[0]?.message?.content ?? "").trim();
 }

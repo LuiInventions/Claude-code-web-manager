@@ -10,7 +10,13 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  let body: { projectsDir?: string; openaiModel?: string; cartesiaVoice?: string };
+  let body: {
+    projectsDir?: string;
+    aiProvider?: string;
+    aiModel?: string;
+    openaiModel?: string;
+    cartesiaVoice?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -19,6 +25,8 @@ export async function POST(req: NextRequest) {
 
   const patch: {
     projectsDir?: string;
+    aiProvider?: string;
+    aiModel?: string;
     openaiModel?: string;
     cartesiaVoice?: string;
   } = {};
@@ -30,6 +38,8 @@ export async function POST(req: NextRequest) {
     }
     patch.projectsDir = dir;
   }
+  if (typeof body.aiProvider === "string") patch.aiProvider = body.aiProvider.trim();
+  if (typeof body.aiModel === "string") patch.aiModel = body.aiModel.trim();
   if (typeof body.openaiModel === "string") patch.openaiModel = body.openaiModel.trim();
   if (typeof body.cartesiaVoice === "string") patch.cartesiaVoice = body.cartesiaVoice.trim();
 

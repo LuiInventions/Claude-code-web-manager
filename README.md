@@ -10,9 +10,9 @@ Claude Code sessions.
 
 ## Features
 
-### Dashboard
+### Local Projects
 
-The dashboard scans your configured `PROJECTS_DIR` and shows a card for every
+The Local Projects view scans your configured `PROJECTS_DIR` and shows a card for every
 direct subfolder — including project name, path, last-modified date, size,
 detected tech stack, Git status (branch, dirty/clean state, most recent
 commits), and a README excerpt. Clicking a card opens a detail view with a
@@ -43,8 +43,12 @@ only happens when you press it; it never happens automatically.
 
 ### Settings
 
-Model, voice, API key status, and other runtime options can be adjusted at any
-time through the Settings page — no server restart required.
+Choose your **AI provider** (OpenAI, Groq, xAI/Grok, OpenRouter, DeepSeek,
+Mistral, Together, Fireworks, Perplexity, Google Gemini, Cerebras — 11 in all),
+enter its API key, and pick a model. Voice and other runtime options are here
+too — no server restart required. The AI provider is **optional**: without a key
+the prompt improver and session review are simply disabled, and everything else
+keeps working. The app opens on the **Launcher** by default.
 
 ---
 
@@ -55,7 +59,9 @@ time through the Settings page — no server restart required.
 - **Custom Node server** (`server.ts`) — binds to `127.0.0.1`, hosts Next plus a
   **`ws` WebSocket server**; HMR upgrades go to Next, `/ws/*` to us.
 - **`node-pty`** (real PTYs for the Claude sessions), **`child_process`** (Git)
-- **OpenAI SDK** — Responses API (prompt improvement + session review)
+- **OpenAI SDK** — chat completions across **11 OpenAI-compatible providers**
+  (OpenAI, Groq, xAI, OpenRouter, DeepSeek, Mistral, Together, Fireworks,
+  Perplexity, Gemini, Cerebras) for prompt improvement + session review
 - **Cartesia** — TTS (Sonic) for reading the reviews aloud
 - **`xterm.js`**, **`highlight.js`**, **`react-markdown`**, **`lucide-react`**
 
@@ -66,9 +72,10 @@ time through the Settings page — no server restart required.
 - **Windows 11**, **Node.js ≥ 20.9** (developed/tested with Node 24)
 - **git** on your `PATH`
 - **Claude Code CLI** (`claude`) installed and logged in
-- An **OpenAI API key** (prompt improver + review). For reading reviews aloud you
-  additionally need a **Cartesia API key** (TTS) — without it everything works
-  except the speech output.
+- **Optional:** an API key for any one of the 11 AI providers (prompt improver +
+  review). Without it the app still launches and supervises Claude sessions —
+  only the AI-assisted features are disabled. For reading reviews aloud you also
+  need a **Cartesia API key** (TTS).
 
 ---
 
@@ -137,8 +144,8 @@ Priority order (highest first): `.data/settings.json` (Settings UI) →
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `OPENAI_API_KEY` | OpenAI key — **server-side only**, never in the frontend | – (required) |
-| `OPENAI_MODEL` | Model for prompt improver & review | `gpt-5.4-mini` |
+| `OPENAI_API_KEY` | OpenAI key — **server-side only**, never in the frontend | – (optional) |
+| `GROQ_API_KEY`, `XAI_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `MISTRAL_API_KEY`, `TOGETHER_API_KEY`, `FIREWORKS_API_KEY`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`, `CEREBRAS_API_KEY` | Keys for the other AI providers — server-side only | – (optional) |
 | `CARTESIA_API_KEY` | Cartesia key — TTS (read reviews aloud); server-side only | – (for speech output) |
 | `CARTESIA_VOICE` | Cartesia voice; selectable in Settings | Sebastian – Orator |
 | `CARTESIA_TTS_MODEL` | TTS model | `sonic-turbo` |
@@ -147,8 +154,10 @@ Priority order (highest first): `.data/settings.json` (Settings UI) →
 | `PORT` | Port | `3100` |
 | `CLAUDE_BIN` | Optional explicit path to the Claude CLI | auto (`where claude`) |
 
-> API keys are used **server-side only** and never reach the frontend. The
-> Settings page only shows **whether** a key is set.
+> The active provider + model are chosen in **Settings** (stored in
+> `.data/settings.json` as `aiProvider` / `aiModel`). API keys are used
+> **server-side only** and never reach the frontend — the Settings page only
+> shows **whether** a key is set. In the desktop app keys are encrypted.
 
 ---
 

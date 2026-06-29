@@ -3,20 +3,17 @@ import fs from "node:fs";
 import path from "node:path";
 
 type Secrets = {
-  openaiApiKey?: string;
+  /** AI API keys keyed by provider id (openai, groq, …). */
+  providerKeys?: Record<string, string>;
   cartesiaApiKey?: string;
   picovoiceAccessKey?: string;
-};
-
-const ENV_MAP: Record<keyof Secrets, string> = {
-  openaiApiKey: "OPENAI_API_KEY",
-  cartesiaApiKey: "CARTESIA_API_KEY",
-  picovoiceAccessKey: "PICOVOICE_ACCESS_KEY",
+  /** Legacy single-key field — migrated into providerKeys.openai. */
+  openaiApiKey?: string;
 };
 
 const STORE = () => path.join(app.getPath("userData"), "secrets.enc");
 
-let cache: Secrets = {};
+let cache: Secrets = { providerKeys: {} };
 
 /** Best-effort diagnostic line into the same startup log main.ts writes. */
 function note(msg: string): void {
@@ -32,6 +29,19 @@ function note(msg: string): void {
   console.warn("[secrets] " + msg);
 }
 
+/** Migrate a legacy { openaiApiKey } blob into providerKeys.openai. */
+function normalize(s: Secrets): Secrets {
+  const providerKeys: Record<string, string> = { ...(s.providerKeys ?? {}) };
+  if (typeof s.openaiApiKey === "string" && s.openaiApiKey && !providerKeys.openai) {
+    providerKeys.openai = s.openaiApiKey;
+  }
+  return {
+    providerKeys,
+    cartesiaApiKey: s.cartesiaApiKey,
+    picovoiceAccessKey: s.picovoiceAccessKey,
+  };
+}
+
 export function loadSecretStore(): Secrets {
   if (!safeStorage.isEncryptionAvailable()) {
     note("OS encryption (DPAPI) unavailable — secrets will be stored as PLAINTEXT on disk");
@@ -41,27 +51,47 @@ export function loadSecretStore(): Secrets {
     const json = safeStorage.isEncryptionAvailable()
       ? safeStorage.decryptString(buf)
       : buf.toString("utf8");
-    cache = JSON.parse(json) as Secrets;
+    cache = normalize(JSON.parse(json) as Secrets);
   } catch (err) {
     // ENOENT is normal (no secrets saved yet). Anything else means the store is
     // unreadable/corrupt — surface it instead of silently dropping all keys.
     if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") {
       note("failed to read/decrypt secrets.enc — keys reset this session: " + String(err));
     }
-    cache = {};
+    cache = { providerKeys: {} };
   }
   return cache;
 }
 
+/** Merge a RAW patch into the store. Empty string clears a key; absent keys untouched. */
 export function saveSecretStore(patch: Secrets): Secrets {
-  const next: Secrets = { ...cache };
-  for (const key of Object.keys(ENV_MAP) as (keyof Secrets)[]) {
+  const next: Secrets = {
+    providerKeys: { ...(cache.providerKeys ?? {}) },
+    cartesiaApiKey: cache.cartesiaApiKey,
+    picovoiceAccessKey: cache.picovoiceAccessKey,
+  };
+
+  // legacy single field -> providerKeys.openai
+  if (typeof patch.openaiApiKey === "string") {
+    const v = patch.openaiApiKey.trim();
+    if (v) next.providerKeys!.openai = v;
+    else delete next.providerKeys!.openai;
+  }
+  if (patch.providerKeys && typeof patch.providerKeys === "object") {
+    for (const [id, val] of Object.entries(patch.providerKeys)) {
+      const v = (val ?? "").trim();
+      if (v) next.providerKeys![id] = v;
+      else delete next.providerKeys![id];
+    }
+  }
+  for (const key of ["cartesiaApiKey", "picovoiceAccessKey"] as const) {
     if (key in patch) {
-      const v = patch[key]?.trim();
+      const v = (patch[key] ?? "").trim();
       if (v) next[key] = v;
       else delete next[key];
     }
   }
+
   cache = next;
   const json = JSON.stringify(next);
   const data = safeStorage.isEncryptionAvailable()
@@ -73,12 +103,15 @@ export function saveSecretStore(patch: Secrets): Secrets {
   return next;
 }
 
+/** Mirror the non-LLM keys + the OpenAI key to env (back-compat for env readers). */
 function mirrorEnv() {
-  for (const key of Object.keys(ENV_MAP) as (keyof Secrets)[]) {
-    const env = ENV_MAP[key];
-    if (cache[key]) process.env[env] = cache[key] as string;
+  const set = (env: string, val: string | undefined) => {
+    if (val) process.env[env] = val;
     else delete process.env[env];
-  }
+  };
+  set("CARTESIA_API_KEY", cache.cartesiaApiKey);
+  set("PICOVOICE_ACCESS_KEY", cache.picovoiceAccessKey);
+  set("OPENAI_API_KEY", cache.providerKeys?.openai);
 }
 
 /** Install the in-process bridge the Next server reads via globalThis.__ccc_secrets. */

@@ -1,19 +1,36 @@
 "use client";
 
-import { useState } from "react";
-import { FolderOpen, KeyRound, Rocket } from "lucide-react";
+import { useEffect, useState } from "react";
+import { FolderOpen, KeyRound, Rocket, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button, Card, Input } from "./ui";
 
+interface ProviderOpt {
+  id: string;
+  label: string;
+  keysUrl: string;
+  listModels: boolean;
+}
+
 export default function SetupScreen({ onReady }: { onReady: () => void }) {
   const [projectsDir, setProjectsDir] = useState("");
-  const [openai, setOpenai] = useState("");
-  const [cartesia, setCartesia] = useState("");
-  const [picovoice, setPicovoice] = useState("");
+  const [providers, setProviders] = useState<ProviderOpt[]>([]);
+  const [provider, setProvider] = useState("openai");
+  const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const desktop = typeof window !== "undefined" ? window.cccDesktop : undefined;
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((c: { providers?: ProviderOpt[]; aiProvider?: string }) => {
+        setProviders(c.providers ?? []);
+        if (c.aiProvider) setProvider(c.aiProvider);
+      })
+      .catch(() => {});
+  }, []);
 
   const pick = async () => {
     const dir = await desktop?.pickFolder();
@@ -25,23 +42,21 @@ export default function SetupScreen({ onReady }: { onReady: () => void }) {
     setError(null);
     try {
       if (!projectsDir.trim()) throw new Error("Bitte einen Projektordner wählen.");
-      if (!openai.trim()) throw new Error("OpenAI API-Key ist erforderlich.");
 
-      const sec = await fetch("/api/secrets", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          openaiApiKey: openai.trim(),
-          cartesiaApiKey: cartesia.trim(),
-          picovoiceAccessKey: picovoice.trim(),
-        }),
-      });
-      if (!sec.ok) throw new Error("Keys konnten nicht gespeichert werden.");
+      // AI key is optional — only save it if provided.
+      if (apiKey.trim()) {
+        const sec = await fetch("/api/secrets", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ providerKeys: { [provider]: apiKey.trim() } }),
+        });
+        if (!sec.ok) throw new Error("Key konnte nicht gespeichert werden.");
+      }
 
       const set = await fetch("/api/settings", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ projectsDir: projectsDir.trim() }),
+        body: JSON.stringify({ projectsDir: projectsDir.trim(), aiProvider: provider }),
       });
       const d = await set.json();
       if (d.error) throw new Error(d.error);
@@ -53,6 +68,8 @@ export default function SetupScreen({ onReady }: { onReady: () => void }) {
       setBusy(false);
     }
   };
+
+  const current = providers.find((p) => p.id === provider);
 
   return (
     <div className="flex h-screen items-center justify-center overflow-auto bg-elevated p-6">
@@ -68,7 +85,7 @@ export default function SetupScreen({ onReady }: { onReady: () => void }) {
           <Field
             icon={FolderOpen}
             title="Projektordner"
-            hint="Direkte Unterordner werden als Projekte gelistet."
+            hint="Erforderlich. Direkte Unterordner werden als lokale Projekte gelistet."
           />
           <div className="flex gap-2">
             <Input
@@ -87,41 +104,44 @@ export default function SetupScreen({ onReady }: { onReady: () => void }) {
 
         <Card className="space-y-3 p-5">
           <Field
-            icon={KeyRound}
-            title="OpenAI API-Key"
-            hint="Erforderlich. Wird verschlüsselt gespeichert."
+            icon={Sparkles}
+            title="AI-Provider (optional)"
+            hint="Für Prompt-Verbesserung & Session-Review. Ohne Key bleibt die App nutzbar — nur diese KI-Funktionen sind dann aus."
           />
-          <Input
-            type="password"
-            value={openai}
-            onChange={(e) => setOpenai(e.target.value)}
-            placeholder="sk-..."
-            className="font-mono text-[13px]"
-          />
-          <Field
-            icon={KeyRound}
-            title="Cartesia API-Key (optional)"
-            hint="Für Sprachausgabe (TTS)."
-          />
-          <Input
-            type="password"
-            value={cartesia}
-            onChange={(e) => setCartesia(e.target.value)}
-            placeholder="leer lassen, wenn nicht genutzt"
-            className="font-mono text-[13px]"
-          />
-          <Field
-            icon={KeyRound}
-            title="Picovoice Access-Key (optional)"
-            hint="Für lokales Wake-Word."
-          />
-          <Input
-            type="password"
-            value={picovoice}
-            onChange={(e) => setPicovoice(e.target.value)}
-            placeholder="leer lassen, wenn nicht genutzt"
-            className="font-mono text-[13px]"
-          />
+          <select
+            value={provider}
+            onChange={(e) => setProvider(e.target.value)}
+            className="h-9 w-full cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
+          >
+            {providers.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          <div className="flex items-center gap-2">
+            <KeyRound className="size-4 shrink-0 text-faint" />
+            <Input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={`${current?.label ?? "API"}-Key (optional)`}
+              className="font-mono text-[13px]"
+            />
+          </div>
+          {current && (
+            <p className="text-xs text-faint">
+              Key holen:{" "}
+              <a
+                href={current.keysUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="cursor-pointer text-accent hover:underline"
+              >
+                {current.keysUrl}
+              </a>
+            </p>
+          )}
         </Card>
 
         {error && <p className="text-sm text-danger">{error}</p>}
@@ -131,6 +151,7 @@ export default function SetupScreen({ onReady }: { onReady: () => void }) {
           icon={Rocket}
           onClick={submit}
           loading={busy}
+          disabled={!projectsDir.trim()}
           className="w-full"
         >
           Loslegen
