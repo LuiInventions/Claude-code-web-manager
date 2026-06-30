@@ -143,8 +143,6 @@ export interface PublicConfig {
   ready: boolean;
   /** Running app version (drives the setup-after-update gate). */
   appVersion: string;
-  /** Selected Sessions-tab visualization ("pixel" office | "flow" graph). */
-  sessionsView: "pixel" | "flow";
   cartesiaVoice: string;
   host: string;
   port: number;
@@ -176,7 +174,6 @@ export function getPublicConfig(): PublicConfig {
     // after an update while leaving the GitHub token + other userData in place.
     ready: existsSync(c.projectsDir) && settings.setupVersion === version,
     appVersion: version,
-    sessionsView: settings.sessionsView === "flow" ? "flow" : "pixel",
     cartesiaVoice: c.cartesiaVoice,
     host: c.host,
     port: c.port,

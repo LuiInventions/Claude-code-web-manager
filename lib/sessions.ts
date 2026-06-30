@@ -44,9 +44,6 @@ export interface VisualSession {
   lastActivityAt?: number;
 }
 
-/** Which visualization the Sessions tab renders. */
-export type SessionView = "pixel" | "flow";
-
 /** Coarse activity derived from status — kept for back-compat. */
 export type Activity = "working" | "done" | "error";
 
