@@ -58,8 +58,10 @@ const SUBAGENT_RE = /Task\(([^)]*)\)/g;
 
 // Every tool marker `Name(args)`, captured globally so we can take the LAST
 // (most recent) one near the tail to describe what the agent is doing right now.
+// The arg group allows one level of nested parens (e.g. `Edit(foo(v2).tsx)`) while
+// still stopping at the call's own close paren, so two calls on one line stay split.
 const TOOL_CALL_RE =
-  /\b(Edit|MultiEdit|Write|NotebookEdit|Read|Grep|Glob|Search|Bash|WebFetch|WebSearch|Task)\(([^)]*)\)/g;
+  /\b(Edit|MultiEdit|Write|NotebookEdit|Read|Grep|Glob|Search|Bash|WebFetch|WebSearch|Task)\(([^()\n]*(?:\([^()\n]*\)[^()\n]*)*)\)/g;
 
 const TOOL_KIND: Record<string, ToolKind> = {
   Edit: "edit",
@@ -82,16 +84,23 @@ function basename(p: string): string {
   return parts[parts.length - 1] || p;
 }
 
-/** Strip a leading `key:`, surrounding quotes, and trailing args from a tool arg. */
-function cleanArg(raw: string): string {
-  // Strip a leading `key:` label (e.g. `file_path: "…"`) — require a space after
+/**
+ * The first argument of a tool call, cleaned for display. Handles the TUI's
+ * `key: "value"` form and bare paths, extracting the quoted value *before* any
+ * comma-splitting so filenames containing commas/parens survive, and multi-arg
+ * calls (`Edit(file_path: "x", old, new)`) don't leave a dangling quote.
+ */
+function firstArg(raw: string): string {
+  // Drop a leading `key:` label (e.g. `file_path: "…"`) — require a space after
   // the colon so a URL scheme like `https://…` is left intact.
-  let s = raw.trim().replace(/^\w+\s*:\s+/, "").trim();
-  s = s.replace(/^["'`]+|["'`]+$/g, "").trim();
-  // Multi-arg calls (e.g. Edit(path, old, new)) — keep the first segment.
+  const s = raw.trim().replace(/^\w+\s*:\s+/, "").trim();
+  // A quoted value owns everything up to its matching close quote (commas and
+  // parens included) — take that and ignore any trailing args.
+  const quoted = s.match(/^["'`]([^"'`]*)["'`]/);
+  if (quoted) return quoted[1].trim();
+  // Bare value → up to the first comma (drops trailing args of multi-arg calls).
   const comma = s.indexOf(",");
-  if (comma > 0) s = s.slice(0, comma).trim();
-  return s;
+  return (comma >= 0 ? s.slice(0, comma) : s).trim();
 }
 
 /** Host of a URL, or the string unchanged when it isn't a URL. */
@@ -115,7 +124,7 @@ export function detectTool(tail: string): { tool: ToolKind; detail?: string } | 
   const m = matches[matches.length - 1];
   if (!m) return undefined;
   const tool = TOOL_KIND[m[1]] ?? "other";
-  const arg = cleanArg(m[2] || "");
+  const arg = firstArg(m[2] || "");
   if (!arg) return { tool };
   let detail: string;
   if (tool === "edit" || tool === "read") detail = basename(arg);

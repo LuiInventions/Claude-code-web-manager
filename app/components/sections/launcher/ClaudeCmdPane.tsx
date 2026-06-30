@@ -52,6 +52,7 @@ export default function ClaudeCmdPane({
   repoFullName,
   projectName,
   batchId,
+  createdAt,
   layoutNonce,
   onExit,
 }: {
@@ -64,6 +65,9 @@ export default function ClaudeCmdPane({
   repoFullName?: string;
   projectName?: string;
   batchId?: string;
+  /** Client creation key — sent to the PTY as `startedAt` so the Sessions office
+   *  numbers this session identically to the launcher (oldest = #1). */
+  createdAt?: number;
   /** Bumped by the launcher on layout changes (sidebar toggle, tab switch) to force a refit. */
   layoutNonce?: number;
   onExit?: (code: number) => void;
@@ -149,6 +153,7 @@ export default function ClaudeCmdPane({
       });
       if (projectName) qs.set("projectName", projectName);
       if (batchId) qs.set("batchId", batchId);
+      if (createdAt) qs.set("startedAt", String(createdAt));
       if (origin) qs.set("origin", origin);
       if (repoFullName) qs.set("repoFullName", repoFullName);
       ws = new WebSocket(`${proto}://${location.host}/ws/claude-pty?${qs}`);

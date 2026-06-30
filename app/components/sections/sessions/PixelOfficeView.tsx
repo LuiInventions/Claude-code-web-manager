@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   avatarVariant,
   groupByBatch,
+  hashId,
   numberSessions,
   sessionActivity,
   sessionColor,
@@ -115,6 +116,12 @@ export default function PixelOfficeView({ sessions }: { sessions: VisualSession[
   hoverIdRef.current = shownId;
   const shownSession = shownId ? mapRef.current.get(shownId) : undefined;
 
+  // Anything that changes which room a session lands in (its id, its batch, or
+  // whether it's done) must trigger a relayout — not just the session count.
+  const layoutSig = sessions
+    .map((s) => `${s.id}|${s.batchId ?? ""}|${sessionActivity(s) === "done" ? "d" : "a"}`)
+    .join(";");
+
   // One-time setup: context, media query, ResizeObserver, visibility, rAF loop.
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -125,10 +132,6 @@ export default function PixelOfficeView({ sessions }: { sessions: VisualSession[
 
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
     reducedRef.current = mq.matches;
-    const onMq = () => {
-      reducedRef.current = mq.matches;
-    };
-    mq.addEventListener?.("change", onMq);
 
     /** Re-measure, size the canvas (DPR-aware) and recompute rooms + seats. */
     const relayout = () => {
@@ -274,10 +277,33 @@ export default function PixelOfficeView({ sessions }: { sessions: VisualSession[
       if (!document.hidden) draw(performance.now());
       raf = requestAnimationFrame(tick);
     };
-    if (!reducedRef.current) raf = requestAnimationFrame(tick);
+    const startLoop = () => {
+      if (!raf && !reducedRef.current) raf = requestAnimationFrame(tick);
+    };
+    const stopLoop = () => {
+      if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
+    };
+
+    // React to a live prefers-reduced-motion change: stop the loop + draw a
+    // single static frame when motion is disabled, resume it when re-enabled.
+    const onMq = () => {
+      reducedRef.current = mq.matches;
+      if (mq.matches) {
+        stopLoop();
+        draw(performance.now());
+      } else {
+        startLoop();
+      }
+    };
+    mq.addEventListener?.("change", onMq);
+
+    startLoop();
 
     return () => {
-      cancelAnimationFrame(raf);
+      stopLoop();
       ro.disconnect();
       mq.removeEventListener?.("change", onMq);
       relayoutRef.current = null;
@@ -285,11 +311,12 @@ export default function PixelOfficeView({ sessions }: { sessions: VisualSession[
     };
   }, []);
 
-  // Session COUNT changed → recompute rooms + canvas size, then redraw.
+  // Room assignment changed (count, ids, batches, or done-state) → recompute
+  // rooms + canvas size, then redraw so sessions move between rooms live.
   useEffect(() => {
     relayoutRef.current?.();
     redrawRef.current?.();
-  }, [sessions.length]);
+  }, [layoutSig]);
 
   // Session DATA changed → for reduced-motion (no rAF loop) redraw so activity /
   // subagent / caption indicators stay current. Animated mode redraws anyway.
@@ -542,7 +569,7 @@ function drawDeskOrCouch(
   const shirt = sessionColor(s.id);
   const variant = avatarVariant(s.id);
   const glow = ACTIVITY_COLOR[activity];
-  const phase = (seat.number * 0.7) % (Math.PI * 2);
+  const phase = (hashId(s.id) % 628) / 100;
   const tt = animate ? t : 0;
   const { cx, top, baseY } = seat;
 
@@ -593,7 +620,7 @@ function drawMeetingSeat(
   const shirt = sessionColor(s.id);
   const variant = avatarVariant(s.id);
   const glow = ACTIVITY_COLOR[activity];
-  const phase = (seat.number * 0.7) % (Math.PI * 2);
+  const phase = (hashId(s.id) % 628) / 100;
   const tt = animate ? t : 0;
   const { cx, top } = seat;
 

@@ -219,6 +219,12 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
   const repoFullName = url.searchParams.get("repoFullName") ?? undefined;
   const projectName = url.searchParams.get("projectName") ?? "";
   const batchId = url.searchParams.get("batchId") ?? "";
+  // Client-provided creation key (the launcher's deterministic `createdAt`). Used
+  // as `startedAt` so the Sessions office numbers sessions identically to the
+  // launcher (oldest = #1), instead of racing on WebSocket-arrival order.
+  const startedAtParam = Number(url.searchParams.get("startedAt"));
+  const startedAt =
+    Number.isFinite(startedAtParam) && startedAtParam > 0 ? startedAtParam : Date.now();
 
   const send = (obj: unknown) => {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
@@ -275,7 +281,7 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
       repoFullName,
       projectName,
       batchId,
-      startedAt: Date.now(),
+      startedAt,
     },
     clients: new Set(),
   };

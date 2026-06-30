@@ -140,6 +140,25 @@ describe("detectTool — current tool + target", () => {
   it("returns undefined when no tool is present", () => {
     expect(detectTool("╭───────────╮\n│ >         │\n╰───────────╯")).toBeUndefined();
   });
+
+  it("multi-arg edit keeps just the file basename (no trailing quote)", () => {
+    expect(detectTool('● Edit(file_path: "myfile.ts", old_string: "x", new_string: "y")')).toEqual({
+      tool: "edit",
+      detail: "myfile.ts",
+    });
+  });
+
+  it("keeps a comma inside a quoted filename", () => {
+    expect(detectTool('● Read("data,2024.csv")')).toEqual({ tool: "read", detail: "data,2024.csv" });
+  });
+
+  it("keeps parentheses inside a filename", () => {
+    expect(detectTool("● Edit(app/foo(v2).tsx)")).toEqual({ tool: "edit", detail: "foo(v2).tsx" });
+  });
+
+  it("isolates one call when two share a line", () => {
+    expect(detectTool("● Read(a.ts)   ● Edit(b.ts)")?.detail).toBe("b.ts");
+  });
 });
 
 describe("detectActivity — tool/detail wiring", () => {

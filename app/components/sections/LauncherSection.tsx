@@ -1029,6 +1029,7 @@ export default function LauncherSection({
                       repoFullName={s.cmd.repoFullName}
                       projectName={s.projectName}
                       batchId={s.batchId}
+                      createdAt={s.createdAt}
                       layoutNonce={layoutNonce}
                       onExit={(code) => {
                         setSessions((prev) =>
