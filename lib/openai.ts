@@ -22,7 +22,9 @@ export function getAiClient(): OpenAI {
       `Kein API-Key für ${p.label}. Trage ihn in den Einstellungen ein (oder wähle einen anderen Provider).`,
     );
   }
-  return new OpenAI({ apiKey: aiApiKey, baseURL: aiBaseUrl });
+  // Cap the request so a hung provider can't block the route (improve/review
+  // have a 120s maxDuration); the default SDK timeout is ~10 min.
+  return new OpenAI({ apiKey: aiApiKey, baseURL: aiBaseUrl, timeout: 30_000 });
 }
 
 /** Back-compat alias. */
@@ -78,7 +80,15 @@ export async function testProvider(
   if (!key)
     return { provider: provider.id, label: provider.label, ok: false, error: "Kein API-Key gesetzt." };
 
-  const client = new OpenAI({ apiKey: key, baseURL: provider.baseUrl });
+  // Short timeout + no retries: this is a connectivity probe, and the /test
+  // route fans out over every keyed provider with a 60s maxDuration — one
+  // unresponsive provider must not stall the whole batch.
+  const client = new OpenAI({
+    apiKey: key,
+    baseURL: provider.baseUrl,
+    timeout: 15_000,
+    maxRetries: 0,
+  });
   const useModel = model?.trim() || provider.defaultModel;
   try {
     await client.chat.completions.create({

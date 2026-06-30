@@ -247,6 +247,20 @@ export default function FlowGraphView({ sessions }: { sessions: VisualSession[] 
       return undefined;
     }
 
+    /** The current label for a node — resolved fresh so polled metadata
+     *  (project name, subagent title) stays live without a graph rebuild. */
+    function liveLabel(n: GNode): string {
+      if (n.kind === "session" && n.sessionId) {
+        const s = sessionsMapRef.current.get(n.sessionId);
+        return s?.projectName?.trim() || n.label;
+      }
+      if (n.kind === "subagent" && n.parentId && n.subId) {
+        const s = sessionsMapRef.current.get(n.parentId);
+        return s?.subagents?.find((a) => a.id === n.subId)?.label || n.label;
+      }
+      return n.label;
+    }
+
     function drawNode(ctx: CanvasRenderingContext2D, n: GNode, t: number) {
       const x = n.x!;
       const y = n.y!;
@@ -304,11 +318,11 @@ export default function FlowGraphView({ sessions }: { sessions: VisualSession[] 
         ctx.fill();
       }
 
-      // label under the node
+      // label under the node (resolved fresh so polled renames show live)
       const labelColor = n.kind === "subagent" ? "#9a948c" : "#cfcbc4";
       ctx.fillStyle = labelColor;
       ctx.font = `${n.kind === "subagent" ? "10" : "11"}px ui-sans-serif, system-ui, sans-serif`;
-      ctx.fillText(clip(ctx, n.label, 120), x, y + r + 11);
+      ctx.fillText(clip(ctx, liveLabel(n), 120), x, y + r + 11);
       ctx.textAlign = "left";
       ctx.textBaseline = "alphabetic";
     }

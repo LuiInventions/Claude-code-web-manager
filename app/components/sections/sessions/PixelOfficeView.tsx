@@ -18,18 +18,21 @@ import {
  * waiting for the user (needs-approval), a green "✓" when done, a red shake on
  * error. The Sessions tab polls, so desks appear/clear as sessions come and go.
  *
- * Rendering is hand-drawn pixel art (crisp rects, DPR-aware) so the look matches
- * the upstream sprite style without bundling its assets. Respects
- * prefers-reduced-motion by drawing a single static frame.
+ * Layout (desk positions) is recomputed only when the session COUNT or the
+ * container size changes; the per-frame draw and the hover handler look the
+ * session DATA up fresh by id, so live activity/subagents/labels stay current
+ * every poll without re-laying-out. Rendering is hand-drawn pixel art (crisp
+ * rects, DPR-aware). Respects prefers-reduced-motion by drawing a single static
+ * frame and redrawing it whenever the session data changes.
  */
 
 const CELL_W = 176;
 const CELL_H = 168;
 const ROOM_PAD = 24;
 
-/** A character's footprint in the room, kept for hover hit-testing. */
+/** A desk's footprint in the room (layout only — session data is looked up by id). */
 interface Desk {
-  session: VisualSession;
+  id: string;
   index: number; // 1-based, matches the launcher numbering
   x: number; // cell top-left (CSS px)
   y: number;
@@ -38,7 +41,7 @@ interface Desk {
 }
 
 interface Hover {
-  session: VisualSession;
+  id: string;
   index: number;
   left: number;
   top: number;
@@ -48,19 +51,27 @@ export default function PixelOfficeView({ sessions }: { sessions: VisualSession[
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Live data the animation loop reads without restarting.
+  // Live data the animation loop / hover handler read fresh, without restarting.
   const sessionsRef = useRef<VisualSession[]>(sessions);
+  const mapRef = useRef<Map<string, VisualSession>>(new Map());
   const desksRef = useRef<Desk[]>([]);
   const sizeRef = useRef({ w: 0, h: 0, dpr: 1 });
   const reducedRef = useRef(false);
   const hoverIdRef = useRef<string | null>(null);
+  // Stable handles so the count/data effects can relayout / redraw the same
+  // canvas without tearing down the rAF loop.
+  const relayoutRef = useRef<(() => void) | null>(null);
+  const redrawRef = useRef<(() => void) | null>(null);
 
   const [hover, setHover] = useState<Hover | null>(null);
 
-  // Keep the latest sessions visible to the rAF loop.
+  // Keep the latest sessions visible to the loop + hover (set every render).
   sessionsRef.current = sessions;
-  hoverIdRef.current = hover?.session.id ?? null;
+  mapRef.current = new Map(sessions.map((s) => [s.id, s]));
+  hoverIdRef.current = hover?.id ?? null;
+  const hoveredSession = hover ? mapRef.current.get(hover.id) : undefined;
 
+  // One-time setup: context, media query, ResizeObserver, the rAF loop.
   useEffect(() => {
     const wrap = wrapRef.current;
     const canvas = canvasRef.current;
@@ -75,13 +86,13 @@ export default function PixelOfficeView({ sessions }: { sessions: VisualSession[
     };
     mq.addEventListener?.("change", onMq);
 
-    /** Re-measure, size the canvas (DPR-aware) and recompute desk layout. */
+    /** Re-measure, size the canvas (DPR-aware) and recompute desk positions. */
     const relayout = () => {
       const list = sessionsRef.current;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const cssW = Math.max(wrap.clientWidth, CELL_W + ROOM_PAD * 2);
       const cols = Math.max(1, Math.floor((cssW - ROOM_PAD * 2) / CELL_W));
-      const rows = Math.max(1, Math.ceil(list.length / cols));
+      const rows = Math.max(1, Math.ceil(Math.max(list.length, 1) / cols));
       const gridW = cols * CELL_W;
       const offX = Math.round((cssW - gridW) / 2);
       const cssH = Math.max(wrap.clientHeight, rows * CELL_H + ROOM_PAD * 2);
@@ -92,31 +103,44 @@ export default function PixelOfficeView({ sessions }: { sessions: VisualSession[
       canvas.width = Math.round(cssW * dpr);
       canvas.height = Math.round(cssH * dpr);
 
-      const desks: Desk[] = list.map((s, i) => {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        return {
-          session: s,
-          index: i + 1,
-          x: offX + col * CELL_W,
-          y: ROOM_PAD + row * CELL_H,
-          w: CELL_W,
-          h: CELL_H,
-        };
-      });
-      desksRef.current = desks;
-
-      if (reducedRef.current) draw(ctx, performance.now()); // static frame
+      desksRef.current = list.map((s, i) => ({
+        id: s.id,
+        index: i + 1,
+        x: offX + (i % cols) * CELL_W,
+        y: ROOM_PAD + Math.floor(i / cols) * CELL_H,
+        w: CELL_W,
+        h: CELL_H,
+      }));
     };
 
-    relayout();
+    /** Draw the whole room for the given timestamp, reading session data fresh. */
+    const draw = (now: number) => {
+      const { w, h, dpr } = sizeRef.current;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawRoom(ctx, w, h);
+      const animate = !reducedRef.current;
+      for (const desk of desksRef.current) {
+        const session = mapRef.current.get(desk.id);
+        if (!session) continue;
+        drawDesk(ctx, desk, session, now, animate, hoverIdRef.current === desk.id);
+      }
+    };
 
-    const ro = new ResizeObserver(relayout);
+    relayoutRef.current = relayout;
+    redrawRef.current = () => draw(performance.now());
+
+    relayout();
+    draw(performance.now());
+
+    const ro = new ResizeObserver(() => {
+      relayout();
+      if (reducedRef.current) draw(performance.now());
+    });
     ro.observe(wrap);
 
     let raf = 0;
     const tick = () => {
-      draw(ctx, performance.now());
+      draw(performance.now());
       raf = requestAnimationFrame(tick);
     };
     if (!reducedRef.current) raf = requestAnimationFrame(tick);
@@ -125,12 +149,24 @@ export default function PixelOfficeView({ sessions }: { sessions: VisualSession[
       cancelAnimationFrame(raf);
       ro.disconnect();
       mq.removeEventListener?.("change", onMq);
+      relayoutRef.current = null;
+      redrawRef.current = null;
     };
-    // Re-run when the session COUNT changes (relayout); the loop itself reads refs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Session COUNT changed → recompute desk positions + canvas size, then redraw.
+  useEffect(() => {
+    relayoutRef.current?.();
+    redrawRef.current?.();
   }, [sessions.length]);
 
-  // Hover hit-testing → DOM tooltip overlay.
+  // Session DATA changed (every poll) → for reduced-motion (no rAF loop), redraw
+  // so activity/subagent indicators stay current. Animated mode redraws anyway.
+  useEffect(() => {
+    if (reducedRef.current) redrawRef.current?.();
+  }, [sessions]);
+
+  // Hover hit-testing → DOM tooltip overlay (session resolved fresh in render).
   const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const wrap = wrapRef.current;
     if (!wrap) return;
@@ -144,13 +180,8 @@ export default function PixelOfficeView({ sessions }: { sessions: VisualSession[
       if (hover) setHover(null);
       return;
     }
-    if (hover?.session.id === hit.session.id) return;
-    setHover({
-      session: hit.session,
-      index: hit.index,
-      left: hit.x + hit.w / 2,
-      top: hit.y + 8,
-    });
+    if (hover?.id === hit.id) return;
+    setHover({ id: hit.id, index: hit.index, left: hit.x + hit.w / 2, top: hit.y + 8 });
   };
 
   return (
@@ -161,20 +192,11 @@ export default function PixelOfficeView({ sessions }: { sessions: VisualSession[
       onMouseLeave={() => setHover(null)}
     >
       <canvas ref={canvasRef} className="block" />
-      {hover && <Tooltip hover={hover} />}
+      {hover && hoveredSession && (
+        <Tooltip session={hoveredSession} index={hover.index} left={hover.left} top={hover.top} />
+      )}
     </div>
   );
-
-  /** Draw the whole room for the given timestamp. */
-  function draw(ctx: CanvasRenderingContext2D, now: number) {
-    const { w, h, dpr } = sizeRef.current;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawRoom(ctx, w, h);
-    const animate = !reducedRef.current;
-    for (const desk of desksRef.current) {
-      drawDesk(ctx, desk, now, animate, hoverIdRef.current === desk.session.id);
-    }
-  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -225,11 +247,12 @@ function drawRoom(ctx: CanvasRenderingContext2D, w: number, h: number) {
 function drawDesk(
   ctx: CanvasRenderingContext2D,
   desk: Desk,
+  session: VisualSession,
   now: number,
   animate: boolean,
   hovered: boolean,
 ) {
-  const { session, index, x, y, w } = desk;
+  const { index, x, y, w } = desk;
   const activity = sessionActivity(session);
   const color = sessionColor(session.id);
   const glow = ACTIVITY_COLOR[activity];
@@ -472,13 +495,22 @@ function truncate(ctx: CanvasRenderingContext2D, text: string, maxW: number): st
 /* Hover tooltip (DOM overlay)                                        */
 /* ------------------------------------------------------------------ */
 
-function Tooltip({ hover }: { hover: Hover }) {
-  const { session, index } = hover;
+function Tooltip({
+  session,
+  index,
+  left,
+  top,
+}: {
+  session: VisualSession;
+  index: number;
+  left: number;
+  top: number;
+}) {
   const activity = sessionActivity(session);
   return (
     <div
       className="pointer-events-none absolute z-10 w-60 -translate-x-1/2 translate-y-2 rounded-lg border border-line bg-elevated p-3 text-xs shadow-lg"
-      style={{ left: hover.left, top: hover.top }}
+      style={{ left, top }}
     >
       <div className="mb-1 flex items-center gap-1.5">
         <span
