@@ -94,6 +94,13 @@ async function boot(): Promise<void> {
   // on a version bump while the GitHub token + other userData stay intact.
   process.env.CCC_APP_VERSION = app.getVersion();
 
+  // The app root (where `public/` and `.next` live). Needed because we chdir()
+  // to userData below in packaged mode, which moves process.cwd() away from the
+  // install dir — server routes that read bundled, read-only assets (e.g. the
+  // Sessions-tab office sprites under public/pixel-agents-assets) resolve paths
+  // from CCC_APP_ROOT instead of cwd.
+  process.env.CCC_APP_ROOT = ROOT;
+
   ensureDepsFromSource();
   installBridge();
   log("secret bridge installed");

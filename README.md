@@ -20,12 +20,14 @@
 </p>
 
 > [!TIP]
-> **🆕 New — v1.5.0 is available.** The **Sessions** office is now the **real
-> [pixel-agents](https://github.com/pixel-agents-hq/pixel-agents) engine**, vendored in directly:
-> genuine pixel-art sprites (characters, furniture, floors, walls, pets), real pathfinding,
-> animations and pan/zoom — fed by your live launcher sessions, with **subagents as their own
-> characters**. No more hand-drawn re-creation.
-> [**Download v1.5.0**](https://github.com/LuiInventions/Claude-code-web-manager/releases/tag/v1.5.0)
+> **🆕 New — v1.6.0 is available.** Fixes the **brown/empty office** in the
+> **Sessions** tab: running Claude Code sessions now render the full
+> [pixel-agents](https://github.com/pixel-agents-hq/pixel-agents) office —
+> genuine pixel-art sprites (characters, furniture, floors, walls, pets), real
+> pathfinding, animations and pan/zoom — fed by your live launcher sessions, with
+> **subagents as their own characters**. (The v1.5.0 installer shipped without the
+> office assets, so the room appeared empty.)
+> [**Download v1.6.0**](https://github.com/LuiInventions/Claude-code-web-manager/releases/tag/v1.6.0)
 > · [**Changelog**](CHANGELOG.md)
 
 <img width="1920" height="1080" alt="Desktop Screenshot 2026 06 28 - 19 27 23 07" src="https://github.com/user-attachments/assets/961f27e3-c90e-4594-bbbc-ce2fa462e56b" />

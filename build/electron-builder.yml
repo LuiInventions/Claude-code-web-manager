@@ -23,6 +23,12 @@ files:
   - build/electron/dist/**/*
   - build/resources/**/*
   - .next/**/*
+  # `public/**` must ship: the office-assets route reads the vendored
+  # pixel-agents sprites/layout from public/pixel-agents-assets at runtime
+  # (the build runs with --experimental-build-mode compile, which skips
+  # prerendering, so the route is evaluated live). Without this the Sessions
+  # tab renders an empty (brown) office.
+  - public/**/*
   - next.config.mjs
   - package.json
   - node_modules/**/*

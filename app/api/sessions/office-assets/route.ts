@@ -28,10 +28,17 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-static";
 
+/** App root that holds `public/`. In the packaged Electron app the main
+ *  process chdir()s to userData (so `.data`/`projects` are writable), which
+ *  moves `process.cwd()` away from the install dir — so it sets CCC_APP_ROOT to
+ *  the real app root. In dev / `npm start` the env is unset and cwd is already
+ *  the app root, so the fallback is correct. */
+const APP_ROOT = process.env.CCC_APP_ROOT || process.cwd();
+
 /** Assets vendored at public/pixel-agents-assets/, with the original `assets/`
  *  tree preserved inside it so the loaders' hardcoded `/assets/` segment
  *  resolves unchanged. */
-const ASSETS_ROOT = path.join(process.cwd(), "public", "pixel-agents-assets");
+const ASSETS_ROOT = path.join(APP_ROOT, "public", "pixel-agents-assets");
 
 export interface OfficeAssetsPayload {
   characters: string[][][][]; // CharacterDirectionSprites[] flattened over JSON

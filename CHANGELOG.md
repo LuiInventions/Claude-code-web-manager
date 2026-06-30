@@ -4,6 +4,31 @@ All notable changes to Claude Code Control Center are documented here. Versions
 follow `package.json`; each `v*` tag publishes a self-contained Windows installer
 (`cc-control-center-Setup-<version>.exe`) via GitHub Actions.
 
+## 1.6.0 — 2026-06-30
+
+### Sessions — fix the brown/empty office in the packaged app
+
+- **Fixed the "brown screen" in the Sessions tab** when Claude Code sessions are
+  running. The office canvas was rendering with no sprites, floor, walls, or
+  furniture — only its dark-brown background — so a running session showed an
+  empty room.
+- **Root cause (two compounding bugs):**
+  1. `public/**` was **not included** in the packaged app
+     (`build/electron-builder.yml`), so the vendored pixel-agents assets under
+     `public/pixel-agents-assets/**` were missing from the installed build
+     entirely.
+  2. `GET /api/sessions/office-assets` resolved those assets via
+     `process.cwd()`, but the packaged Electron main process `chdir()`s to
+     `userData` (so `.data`/`projects` stay writable) — moving the working
+     directory away from the install dir. Because the production build uses
+     `next build --experimental-build-mode compile` (which skips prerendering),
+     the route runs at request time with the wrong cwd. Both failures meant the
+     asset loaders returned nothing and the office rendered empty.
+- **Fixes:** ship `public/**` in the installer, and resolve the office assets
+  from a new `CCC_APP_ROOT` env var (set by the Electron main to the app root,
+  falling back to `process.cwd()` in dev / `npm start`). Added a regression test
+  (`lib/__tests__/office-assets.test.ts`) that loads the shipped asset tree.
+
 ## 1.5.0 — 2026-06-30
 
 ### Sessions — the office is now the real pixel-agents engine
