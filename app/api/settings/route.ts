@@ -17,7 +17,6 @@ export async function POST(req: NextRequest) {
     aiModel?: string;
     openaiModel?: string;
     cartesiaVoice?: string;
-    sessionsView?: string;
     /** Sent by the setup screen on "Loslegen" — stamps this app version. */
     setupComplete?: boolean;
   };
@@ -33,7 +32,6 @@ export async function POST(req: NextRequest) {
     aiModel?: string;
     openaiModel?: string;
     cartesiaVoice?: string;
-    sessionsView?: "pixel" | "flow";
     setupVersion?: string;
   } = {};
 
@@ -48,8 +46,6 @@ export async function POST(req: NextRequest) {
   if (typeof body.aiModel === "string") patch.aiModel = body.aiModel.trim();
   if (typeof body.openaiModel === "string") patch.openaiModel = body.openaiModel.trim();
   if (typeof body.cartesiaVoice === "string") patch.cartesiaVoice = body.cartesiaVoice.trim();
-  if (body.sessionsView === "pixel" || body.sessionsView === "flow")
-    patch.sessionsView = body.sessionsView;
   // Mark first-run setup complete for THIS version so the gate (config.ready)
   // doesn't re-show the welcome screen until the next update. Only stamp once a
   // valid, existing projects folder is present — otherwise `ready` would stay
