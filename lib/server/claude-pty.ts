@@ -13,6 +13,7 @@ import {
   detectActivity,
   type LiveActivity,
   type DetectedSubagent,
+  type ToolKind,
 } from "../session-activity";
 import type { SessionOutput } from "../session-review";
 
@@ -74,6 +75,10 @@ export interface PtySessionInfo extends PtyMeta {
   exitCode?: number;
   /** Live activity derived from the output tail (thinking/working/waiting/…). */
   activity: LiveActivity;
+  /** Coarse category of the tool currently running (running sessions only). */
+  tool?: ToolKind;
+  /** Short target of that tool: file basename / search pattern / command / host. */
+  detail?: string;
   /** In-session subagents (Task tool) detected in the output. */
   subagents: DetectedSubagent[];
   /** ms timestamp of the last output byte (for the idle heuristic on the client). */
@@ -85,7 +90,7 @@ export function listPtySessions(): PtySessionInfo[] {
   const now = Date.now();
   return Array.from(SESSIONS.values())
     .map((s) => {
-      const { activity, subagents } = detectActivity({
+      const { activity, subagents, tool, detail } = detectActivity({
         tail: tailText(s.buffer),
         status: s.status,
         lastDataAtMs: s.lastDataAt,
@@ -96,6 +101,8 @@ export function listPtySessions(): PtySessionInfo[] {
         status: s.status,
         exitCode: s.exitCode,
         activity,
+        tool,
+        detail,
         subagents,
         lastActivityAt: s.lastDataAt,
         ...s.meta,
