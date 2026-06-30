@@ -57,6 +57,14 @@ interface PtySession {
   lastDataAt: number;
   meta: PtyMeta;
   clients: Set<WebSocket>;
+  /**
+   * Warm-pool flag. A pooled session is a pre-spawned `claude` for a folder the
+   * user selected in the Launcher — booted and waiting, but NOT yet opened. It is
+   * hidden from {@link listPtySessions} (so it never appears in the Launcher's
+   * restore list or as a character in the Sessions office) until it is claimed by
+   * an actual "open" (see {@link claimFromPool}), which flips this to false.
+   */
+  pooled: boolean;
 }
 
 // The registry MUST be a single process-wide instance: in dev (and with the
@@ -65,6 +73,7 @@ interface PtySession {
 // Pinning it to globalThis gives both one and the same registry.
 const g = globalThis as unknown as {
   __claudePtySessions?: Map<string, PtySession>;
+  __claudePoolReaper?: ReturnType<typeof setInterval>;
 };
 const SESSIONS: Map<string, PtySession> = (g.__claudePtySessions ??= new Map());
 const BUFFER_CAP = 200_000; // scrollback bytes kept per session for replay
@@ -89,6 +98,9 @@ export interface PtySessionInfo extends PtyMeta {
 export function listPtySessions(): PtySessionInfo[] {
   const now = Date.now();
   return Array.from(SESSIONS.values())
+    // Warm-pool sessions are pre-spawned but not yet opened — never list them
+    // (no Launcher restore entry, no Sessions-office character) until claimed.
+    .filter((s) => !s.pooled)
     .map((s) => {
       const { activity, subagents, tool, detail } = detectActivity({
         tail: tailText(s.buffer),
@@ -123,7 +135,7 @@ export function snapshotPtySessions(ids?: string[]): SessionOutput[] {
     ? ids
         .map((id) => SESSIONS.get(id))
         .filter((s): s is PtySession => s !== undefined)
-    : Array.from(SESSIONS.values());
+    : Array.from(SESSIONS.values()).filter((s) => !s.pooled);
   return pick.map((s) => ({
     id: s.id,
     projectName:
@@ -196,6 +208,238 @@ function attach(s: PtySession, ws: WebSocket): void {
   ws.on("error", detach);
 }
 
+interface CreatePtyOpts {
+  id: string;
+  cwd: string;
+  prompt: string;
+  model: string;
+  effort: string;
+  cols: number;
+  rows: number;
+  projectName: string;
+  batchId: string;
+  startedAt: number;
+  origin?: "github";
+  repoFullName?: string;
+  /** Warm-pool session: pre-spawned and hidden until claimed. */
+  pooled: boolean;
+}
+
+/**
+ * Spawn a Claude PTY and register it (no WebSocket attached yet). Shared by the
+ * live WS handler (pooled:false, prompt passed as a spawn arg) and the warm pool
+ * (pooled:true, no prompt — Claude boots to its interactive box and the prompt is
+ * injected later, on claim). Throws if Claude can't be spawned.
+ */
+function createPtySession(o: CreatePtyOpts): PtySession {
+  const args: string[] = ["--dangerously-skip-permissions"];
+  if (o.model) args.push("--model", o.model);
+  if (o.effort) args.push("--effort", o.effort);
+  if (o.prompt) args.push(o.prompt);
+
+  const term = pty.spawn(resolveClaudeBin(), args, {
+    name: "xterm-256color",
+    cols: o.cols,
+    rows: o.rows,
+    cwd: o.cwd,
+    env: process.env as Record<string, string>,
+  });
+
+  const session: PtySession = {
+    id: o.id,
+    term,
+    buffer: "",
+    status: "running",
+    lastDataAt: Date.now(),
+    pooled: o.pooled,
+    meta: {
+      cwd: o.cwd,
+      prompt: o.prompt,
+      model: o.model,
+      effort: o.effort,
+      origin: o.origin,
+      repoFullName: o.repoFullName,
+      projectName: o.projectName,
+      batchId: o.batchId,
+      startedAt: o.startedAt,
+    },
+    clients: new Set(),
+  };
+  SESSIONS.set(o.id, session);
+
+  term.onData((d) => {
+    session.buffer += d;
+    if (session.buffer.length > BUFFER_CAP) session.buffer = session.buffer.slice(-BUFFER_CAP);
+    session.lastDataAt = Date.now();
+    broadcast(session, { t: "out", d });
+  });
+
+  term.onExit(({ exitCode }) => {
+    session.status = exitCode === 0 ? "done" : "error";
+    session.exitCode = exitCode;
+    broadcast(session, { t: "exit", code: exitCode });
+  });
+
+  return session;
+}
+
+// ── Warm pool ────────────────────────────────────────────────────────────────
+// Pre-spawned Claude sessions keyed by the folder (+ model + effort) the user
+// selected in the Launcher, so opening a session is instant. The pool is filled
+// when the user picks a folder (preloadPool) and drained as sessions are opened
+// (claimFromPool). Pooled sessions stay hidden (listPtySessions filters them) so
+// they never show in the Launcher restore list or the Sessions office until
+// claimed.
+
+/** Per-selection pool size (matches the Launcher's max "boxes"). */
+const POOL_SIZE = 6;
+
+function poolKey(cwd: string, model: string, effort: string): string {
+  return `${cwd} ${model} ${effort}`;
+}
+
+function genSessionId(): string {
+  return `c_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/**
+ * Submit `text` into a freshly-claimed pooled session once Claude's interactive
+ * input box is up (it boots in ~1–2s). Polls the scrollback for the box border;
+ * after ~10s it sends anyway so a missed heuristic never strands a live session.
+ * If Claude has already exited (a rare crash between claim and ready) there is
+ * nothing to inject — the box simply shows as ended via its normal exit status.
+ */
+function injectWhenReady(s: PtySession, text: string, attempt = 0): void {
+  if (s.status !== "running") return;
+  const ready = /[╭╰]/.test(s.buffer) || /\n\s*>\s/.test(s.buffer);
+  if (ready || attempt >= 50) {
+    try {
+      s.term.write(text + "\r");
+    } catch {
+      /* PTY gone */
+    }
+    return;
+  }
+  setTimeout(() => injectWhenReady(s, text, attempt + 1), 200);
+}
+
+/**
+ * Pre-warm the pool for one folder selection: spawn up to POOL_SIZE pooled
+ * sessions matching (cwd, model, effort), and kill any pooled session that no
+ * longer matches the current selection (or has exited) so only the current
+ * folder's warm pool survives. No-op while the Claude usage limit is hit.
+ */
+export function preloadPool(opts: {
+  cwd: string;
+  model: string;
+  effort: string;
+  count?: number;
+}): void {
+  const cwd = opts.cwd?.trim();
+  if (!cwd) return;
+  if (isBlocked(getUsage(), Date.now()).blocked) return;
+  const model = normalizeModel(opts.model) ?? "";
+  const effort = normalizeEffort(opts.effort) ?? "";
+  const wantKey = poolKey(cwd, model, effort);
+  const count = opts.count ?? POOL_SIZE;
+
+  // Drop stale pooled sessions (different selection, or exited).
+  for (const s of [...SESSIONS.values()]) {
+    if (!s.pooled) continue;
+    const stale =
+      s.status !== "running" || poolKey(s.meta.cwd, s.meta.model, s.meta.effort) !== wantKey;
+    if (stale) killPtySession(s.id);
+  }
+
+  let have = 0;
+  for (const s of SESSIONS.values()) {
+    if (s.pooled && poolKey(s.meta.cwd, s.meta.model, s.meta.effort) === wantKey) have++;
+  }
+  for (let i = have; i < count; i++) {
+    try {
+      createPtySession({
+        id: genSessionId(),
+        cwd,
+        prompt: "",
+        model,
+        effort,
+        cols: 80,
+        rows: 24,
+        projectName: "",
+        batchId: "",
+        startedAt: Date.now(),
+        pooled: true,
+      });
+    } catch {
+      break; // Claude unresolved / spawn failed — stop trying.
+    }
+  }
+}
+
+/**
+ * Claim a warm session for (cwd, model, effort): assign the user's task to it,
+ * inject the prompt once Claude is ready, reveal it (pooled:false), and return
+ * its id so the client attaches to it. Returns null when no warm session is
+ * available — the caller then opens a fresh session the normal way.
+ */
+export function claimFromPool(opts: {
+  cwd: string;
+  model: string;
+  effort: string;
+  prompt: string;
+  projectName: string;
+  batchId: string;
+  startedAt: number;
+  origin?: "github";
+  repoFullName?: string;
+}): string | null {
+  const cwd = opts.cwd?.trim();
+  if (!cwd) return null;
+  const model = normalizeModel(opts.model) ?? "";
+  const effort = normalizeEffort(opts.effort) ?? "";
+  const wantKey = poolKey(cwd, model, effort);
+  const match = [...SESSIONS.values()].find(
+    (s) =>
+      s.pooled &&
+      s.status === "running" &&
+      poolKey(s.meta.cwd, s.meta.model, s.meta.effort) === wantKey,
+  );
+  if (!match) return null;
+
+  match.pooled = false;
+  match.meta.prompt = opts.prompt;
+  match.meta.projectName = opts.projectName;
+  match.meta.batchId = opts.batchId;
+  match.meta.startedAt = opts.startedAt;
+  match.meta.origin = opts.origin;
+  match.meta.repoFullName = opts.repoFullName;
+  if (opts.prompt) injectWhenReady(match, opts.prompt);
+  return match.id;
+}
+
+/** Reap warm sessions that were pre-spawned but never opened within this long. */
+const POOL_MAX_IDLE_MS = 10 * 60 * 1000;
+
+/**
+ * Kill pooled (unclaimed) sessions older than the idle limit. preloadPool only
+ * cleans up on a folder change, so without this a pool the user pre-warmed and
+ * then walked away from would keep ~6 `claude` processes alive until the app
+ * quits. A single process-wide interval bounds that leak. Claimed sessions
+ * (pooled:false) are never touched.
+ */
+function reapStalePool(): void {
+  const now = Date.now();
+  for (const s of [...SESSIONS.values()]) {
+    if (s.pooled && now - s.meta.startedAt > POOL_MAX_IDLE_MS) killPtySession(s.id);
+  }
+}
+if (!g.__claudePoolReaper) {
+  const timer = setInterval(reapStalePool, 60_000);
+  // Don't let the reaper keep the process alive on its own.
+  (timer as { unref?: () => void }).unref?.();
+  g.__claudePoolReaper = timer;
+}
+
 export function handleClaudePty(ws: WebSocket, url: URL): void {
   const id =
     url.searchParams.get("id")?.trim() ||
@@ -242,20 +486,24 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
     return;
   }
 
-  // Options first, positional prompt last (claude [options] [prompt]).
-  const args: string[] = ["--dangerously-skip-permissions"];
-  if (model) args.push("--model", model);
-  if (effort) args.push("--effort", effort);
-  if (prompt) args.push(prompt);
-
-  let term: pty.IPty;
+  // A fresh, immediately-opened session: spawn Claude with the prompt as a
+  // launch arg (the warm-pool path injects the prompt instead — see claimFromPool).
+  let session: PtySession;
   try {
-    term = pty.spawn(resolveClaudeBin(), args, {
-      name: "xterm-256color",
+    session = createPtySession({
+      id,
+      cwd,
+      prompt,
+      model: model ?? "",
+      effort: effort ?? "",
       cols,
       rows,
-      cwd,
-      env: process.env as Record<string, string>,
+      projectName,
+      batchId,
+      startedAt,
+      origin,
+      repoFullName,
+      pooled: false,
     });
   } catch (err) {
     send({
@@ -265,41 +513,6 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
     ws.close();
     return;
   }
-
-  const session: PtySession = {
-    id,
-    term,
-    buffer: "",
-    status: "running",
-    lastDataAt: Date.now(),
-    meta: {
-      cwd,
-      prompt,
-      model: model ?? "",
-      effort: effort ?? "",
-      origin,
-      repoFullName,
-      projectName,
-      batchId,
-      startedAt,
-    },
-    clients: new Set(),
-  };
-  SESSIONS.set(id, session);
-
-  term.onData((d) => {
-    session.buffer += d;
-    if (session.buffer.length > BUFFER_CAP)
-      session.buffer = session.buffer.slice(-BUFFER_CAP);
-    session.lastDataAt = Date.now();
-    broadcast(session, { t: "out", d });
-  });
-
-  term.onExit(({ exitCode }) => {
-    session.status = exitCode === 0 ? "done" : "error";
-    session.exitCode = exitCode;
-    broadcast(session, { t: "exit", code: exitCode });
-  });
 
   attach(session, ws);
 }

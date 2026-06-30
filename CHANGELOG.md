@@ -4,6 +4,35 @@ All notable changes to Claude Code Control Center are documented here. Versions
 follow `package.json`; each `v*` tag publishes a self-contained Windows installer
 (`cc-control-center-Setup-<version>.exe`) via GitHub Actions.
 
+## 1.8.0 — 2026-07-01
+
+### Launcher — instant sessions via a per-folder warm pool
+
+- **Pick a folder → 6 Claude sessions pre-warm for it.** Selecting a project in the
+  Launcher dropdown now pre-spawns a small pool of `claude --dangerously-skip-permissions`
+  sessions for exactly that folder (keyed by folder + model + effort), so opening a
+  session is instant instead of waiting for Claude to boot. Switching folders replaces
+  the pool; the pool is refilled after each open.
+- **Pooled sessions stay hidden until opened.** A warm session is invisible — no Launcher
+  restore entry and **no character in the Sessions office** — until you actually open it.
+  Opening claims a warm session, injects your prompt once Claude is ready, and only then
+  does it appear as a `#N` character. (`listPtySessions` filters pooled sessions; new
+  `preloadPool`/`claimFromPool` + `/api/launcher/preload` and `/api/launcher/claim`.)
+
+### Sessions — fixes
+
+- **Activity captions now actually show.** Root cause: Claude Code's TUI renders the
+  Edit/Write tool as `Update(file)`, which the activity parser didn't recognise, so edit
+  operations produced no tool/detail and no caption. `Update` is now detected as an edit,
+  and the desk caption falls back to "Thinking…"/"Working…" whenever an agent is active but
+  no specific tool is parsed — so the office never looks idle when it isn't. (Regression test
+  added.)
+- **The office stays fully visible when the window shrinks.** The fit switched from "cover"
+  (which cropped edges) to an integer "contain" fit: the whole office scales to fit the
+  container at any size; leftover space uses a neutral (non-brown) background.
+- **Kitchen cleanup.** Removed the floor coffee machines, pots, cacti and the corner table
+  from the default layout (kept the break table + benches and the leafy plants).
+
 ## 1.7.0 — 2026-06-30
 
 ### Sessions — still camera, full-bleed office, live captions, agent numbers, richer layout

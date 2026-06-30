@@ -83,7 +83,6 @@
     {"uid": "f-1773356878781-rncl", "type": "PLANT_2", "col": 11, "row": 10},
     {"uid": "f-1773356974812-apra", "type": "LARGE_PAINTING", "col": 14, "row": 9},
     {"uid": "f-1773357087399-3kfy", "type": "BIN", "col": 2, "row": 20},
-    {"uid": "f-1773357989802-thws", "type": "SMALL_TABLE_FRONT", "col": 17, "row": 19},
     {"uid": "f-1773358001163-aqv4", "type": "SMALL_TABLE_SIDE", "col": 1, "row": 18},
     {"uid": "f-1773358458100-4wm2", "type": "COFFEE", "col": 1, "row": 19},
     {"uid": "f-1773358479734-biia", "type": "PLANT_2", "col": 1, "row": 17},
@@ -92,18 +91,9 @@
     {"uid": "f-ext-k01", "type": "COFFEE_TABLE", "col": 12, "row": 18},
     {"uid": "f-ext-k02", "type": "WOODEN_BENCH", "col": 12, "row": 17},
     {"uid": "f-ext-k03", "type": "WOODEN_BENCH", "col": 13, "row": 17},
-    {"uid": "f-ext-k04", "type": "COFFEE", "col": 14, "row": 18},
-    {"uid": "f-ext-k05", "type": "COFFEE", "col": 15, "row": 18},
-    {"uid": "f-ext-k06", "type": "COFFEE", "col": 16, "row": 18},
-    {"uid": "f-ext-k07", "type": "POT", "col": 14, "row": 19},
-    {"uid": "f-ext-k08", "type": "POT", "col": 15, "row": 19},
-    {"uid": "f-ext-k09", "type": "CACTUS", "col": 16, "row": 19},
 
     {"uid": "f-ext-d01", "type": "LARGE_PLANT", "col": 17, "row": 12},
     {"uid": "f-ext-d02", "type": "PLANT_2", "col": 11, "row": 12},
-    {"uid": "f-ext-d03", "type": "CACTUS", "col": 9, "row": 11},
-    {"uid": "f-ext-d04", "type": "PLANT", "col": 1, "row": 11},
-    {"uid": "f-ext-d05", "type": "POT", "col": 9, "row": 20},
-    {"uid": "f-ext-d06", "type": "CACTUS", "col": 9, "row": 18}
+    {"uid": "f-ext-d04", "type": "PLANT", "col": 1, "row": 11}
   ]
 }

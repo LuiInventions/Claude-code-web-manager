@@ -104,6 +104,15 @@ describe("detectTool — current tool + target", () => {
     });
   });
 
+  it("edit rendered as Update(...) (Claude Code TUI) → file basename", () => {
+    // The interactive TUI renders the Edit/Write tool as `Update(file)`; it must
+    // still resolve to an edit so the desk caption ("✎ file") appears.
+    expect(detectTool("⏺ Update(app/components/Foo.tsx)")).toEqual({
+      tool: "edit",
+      detail: "Foo.tsx",
+    });
+  });
+
   it("read → file basename, strips key + quotes", () => {
     expect(detectTool('● Read(file_path: "lib/sessions.ts")')).toEqual({
       tool: "read",

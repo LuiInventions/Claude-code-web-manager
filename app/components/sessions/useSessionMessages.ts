@@ -210,9 +210,14 @@ export function useSessionMessages(
       const activity = sessionActivity(s);
       const active = activity === "working" || activity === "thinking";
       const tool = active && s.tool ? TOOL_NAME[s.tool] : null;
-      // Desk caption (file/command) for the active tool — same detail level as
-      // the original; drives the live "✎ file" / "$ command" label.
-      const caption = active ? toolCaption(s.tool, s.detail) : null;
+      // Desk caption for the active agent. Prefer the concrete tool target
+      // ("✎ file" / "$ command"); when no tool is parsed from the tail (e.g. the
+      // agent is mid-thought, or a tool the heuristic doesn't classify), fall
+      // back to a generic activity word so SOMETHING is always shown while the
+      // agent is working — the office should never look idle when it isn't.
+      const caption = active
+        ? (toolCaption(s.tool, s.detail) ?? (activity === "thinking" ? "Thinking…" : "Working…"))
+        : null;
       if (caption) caps[agentId] = caption;
       const launcherNumber = numberBySession.get(s.id);
       if (launcherNumber) nums[agentId] = launcherNumber;

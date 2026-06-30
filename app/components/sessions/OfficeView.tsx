@@ -46,7 +46,7 @@ export default function OfficeView({ sessions }: { sessions: VisualSession[] }) 
   }
 
   return (
-    <div ref={containerRef} className="relative h-full w-full overflow-hidden bg-[#1b1712]">
+    <div ref={containerRef} className="relative h-full w-full overflow-hidden bg-[#0e0f13]">
       <OfficeCanvas
         officeState={getOfficeState()}
         onClick={noop}

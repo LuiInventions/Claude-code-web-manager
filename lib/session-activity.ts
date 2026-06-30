@@ -61,12 +61,14 @@ const SUBAGENT_RE = /Task\(([^)]*)\)/g;
 // The arg group allows one level of nested parens (e.g. `Edit(foo(v2).tsx)`) while
 // still stopping at the call's own close paren, so two calls on one line stay split.
 const TOOL_CALL_RE =
-  /\b(Edit|MultiEdit|Write|NotebookEdit|Read|Grep|Glob|Search|Bash|WebFetch|WebSearch|Task)\(([^()\n]*(?:\([^()\n]*\)[^()\n]*)*)\)/g;
+  /\b(Edit|MultiEdit|Write|Update|NotebookEdit|Read|Grep|Glob|Search|Bash|WebFetch|WebSearch|Task)\(([^()\n]*(?:\([^()\n]*\)[^()\n]*)*)\)/g;
 
 const TOOL_KIND: Record<string, ToolKind> = {
   Edit: "edit",
   MultiEdit: "edit",
   Write: "edit",
+  // Claude Code's interactive TUI renders the Edit/Write tool as `Update(file)`.
+  Update: "edit",
   NotebookEdit: "edit",
   Read: "read",
   Grep: "search",

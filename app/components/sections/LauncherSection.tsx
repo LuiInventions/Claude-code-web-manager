@@ -225,6 +225,25 @@ export default function LauncherSection({
     refreshUsage();
   }, [refreshUsage]);
 
+  // Warm pool: pre-spawn a small pool of Claude sessions for the selected folder
+  // (+ model/effort) so opening one is instant. Pooled sessions stay hidden — they
+  // only appear in the Launcher/Sessions office once actually opened.
+  const preload = useCallback((cwd: string, m: string, e: string) => {
+    if (!cwd) return;
+    void fetch("/api/launcher/preload", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cwd, model: m, effort: e }),
+    }).catch(() => {});
+  }, []);
+  // Trigger on folder (and model/effort) selection — debounced so quickly flipping
+  // the dropdown doesn't thrash; the server keeps only the latest selection's pool.
+  useEffect(() => {
+    if (!projectPath) return;
+    const t = setTimeout(() => preload(projectPath, model, effort), 400);
+    return () => clearTimeout(t);
+  }, [projectPath, model, effort, preload]);
+
   // While blocked, tick once a second for the countdown and auto-unblock.
   useEffect(() => {
     if (!usage?.blockedUntil || usage.blockedUntil <= Date.now()) return;
@@ -262,30 +281,61 @@ export default function LauncherSection({
   // Open one live PTY Claude session per prompt — a single batch shown as a
   // symmetric grid. Each box is an independent interactive session. Empty
   // prompts are allowed (interactive REPL with no initial task).
-  const startBatch = (prompts: string[]) => {
+  const startBatch = async (prompts: string[]) => {
     if (!projectPath || blocked || prompts.length === 0) return;
     const pn = nameForPath(projectPath);
     const po = pendingOriginRef.current;
     const stamp = Date.now().toString(36);
     const batchId = `b_${stamp}${Math.random().toString(36).slice(2, 5)}`;
     const startedAt = Date.now();
-    const batch: LiveSession[] = prompts.map((pr, i) => ({
-      id: `c_${stamp}${Math.random().toString(36).slice(2, 6)}_${i}`,
-      batchId,
-      createdAt: startedAt + i,
-      projectName: pn,
-      projectPath,
-      prompt: pr,
-      status: "running" as Status,
-      cmd: {
-        cwd: projectPath,
-        prompt: pr,
-        model,
-        effort,
-        origin: po?.origin,
-        repoFullName: po?.repoFullName,
-      },
-    }));
+    // Hand each box a pre-warmed session from the pool when one is available
+    // (instant open — the server injects the prompt); otherwise keep a fresh id
+    // and let the pane spawn Claude the normal way. Promise.all preserves order,
+    // so createdAt = startedAt + i still drives the stable #1..#N numbering.
+    const batch: LiveSession[] = await Promise.all(
+      prompts.map(async (pr, i): Promise<LiveSession> => {
+        const createdAt = startedAt + i;
+        let id = `c_${stamp}${Math.random().toString(36).slice(2, 6)}_${i}`;
+        try {
+          const r = await fetch("/api/launcher/claim", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              cwd: projectPath,
+              model,
+              effort,
+              prompt: pr,
+              projectName: pn,
+              batchId,
+              startedAt: createdAt,
+              origin: po?.origin,
+              repoFullName: po?.repoFullName,
+            }),
+          });
+          const d = (await r.json()) as { id?: string | null };
+          if (d?.id) id = d.id;
+        } catch {
+          /* no pool reachable — keep the fresh id (pane spawns Claude) */
+        }
+        return {
+          id,
+          batchId,
+          createdAt,
+          projectName: pn,
+          projectPath,
+          prompt: pr,
+          status: "running" as Status,
+          cmd: {
+            cwd: projectPath,
+            prompt: pr,
+            model,
+            effort,
+            origin: po?.origin,
+            repoFullName: po?.repoFullName,
+          },
+        };
+      }),
+    );
     setSessions((prev) => [...batch, ...prev]);
     setSelectedId(batch[0].id);
     refreshUsage();
@@ -297,6 +347,8 @@ export default function LauncherSection({
     setSplitError(null);
     setManualSessions([]);
     setPhase("idle");
+    // Refill the folder's pool so the next open is instant too.
+    preload(projectPath, model, effort);
   };
 
   // Normal start: `boxCount` boxes, all with the same (improved) prompt.

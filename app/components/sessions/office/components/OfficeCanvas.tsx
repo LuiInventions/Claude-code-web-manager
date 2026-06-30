@@ -57,13 +57,14 @@ function contentBounds(layout: OfficeLayout): {
 }
 
 /**
- * Integer "cover" fit: the smallest integer zoom at which the content box fills
- * the whole canvas in BOTH axes (so no transparent/brown edge shows), plus the
- * pan that centres that box. Integer zoom keeps the pixel-art crisp (sprites are
- * cached at `tile*zoom`); the centred box may clip a little at the far edges,
- * which is the intended trade for "floor fills the entire area".
+ * Integer "contain" fit: the largest integer zoom at which the WHOLE content box
+ * still fits inside the canvas in both axes, plus the pan that centres it. This
+ * keeps everything visible at any container size — the office shrinks to fit when
+ * the window is made smaller (the explicit goal, over edge-cropping). Integer
+ * zoom keeps the pixel-art crisp (sprites are cached at `tile*zoom`); any leftover
+ * margin shows the neutral wrapper background, not a brown band.
  */
-function computeCoverFit(
+function computeContainFit(
   canvasW: number,
   canvasH: number,
   layout: OfficeLayout,
@@ -73,12 +74,16 @@ function computeCoverFit(
   const boxRows = b.maxRow - b.minRow + 1;
   const boxW = boxCols * TILE_SIZE;
   const boxH = boxRows * TILE_SIZE;
-  const rawZoom = Math.max(canvasW / boxW, canvasH / boxH);
-  // NOTE: deliberately NOT clamped to ZOOM_MAX. ZOOM_MAX bounds *manual* (wheel)
-  // zoom; the cover fit must be free to use whatever integer zoom actually fills
-  // the canvas. Clamping here would leave a small office in a large / high-DPR
-  // canvas short of covering and re-expose the brown border (point 2).
-  const zoom = Math.max(ZOOM_MIN, Math.ceil(rawZoom));
+  // Degenerate/empty layout (cols or rows 0) — nothing to fit; bail before the
+  // divide so canvasW/0 → Infinity → NaN pan can't happen.
+  if (boxW <= 0 || boxH <= 0) return { zoom: ZOOM_MIN, panX: 0, panY: 0 };
+  const rawZoom = Math.min(canvasW / boxW, canvasH / boxH);
+  // Crisp integer zoom while the office fits at ≥1× (the normal case). When the
+  // office is bigger than the canvas (rawZoom < 1, only at very small windows),
+  // fall through to a fractional zoom so EVERYTHING still fits — honouring the
+  // contain guarantee, trading a little blur for never cropping. Not clamped to
+  // ZOOM_MAX — that bounds *manual* wheel zoom, not the auto-fit.
+  const zoom = rawZoom >= 1 ? Math.floor(rawZoom) : Math.max(0.05, rawZoom);
   // Renderer centres the FULL grid then adds pan; derive the pan that lands the
   // content-box centre exactly on the canvas centre.
   const mapW = layout.cols * TILE_SIZE * zoom;
@@ -115,11 +120,11 @@ interface OfficeCanvasProps {
    */
   followCameraOnSelect?: boolean;
   /**
-   * When true, the canvas computes a one-time integer "cover" fit so the office
-   * floor fills the whole container (no brown border), then locks zoom & pan —
-   * no camera follow, no wheel zoom, no pan, no resize-driven panning. The fit
-   * is recomputed only to keep covering when the container itself resizes.
-   * Off by default so the editor app keeps free zoom/pan.
+   * When true, the canvas auto-fits the office to the container and locks
+   * zoom & pan — no camera follow, no wheel zoom, no pan. It uses an integer
+   * "contain" fit so the WHOLE office stays visible at any container size (it
+   * shrinks to fit when the window is made smaller); the fit is recomputed when
+   * the container resizes. Off by default so the editor app keeps free zoom/pan.
    */
   fitToContent?: boolean;
 }
@@ -193,15 +198,15 @@ export function OfficeCanvas({
     // No ctx.scale(dpr) — we render directly in device pixels
   }, []);
 
-  // Compute the cover-fit for the current canvas size + layout, lock pan to it,
+  // Compute the contain-fit for the current canvas size + layout, lock pan to it,
   // and push the fit zoom up to the host. onZoomChange with an unchanged value
   // is a no-op in React, so this converges in ≤1 extra render. Called on mount
   // and whenever the container resizes; never in response to agent movement.
-  const applyCoverFit = useCallback(() => {
+  const applyContainFit = useCallback(() => {
     if (!fitToContent) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const fit = computeCoverFit(canvas.width, canvas.height, officeState.getLayout());
+    const fit = computeContainFit(canvas.width, canvas.height, officeState.getLayout());
     fitRef.current = fit;
     panRef.current = { x: fit.panX, y: fit.panY };
     onZoomChange(fit.zoom);
@@ -212,11 +217,11 @@ export function OfficeCanvas({
     if (!canvas) return;
 
     resizeCanvas();
-    applyCoverFit();
+    applyContainFit();
 
     const observer = new ResizeObserver(() => {
       resizeCanvas();
-      applyCoverFit();
+      applyContainFit();
     });
     if (containerRef.current) {
       observer.observe(containerRef.current);
@@ -324,8 +329,8 @@ export function OfficeCanvas({
           }
         }
 
-        // Locked cover-fit: re-assert pan every frame so the view can't drift
-        // (no camera follow, no resize-driven panning) — point 2.
+        // Locked contain-fit: re-assert pan every frame so the view can't drift
+        // (no camera follow, no resize-driven panning).
         if (fitToContent) {
           if (fitRef.current) {
             panRef.current = { x: fitRef.current.panX, y: fitRef.current.panY };
@@ -398,7 +403,7 @@ export function OfficeCanvas({
   }, [
     officeState,
     resizeCanvas,
-    applyCoverFit,
+    applyContainFit,
     isEditMode,
     editorState,
     _editorTick,
