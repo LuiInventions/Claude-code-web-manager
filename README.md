@@ -19,6 +19,13 @@
   clicks. Prefer source? Jump to <a href="#option-b--from-source">Option B</a>.
 </p>
 
+> [!TIP]
+> **🆕 New — v1.4.0 is available.** The **Sessions** tab is now a single living **pixel office**:
+> Work / Meeting / Break rooms, characters that show the exact **file or command** each agent is
+> working on, **subagents as their own little people**, and desk numbers that match the Launcher.
+> [**Download v1.4.0**](https://github.com/LuiInventions/Claude-code-web-manager/releases/tag/v1.4.0)
+> · [**Changelog**](CHANGELOG.md)
+
 <img width="1920" height="1080" alt="Desktop Screenshot 2026 06 28 - 19 27 23 07" src="https://github.com/user-attachments/assets/961f27e3-c90e-4594-bbbc-ce2fa462e56b" />
 
 ---
