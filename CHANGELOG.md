@@ -4,6 +4,35 @@ All notable changes to Claude Code Control Center are documented here. Versions
 follow `package.json`; each `v*` tag publishes a self-contained Windows installer
 (`cc-control-center-Setup-<version>.exe`) via GitHub Actions.
 
+## 1.7.0 — 2026-06-30
+
+### Sessions — still camera, full-bleed office, live captions, agent numbers, richer layout
+
+Bug-fix + enhancement pass on the vendored pixel-agents office. The engine in
+`app/components/sessions/office/engine/**` (rendering, sprites, pathfinding, FSM)
+is unchanged — all work is in the adapter, the canvas host (prop-gated), a new
+thin overlay layer, and the default layout.
+
+- **Camera no longer follows on click.** `OfficeCanvas` gained an opt-out prop
+  `followCameraOnSelect` (default `true`, preserving upstream); the Sessions tab
+  passes `false`, so clicking a character only selects it (tooltip/info) and the
+  camera stays put.
+- **The office fills the whole container — no brown border.** New `fitToContent`
+  mode computes an integer "cover" fit to the non-VOID content bounding box (the
+  layout's empty top rows were the brown band), then locks zoom + pan (no camera
+  follow, no wheel/drag pan, re-fit only on container resize). The cover zoom is
+  intentionally not clamped to `ZOOM_MAX` so a small office in a large/high-DPR
+  canvas still fully covers.
+- **Live desk captions.** The activity overlay shows the current file/command for
+  the running tool — `✎ App.tsx` (edit), `$ npm run build` (bash), `Reading …`,
+  `Searching …`, etc. — sourced from the `tool`/`detail` the server already
+  parses in `lib/session-activity.ts`.
+- **Permanent `#N` badge over every character**, matching the Launcher's session
+  numbering (`numberSessions`, oldest = #1); sub-agents inherit their parent's
+  number. Rendered by a new thin `OfficeOverlay` layer (the engine is untouched).
+- **Richer default layout.** Added a coffee/break area (table, benches, a coffee
+  "counter", pots) and more greenery across both rooms; `layoutRevision` 1 → 2.
+
 ## 1.6.0 — 2026-06-30
 
 ### Sessions — fix the brown/empty office in the packaged app

@@ -13,6 +13,7 @@
 
 import { useCallback, useRef, useState } from "react";
 
+import { OfficeOverlay } from "./OfficeOverlay";
 import { OfficeCanvas } from "./office/components/OfficeCanvas";
 import { EditorState } from "./office/editor/editorState";
 import { OfficeState } from "./office/engine/officeState";
@@ -32,9 +33,11 @@ export default function OfficeView({ sessions }: { sessions: VisualSession[] }) 
   if (!editorRef.current) editorRef.current = new EditorState();
 
   const panRef = useRef({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(3);
 
-  const { layoutReady } = useSessionMessages(getOfficeState, sessions);
+  const { layoutReady, agents, subagentCharacters, agentCaptions, agentNumbers } =
+    useSessionMessages(getOfficeState, sessions);
 
   if (!layoutReady) {
     return (
@@ -43,7 +46,7 @@ export default function OfficeView({ sessions }: { sessions: VisualSession[] }) 
   }
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[#1b1712]">
+    <div ref={containerRef} className="relative h-full w-full overflow-hidden bg-[#1b1712]">
       <OfficeCanvas
         officeState={getOfficeState()}
         onClick={noop}
@@ -59,6 +62,18 @@ export default function OfficeView({ sessions }: { sessions: VisualSession[] }) 
         zoom={zoom}
         onZoomChange={setZoom}
         panRef={panRef}
+        followCameraOnSelect={false}
+        fitToContent
+      />
+      <OfficeOverlay
+        officeState={getOfficeState()}
+        containerRef={containerRef}
+        zoom={zoom}
+        panRef={panRef}
+        agents={agents}
+        subagentCharacters={subagentCharacters}
+        agentCaptions={agentCaptions}
+        agentNumbers={agentNumbers}
       />
     </div>
   );

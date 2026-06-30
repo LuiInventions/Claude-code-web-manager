@@ -30,7 +30,7 @@ import { setProviderCapabilities } from "./office/toolUtils";
 import type { OfficeLayout } from "./office/types";
 import { setWallSprites } from "./office/wallTiles";
 import type { OfficeState } from "./office/engine/officeState";
-import { sessionActivity, type ToolKind, type VisualSession } from "@/lib/sessions";
+import { numberSessions, sessionActivity, type ToolKind, type VisualSession } from "@/lib/sessions";
 
 /** Same shape as pixel-agents' SubagentCharacter (re-exported for ToolOverlay). */
 export interface SubagentCharacter {
@@ -45,6 +45,47 @@ export interface SessionMessagesState {
   agents: number[];
   layoutReady: boolean;
   subagentCharacters: SubagentCharacter[];
+  /**
+   * Office agent-id → live desk caption for the tool the agent is running right
+   * now, e.g. `"✎ App.tsx"` (edit) or `"$ npm run build"` (bash). Only present
+   * while the agent is active; absent when idle. Mirrors the detail level of
+   * upstream's per-tool status text.
+   */
+  agentCaptions: Record<number, string>;
+  /**
+   * Office agent-id → the session's stable Launcher number (the same `#N` shown
+   * in the Launcher tab, oldest = #1). The overlay renders this permanently over
+   * each character. Sub-agents inherit their parent session's number.
+   */
+  agentNumbers: Record<number, number>;
+}
+
+/**
+ * Human-readable desk caption for the tool an agent is running, built from the
+ * coarse {@link ToolKind} plus the short target (`detail`) the server already
+ * parsed from the output tail (file basename / command / search pattern / host).
+ * Edit/Bash use the glyph form the spec calls for ("✎ file", "$ command");
+ * the rest keep upstream's verb form ("Reading x", "Searching y", …).
+ */
+function toolCaption(tool: ToolKind | undefined, detail: string | undefined): string | null {
+  if (!tool) return null;
+  const d = (detail ?? "").trim();
+  switch (tool) {
+    case "edit":
+      return d ? `✎ ${d}` : "Editing";
+    case "bash":
+      return d ? `$ ${d}` : "Running";
+    case "read":
+      return d ? `Reading ${d}` : "Reading";
+    case "search":
+      return d ? `Searching ${d}` : "Searching";
+    case "web":
+      return d ? `Fetching ${d}` : "Fetching";
+    case "task":
+      return d ? `Task ${d}` : "Delegating";
+    default:
+      return null;
+  }
 }
 
 /** Claude reading tools — drive the office's reading-vs-typing animation. */
@@ -81,6 +122,8 @@ export function useSessionMessages(
   const [layoutReady, setLayoutReady] = useState(false);
   const [agents, setAgents] = useState<number[]>([]);
   const [subagentCharacters, setSubagentCharacters] = useState<SubagentCharacter[]>([]);
+  const [agentCaptions, setAgentCaptions] = useState<Record<number, string>>({});
+  const [agentNumbers, setAgentNumbers] = useState<Record<number, number>>({});
 
   // Stable session-id → office agent-id assignment (first-seen order).
   const agentIdBySession = useRef<Map<string, number>>(new Map());
@@ -145,6 +188,13 @@ export function useSessionMessages(
     const os = getOfficeState();
     const map = agentIdBySession.current;
     const present = new Set<string>();
+    // Rebuilt each poll: office agent-id → live desk caption (active agents only).
+    const caps: Record<number, string> = {};
+    // Rebuilt each poll: office agent-id → stable Launcher number (#N). The
+    // numbering is keyed on the session's spawn time (oldest = #1), identical to
+    // the Launcher tab, so a session shows the SAME number in both places.
+    const nums: Record<number, number> = {};
+    const numberBySession = numberSessions(sessions);
 
     // Add / update agents for every live session.
     for (const s of sessions) {
@@ -160,6 +210,12 @@ export function useSessionMessages(
       const activity = sessionActivity(s);
       const active = activity === "working" || activity === "thinking";
       const tool = active && s.tool ? TOOL_NAME[s.tool] : null;
+      // Desk caption (file/command) for the active tool — same detail level as
+      // the original; drives the live "✎ file" / "$ command" label.
+      const caption = active ? toolCaption(s.tool, s.detail) : null;
+      if (caption) caps[agentId] = caption;
+      const launcherNumber = numberBySession.get(s.id);
+      if (launcherNumber) nums[agentId] = launcherNumber;
       const prev = lastSnapshot.current.get(agentId);
 
       if (!prev || prev.active !== active) os.setAgentActive(agentId, active);
@@ -187,10 +243,13 @@ export function useSessionMessages(
       setAgents((prev) => prev.filter((a) => a !== agentId));
       setSubagentCharacters((prev) => prev.filter((sc) => sc.parentAgentId !== agentId));
     }
+
+    setAgentCaptions(caps);
+    setAgentNumbers(nums);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions, layoutReady]);
 
-  return { agents, layoutReady, subagentCharacters };
+  return { agents, layoutReady, subagentCharacters, agentCaptions, agentNumbers };
 }
 
 /** Spawn / update / despawn this session's detected subagents as office characters. */

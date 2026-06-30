@@ -22,8 +22,75 @@ import type {
 } from '../engine/renderer.js';
 import { renderFrame } from '../engine/renderer.js';
 import { getCatalogEntry, isRotatable } from '../layout/furnitureCatalog.js';
-import { EditTool, TILE_SIZE } from '../types.js';
+import type { OfficeLayout } from '../types.js';
+import { EditTool, TILE_SIZE, TileType } from '../types.js';
 import { computeNormalModeCursor } from './officeCanvasCursor.js';
+
+/**
+ * Tight bounding box (in tile coords, inclusive) of every non-VOID tile in the
+ * layout. VOID tiles render transparent, so fitting to this box — instead of
+ * the full cols×rows grid — is what removes the brown border around the office.
+ * Falls back to the full grid if a layout is somehow all-VOID.
+ */
+function contentBounds(layout: OfficeLayout): {
+  minCol: number;
+  minRow: number;
+  maxCol: number;
+  maxRow: number;
+} {
+  const { cols, rows, tiles } = layout;
+  let minCol = Infinity;
+  let minRow = Infinity;
+  let maxCol = -Infinity;
+  let maxRow = -Infinity;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (tiles[r * cols + c] === TileType.VOID) continue;
+      if (c < minCol) minCol = c;
+      if (c > maxCol) maxCol = c;
+      if (r < minRow) minRow = r;
+      if (r > maxRow) maxRow = r;
+    }
+  }
+  if (maxCol < minCol) return { minCol: 0, minRow: 0, maxCol: cols - 1, maxRow: rows - 1 };
+  return { minCol, minRow, maxCol, maxRow };
+}
+
+/**
+ * Integer "cover" fit: the smallest integer zoom at which the content box fills
+ * the whole canvas in BOTH axes (so no transparent/brown edge shows), plus the
+ * pan that centres that box. Integer zoom keeps the pixel-art crisp (sprites are
+ * cached at `tile*zoom`); the centred box may clip a little at the far edges,
+ * which is the intended trade for "floor fills the entire area".
+ */
+function computeCoverFit(
+  canvasW: number,
+  canvasH: number,
+  layout: OfficeLayout,
+): { zoom: number; panX: number; panY: number } {
+  const b = contentBounds(layout);
+  const boxCols = b.maxCol - b.minCol + 1;
+  const boxRows = b.maxRow - b.minRow + 1;
+  const boxW = boxCols * TILE_SIZE;
+  const boxH = boxRows * TILE_SIZE;
+  const rawZoom = Math.max(canvasW / boxW, canvasH / boxH);
+  // NOTE: deliberately NOT clamped to ZOOM_MAX. ZOOM_MAX bounds *manual* (wheel)
+  // zoom; the cover fit must be free to use whatever integer zoom actually fills
+  // the canvas. Clamping here would leave a small office in a large / high-DPR
+  // canvas short of covering and re-expose the brown border (point 2).
+  const zoom = Math.max(ZOOM_MIN, Math.ceil(rawZoom));
+  // Renderer centres the FULL grid then adds pan; derive the pan that lands the
+  // content-box centre exactly on the canvas centre.
+  const mapW = layout.cols * TILE_SIZE * zoom;
+  const mapH = layout.rows * TILE_SIZE * zoom;
+  const baseOffsetX = Math.floor((canvasW - mapW) / 2);
+  const baseOffsetY = Math.floor((canvasH - mapH) / 2);
+  const contentCenterX = (b.minCol + boxCols / 2) * TILE_SIZE * zoom;
+  const contentCenterY = (b.minRow + boxRows / 2) * TILE_SIZE * zoom;
+  const panX = Math.round(canvasW / 2 - baseOffsetX - contentCenterX);
+  const panY = Math.round(canvasH / 2 - baseOffsetY - contentCenterY);
+  return { zoom, panX, panY };
+}
 
 interface OfficeCanvasProps {
   officeState: OfficeState;
@@ -40,6 +107,21 @@ interface OfficeCanvasProps {
   zoom: number;
   onZoomChange: (zoom: number) => void;
   panRef: React.MutableRefObject<{ x: number; y: number }>;
+  /**
+   * When true (upstream default), clicking a character makes the camera follow
+   * it. The Sessions tab passes `false` so a click only selects (tooltip/info)
+   * and the camera never moves. Additive/opt-out so `office/**` keeps upstream
+   * behaviour by default.
+   */
+  followCameraOnSelect?: boolean;
+  /**
+   * When true, the canvas computes a one-time integer "cover" fit so the office
+   * floor fills the whole container (no brown border), then locks zoom & pan —
+   * no camera follow, no wheel zoom, no pan, no resize-driven panning. The fit
+   * is recomputed only to keep covering when the container itself resizes.
+   * Off by default so the editor app keeps free zoom/pan.
+   */
+  fitToContent?: boolean;
 }
 
 export function OfficeCanvas({
@@ -57,10 +139,15 @@ export function OfficeCanvas({
   zoom,
   onZoomChange,
   panRef,
+  followCameraOnSelect = true,
+  fitToContent = false,
 }: OfficeCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const offsetRef = useRef({ x: 0, y: 0 });
+  // Last computed cover-fit (fitToContent mode). Pan is re-asserted from this
+  // every frame so the locked view can't drift.
+  const fitRef = useRef<{ zoom: number; panX: number; panY: number } | null>(null);
   // Middle-mouse pan state (imperative, no re-renders)
   const isPanningRef = useRef(false);
   const panStartRef = useRef({ mouseX: 0, mouseY: 0, panX: 0, panY: 0 });
@@ -106,13 +193,31 @@ export function OfficeCanvas({
     // No ctx.scale(dpr) — we render directly in device pixels
   }, []);
 
+  // Compute the cover-fit for the current canvas size + layout, lock pan to it,
+  // and push the fit zoom up to the host. onZoomChange with an unchanged value
+  // is a no-op in React, so this converges in ≤1 extra render. Called on mount
+  // and whenever the container resizes; never in response to agent movement.
+  const applyCoverFit = useCallback(() => {
+    if (!fitToContent) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const fit = computeCoverFit(canvas.width, canvas.height, officeState.getLayout());
+    fitRef.current = fit;
+    panRef.current = { x: fit.panX, y: fit.panY };
+    onZoomChange(fit.zoom);
+  }, [fitToContent, officeState, panRef, onZoomChange]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     resizeCanvas();
+    applyCoverFit();
 
-    const observer = new ResizeObserver(() => resizeCanvas());
+    const observer = new ResizeObserver(() => {
+      resizeCanvas();
+      applyCoverFit();
+    });
     if (containerRef.current) {
       observer.observe(containerRef.current);
     }
@@ -219,8 +324,16 @@ export function OfficeCanvas({
           }
         }
 
-        // Camera follow: smoothly center on followed agent
-        if (officeState.cameraFollowId !== null) {
+        // Locked cover-fit: re-assert pan every frame so the view can't drift
+        // (no camera follow, no resize-driven panning) — point 2.
+        if (fitToContent) {
+          if (fitRef.current) {
+            panRef.current = { x: fitRef.current.panX, y: fitRef.current.panY };
+          }
+        }
+        // Camera follow: smoothly center on followed agent (only when the host
+        // opted into follow — the Sessions tab disables it so the view is still).
+        else if (followCameraOnSelect && officeState.cameraFollowId !== null) {
           const followCh = officeState.characters.get(officeState.cameraFollowId);
           if (followCh) {
             const layout = officeState.getLayout();
@@ -282,7 +395,18 @@ export function OfficeCanvas({
       stop();
       observer.disconnect();
     };
-  }, [officeState, resizeCanvas, isEditMode, editorState, _editorTick, zoom, panRef]);
+  }, [
+    officeState,
+    resizeCanvas,
+    applyCoverFit,
+    isEditMode,
+    editorState,
+    _editorTick,
+    zoom,
+    panRef,
+    followCameraOnSelect,
+    fitToContent,
+  ]);
 
   // Convert CSS mouse coords to world (sprite pixel) coords
   const screenToWorld = useCallback(
@@ -498,6 +622,7 @@ export function OfficeCanvas({
       // Middle mouse button (button 1) starts panning
       if (e.button === 1) {
         e.preventDefault();
+        if (fitToContent) return; // locked cover-fit: no pan
         // Break camera follow on manual pan
         officeState.cameraFollowId = null;
         isPanningRef.current = true;
@@ -603,6 +728,7 @@ export function OfficeCanvas({
       hitTestDeleteButton,
       hitTestRotateButton,
       panRef,
+      fitToContent,
     ],
   );
 
@@ -678,7 +804,10 @@ export function OfficeCanvas({
           officeState.cameraFollowId = null;
         } else {
           officeState.selectedAgentId = hitId;
-          officeState.cameraFollowId = hitId;
+          // Only follow with the camera when the host opts in. The Sessions tab
+          // passes followCameraOnSelect={false}: a click selects (tooltip/info)
+          // without moving the camera.
+          if (followCameraOnSelect) officeState.cameraFollowId = hitId;
         }
         onClick(hitId); // still focus terminal
         return;
@@ -743,7 +872,7 @@ export function OfficeCanvas({
         officeState.cameraFollowId = null;
       }
     },
-    [officeState, onClick, screenToWorld, screenToTile, isEditMode],
+    [officeState, onClick, screenToWorld, screenToTile, isEditMode, followCameraOnSelect],
   );
 
   const handleMouseLeave = useCallback(() => {
@@ -785,6 +914,7 @@ export function OfficeCanvas({
   const handleWheel = useCallback(
     (e: WheelEvent) => {
       e.preventDefault();
+      if (fitToContent) return; // locked cover-fit: no zoom, no pan
       if (e.ctrlKey || e.metaKey) {
         // Accumulate scroll delta, step zoom when threshold crossed
         zoomAccumulatorRef.current += e.deltaY;
@@ -806,7 +936,7 @@ export function OfficeCanvas({
         );
       }
     },
-    [zoom, onZoomChange, officeState, panRef, clampPan],
+    [zoom, onZoomChange, officeState, panRef, clampPan, fitToContent],
   );
 
   // Attach wheel listener with { passive: false } so preventDefault() works.
