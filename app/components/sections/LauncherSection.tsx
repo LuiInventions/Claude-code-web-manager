@@ -16,6 +16,7 @@ import {
   Split,
   Wand2,
   X,
+  XCircle,
   Zap,
 } from "lucide-react";
 import { Badge, Button, Textarea, cn } from "../ui";
@@ -403,6 +404,28 @@ export default function LauncherSection({
     setSelectedId((cur) => (cur === id ? null : cur));
   };
 
+  // Stop every live session at once (the "Close all sessions" button). Confirmed
+  // first because, like closeSession, this is permanent — the PTYs are gone.
+  const closeAllSessions = () => {
+    if (sessions.length === 0) return;
+    const ok = window.confirm(
+      `Really stop all ${sessions.length} Claude session${sessions.length === 1 ? "" : "s"}?\n\n` +
+        "They keep running in the background (even after page reload) until the " +
+        "PC is shut down. Stopping ends them all permanently.",
+    );
+    if (!ok) return;
+    const ids = sessions.map((s) => s.id);
+    void Promise.all(
+      ids.map((id) =>
+        fetch(`/api/launcher/live-sessions?id=${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        }).catch(() => {}),
+      ),
+    );
+    setSessions([]);
+    setSelectedId(null);
+  };
+
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
   // The active batch (the boxes shown in the grid) follows the selected session.
   const activeBatchId = selected?.batchId ?? sessions[0]?.batchId ?? null;
@@ -416,6 +439,12 @@ export default function LauncherSection({
     const s = sessions[i];
     if (!batchIds.includes(s.batchId)) batchIds.push(s.batchId);
   }
+  // A value that changes whenever the terminal panes' available width changes —
+  // the sidebar collapsing/expanding or the visible batch switching. Passed to
+  // each ClaudeCmdPane so it re-fits its xterm once the layout settles, fixing
+  // the "panes shifted until the sidebar is toggled" bug at start.
+  const layoutNonce =
+    (sidebarOpen ? 1 : 0) + 2 * batchIds.indexOf(activeBatchId ?? "");
 
   // Stable per-instance numbers (oldest = #1) so each window can be referenced
   // unambiguously in the list and grid, even as newer ones are added.
@@ -954,6 +983,15 @@ export default function LauncherSection({
                 <span className="text-xs text-faint">
                   {visibleCount} {visibleCount === 1 ? "box" : "boxes"}
                 </span>
+                <button
+                  onClick={closeAllSessions}
+                  title="Stop every running session"
+                  aria-label="Close all sessions"
+                  className="ml-auto inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-xs font-medium text-faint transition-colors hover:border-danger/50 hover:text-danger"
+                >
+                  <XCircle className="size-3.5" />
+                  Close all sessions
+                </button>
               </div>
               <div
                 className="grid min-h-0 flex-1 gap-2 p-2"
@@ -991,6 +1029,7 @@ export default function LauncherSection({
                       repoFullName={s.cmd.repoFullName}
                       projectName={s.projectName}
                       batchId={s.batchId}
+                      layoutNonce={layoutNonce}
                       onExit={(code) => {
                         setSessions((prev) =>
                           prev.map((x) =>

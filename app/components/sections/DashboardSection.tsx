@@ -132,7 +132,7 @@ export default function DashboardSection() {
       )}
 
       {data && data.projects.length > 0 && (
-        <div className="grid grid-cols-1 gap-1 px-4 pb-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 px-4 pb-6 sm:grid-cols-2 lg:grid-cols-3">
           {data.projects.map((p) => (
             <ProjectCard key={p.path} p={p} onClick={() => openDetail(p)} />
           ))}
@@ -166,7 +166,7 @@ function ProjectCard({
           onClick();
         }
       }}
-      className="flex cursor-pointer flex-col gap-0.5 rounded-md px-2 py-1.5 text-left hover:bg-raised"
+      className="flex cursor-pointer flex-col gap-0.5 rounded-md border border-line px-2.5 py-2 text-left transition-colors hover:border-line-strong hover:bg-raised"
     >
       <div className="truncate text-sm text-ink">{p.name}</div>
       <div className="truncate font-mono text-[11px] text-faint">

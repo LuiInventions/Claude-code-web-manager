@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { getConfig } from "./config";
 import { getProvider } from "./providers";
+import { readSecrets } from "./secrets";
 
 /**
  * AI client + helpers. The active provider's key/base URL are read server-side
@@ -29,6 +30,71 @@ export const getOpenAI = getAiClient;
 
 export function getModel(): string {
   return getConfig().aiModel;
+}
+
+export interface ProviderTestResult {
+  provider: string;
+  /** Human label for the UI. */
+  label: string;
+  ok: boolean;
+  /** Model the test actually hit (default or the one passed in). */
+  model?: string;
+  /** Short, actionable message when ok === false. */
+  error?: string;
+}
+
+/** Map an SDK/HTTP error to a short, actionable German message. */
+export function friendlyAiError(err: unknown): string {
+  const e = err as { status?: number; message?: string; code?: string };
+  const status = e?.status;
+  const msg = (e?.message || "").replace(/\s+/g, " ").trim().slice(0, 240);
+  if (status === 401) return "Ungültiger oder fehlender API-Key (401).";
+  if (status === 403)
+    return "Zugriff verweigert (403) — der Key darf dieses Modell nicht nutzen. Wähle ein anderes Modell oder gib den Zugriff beim Provider frei.";
+  if (status === 404)
+    return "Nicht gefunden (404) — prüfe die Modell-ID für diesen Provider.";
+  if (status === 429) return "Rate-Limit erreicht (429) — später erneut versuchen.";
+  if (status && status >= 500) return `Provider-Fehler (${status}) — später erneut versuchen.`;
+  return msg || "Unbekannter Fehler.";
+}
+
+/**
+ * Verify a provider's stored key actually works by making one minimal chat
+ * completion against the given (or default) model. Tests the provider id passed
+ * in — not necessarily the active one — so the Settings UI can check every
+ * configured key. Never throws: failures come back as `{ ok: false, error }`.
+ *
+ * No token cap is set on purpose: some providers' newer models reject
+ * `max_tokens` (they want `max_completion_tokens`), and "ping" already yields a
+ * tiny reply. This exercises the real auth + model-access path, so it catches a
+ * gated model returning 403 (the Groq default-model case), not just the key.
+ */
+export async function testProvider(
+  providerId: string,
+  model?: string,
+): Promise<ProviderTestResult> {
+  const provider = getProvider(providerId);
+  const key = readSecrets().providerKeys?.[provider.id];
+  if (!key)
+    return { provider: provider.id, label: provider.label, ok: false, error: "Kein API-Key gesetzt." };
+
+  const client = new OpenAI({ apiKey: key, baseURL: provider.baseUrl });
+  const useModel = model?.trim() || provider.defaultModel;
+  try {
+    await client.chat.completions.create({
+      model: useModel,
+      messages: [{ role: "user", content: "ping" }],
+    });
+    return { provider: provider.id, label: provider.label, ok: true, model: useModel };
+  } catch (err) {
+    return {
+      provider: provider.id,
+      label: provider.label,
+      ok: false,
+      model: useModel,
+      error: friendlyAiError(err),
+    };
+  }
 }
 
 const NON_TEXT =

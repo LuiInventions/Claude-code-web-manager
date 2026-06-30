@@ -35,9 +35,9 @@ win:
   # See build/SIGNING.md.
   signtoolOptions:
     publisherName: LT Digital Concepts
+  # Only the NSIS installer is shipped — no standalone portable .exe.
   target:
     - nsis
-    - portable
 nsis:
   oneClick: false
   # Per-user install (default LOCALAPPDATA\Programs\...) so the app dir stays
@@ -51,6 +51,3 @@ nsis:
   shortcutName: Claude Code Control Center
   # Downloadable installer file name: cc-control-center-Setup-<version>.exe
   artifactName: cc-control-center-Setup-${version}.${ext}
-portable:
-  # Downloadable portable file name: cc-control-center-<version>.exe
-  artifactName: cc-control-center-${version}.${ext}

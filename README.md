@@ -133,18 +133,26 @@ The **Sessions** tab turns the launcher's live Claude Code sessions into a graph
 every session you start in the Launcher shows up here within a couple of seconds, and
 disappears when it's stopped. Pick the look you prefer (the choice is remembered):
 
-- **Pixel office** — a homage to
-  [**pixel-agents**](https://github.com/pixel-agents-hq/pixel-agents): each session becomes
-  its own little **animated character** at a desk. It types while the agent is running,
-  sits calmly when the run is done, and flags red on error.
-- **Flow graph** — a homage to
-  [**agent-flow**](https://github.com/patoles/agent-flow): the Launcher is the root node and
-  each session **branches off as a node**; **KI-Modus** splits fan out from a shared batch
-  hub, so a parallel run reads as one tree.
+- **Pixel office** — a native re-creation of
+  [**pixel-agents**](https://github.com/pixel-agents-hq/pixel-agents): one shared **office
+  room** (rendered on a canvas) where every session is a pixel character at its own desk.
+  Each character animates to its **live activity** — typing while working, bobbing with
+  thought-dots while thinking, raising an amber **"needs approval"** flag when it's waiting
+  for you, a green ✓ when done, a red shake on error. **In-session subagents** (the Task
+  tool) show up as smaller companions beside their parent. Hover a desk for the project,
+  prompt, model, and its subagents.
+- **Flow graph** — a native re-creation of
+  [**agent-flow**](https://github.com/patoles/agent-flow): a **force-directed graph** of
+  hex nodes. The Launcher is the root; each session is a node wired to it (**KI-Modus**
+  splits fan out from a shared batch hub), and each subagent is a smaller hex linked to its
+  parent. Nodes settle on their own, **pulse with their live activity colour**, and can be
+  dragged around.
 
-Both views are **built into the app** (offline, no extra install) and are driven by the same
-live session registry the Launcher uses, so what you see always matches what's actually
-running. Full credit to the two upstream projects that inspired each style.
+Both views are **built into the app** (offline, no extra install), rendered natively in the
+style of the upstream projects, and driven by the same live session registry the Launcher
+uses — including activity and subagent state parsed server-side — so what you see always
+matches what's actually running. Full credit to the two upstream projects that inspired
+each style.
 
 ### GitHub
 
@@ -242,9 +250,9 @@ npm install
 npm run electron:build
 ```
 
-This produces, in `build/dist/`, an **NSIS installer** and a **portable** `.exe` — both
-self-contained. For developing the desktop shell, `npm run electron:dev` runs it from
-source with Next.js in dev mode and DevTools available.
+This produces, in `build/dist/`, a self-contained **NSIS installer**
+(`cc-control-center-Setup-<version>.exe`). For developing the desktop shell,
+`npm run electron:dev` runs it from source with Next.js in dev mode and DevTools available.
 
 </details>
 

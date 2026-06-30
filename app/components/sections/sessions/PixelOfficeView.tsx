@@ -1,148 +1,526 @@
 "use client";
 
-import { sessionColor, statusActivity, type Activity, type VisualSession } from "@/lib/sessions";
+import { useEffect, useRef, useState } from "react";
+import {
+  sessionActivity,
+  sessionColor,
+  type LiveActivity,
+  type VisualSession,
+} from "@/lib/sessions";
 
 /**
- * Pixel-office view — a homage to pixel-agents
- * (https://github.com/pixel-agents-hq/pixel-agents). Every live launcher
- * session becomes its own animated pixel character at a desk: the character
- * types while the session is running, sits calmly when done, and flags red on
- * error. New sessions appear automatically as the Sessions tab polls.
+ * Pixel-office view — a native re-creation of pixel-agents
+ * (https://github.com/pixel-agents-hq/pixel-agents): a single shared office room
+ * rendered on a canvas. Every live launcher session is a pixel character seated
+ * at its own desk; in-session subagents (Task tool) appear as smaller companions
+ * beside their parent. Characters animate by live activity — typing while
+ * working, bobbing with thought-dots while thinking, flagging an amber "!" when
+ * waiting for the user (needs-approval), a green "✓" when done, a red shake on
+ * error. The Sessions tab polls, so desks appear/clear as sessions come and go.
+ *
+ * Rendering is hand-drawn pixel art (crisp rects, DPR-aware) so the look matches
+ * the upstream sprite style without bundling its assets. Respects
+ * prefers-reduced-motion by drawing a single static frame.
  */
-export default function PixelOfficeView({ sessions }: { sessions: VisualSession[] }) {
-  return (
-    <div className="pixel-office min-h-full w-full p-6">
-      <style>{KEYFRAMES}</style>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-5">
-        {sessions.map((s, i) => (
-          <Workstation key={s.id} session={s} index={i + 1} />
-        ))}
-      </div>
-    </div>
-  );
+
+const CELL_W = 176;
+const CELL_H = 168;
+const ROOM_PAD = 24;
+
+/** A character's footprint in the room, kept for hover hit-testing. */
+interface Desk {
+  session: VisualSession;
+  index: number; // 1-based, matches the launcher numbering
+  x: number; // cell top-left (CSS px)
+  y: number;
+  w: number;
+  h: number;
 }
 
-function Workstation({ session, index }: { session: VisualSession; index: number }) {
-  const color = sessionColor(session.id);
-  const activity = statusActivity(session.status);
-  const title = session.projectName?.trim() || "session";
+interface Hover {
+  session: VisualSession;
+  index: number;
+  left: number;
+  top: number;
+}
+
+export default function PixelOfficeView({ sessions }: { sessions: VisualSession[] }) {
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Live data the animation loop reads without restarting.
+  const sessionsRef = useRef<VisualSession[]>(sessions);
+  const desksRef = useRef<Desk[]>([]);
+  const sizeRef = useRef({ w: 0, h: 0, dpr: 1 });
+  const reducedRef = useRef(false);
+  const hoverIdRef = useRef<string | null>(null);
+
+  const [hover, setHover] = useState<Hover | null>(null);
+
+  // Keep the latest sessions visible to the rAF loop.
+  sessionsRef.current = sessions;
+  hoverIdRef.current = hover?.session.id ?? null;
+
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    const canvas = canvasRef.current;
+    if (!wrap || !canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    reducedRef.current = mq.matches;
+    const onMq = () => {
+      reducedRef.current = mq.matches;
+    };
+    mq.addEventListener?.("change", onMq);
+
+    /** Re-measure, size the canvas (DPR-aware) and recompute desk layout. */
+    const relayout = () => {
+      const list = sessionsRef.current;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const cssW = Math.max(wrap.clientWidth, CELL_W + ROOM_PAD * 2);
+      const cols = Math.max(1, Math.floor((cssW - ROOM_PAD * 2) / CELL_W));
+      const rows = Math.max(1, Math.ceil(list.length / cols));
+      const gridW = cols * CELL_W;
+      const offX = Math.round((cssW - gridW) / 2);
+      const cssH = Math.max(wrap.clientHeight, rows * CELL_H + ROOM_PAD * 2);
+
+      sizeRef.current = { w: cssW, h: cssH, dpr };
+      canvas.style.width = `${cssW}px`;
+      canvas.style.height = `${cssH}px`;
+      canvas.width = Math.round(cssW * dpr);
+      canvas.height = Math.round(cssH * dpr);
+
+      const desks: Desk[] = list.map((s, i) => {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        return {
+          session: s,
+          index: i + 1,
+          x: offX + col * CELL_W,
+          y: ROOM_PAD + row * CELL_H,
+          w: CELL_W,
+          h: CELL_H,
+        };
+      });
+      desksRef.current = desks;
+
+      if (reducedRef.current) draw(ctx, performance.now()); // static frame
+    };
+
+    relayout();
+
+    const ro = new ResizeObserver(relayout);
+    ro.observe(wrap);
+
+    let raf = 0;
+    const tick = () => {
+      draw(ctx, performance.now());
+      raf = requestAnimationFrame(tick);
+    };
+    if (!reducedRef.current) raf = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      mq.removeEventListener?.("change", onMq);
+    };
+    // Re-run when the session COUNT changes (relayout); the loop itself reads refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions.length]);
+
+  // Hover hit-testing → DOM tooltip overlay.
+  const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const rect = wrap.getBoundingClientRect();
+    const px = e.clientX - rect.left + wrap.scrollLeft;
+    const py = e.clientY - rect.top + wrap.scrollTop;
+    const hit = desksRef.current.find(
+      (d) => px >= d.x && px <= d.x + d.w && py >= d.y && py <= d.y + d.h,
+    );
+    if (!hit) {
+      if (hover) setHover(null);
+      return;
+    }
+    if (hover?.session.id === hit.session.id) return;
+    setHover({
+      session: hit.session,
+      index: hit.index,
+      left: hit.x + hit.w / 2,
+      top: hit.y + 8,
+    });
+  };
 
   return (
     <div
-      className="group relative flex flex-col items-center rounded-lg border border-line bg-raised/60 px-3 pb-3 pt-4"
-      title={`${title}\n${session.prompt}`}
+      ref={wrapRef}
+      className="pixel-office relative min-h-full w-full cursor-pointer overflow-auto"
+      onMouseMove={onMove}
+      onMouseLeave={() => setHover(null)}
     >
-      <StatusBubble activity={activity} />
-      <Character color={color} activity={activity} />
-      {/* desk */}
-      <div className="mt-1 h-2 w-[88%] rounded-sm bg-[#3a3326]" />
-      <div className="h-1 w-[70%] rounded-b-sm bg-[#2a2622]" />
+      <canvas ref={canvasRef} className="block" />
+      {hover && <Tooltip hover={hover} />}
+    </div>
+  );
 
-      <div className="mt-2 flex w-full items-center gap-1.5">
+  /** Draw the whole room for the given timestamp. */
+  function draw(ctx: CanvasRenderingContext2D, now: number) {
+    const { w, h, dpr } = sizeRef.current;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawRoom(ctx, w, h);
+    const animate = !reducedRef.current;
+    for (const desk of desksRef.current) {
+      drawDesk(ctx, desk, now, animate, hoverIdRef.current === desk.session.id);
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Room + desk rendering                                              */
+/* ------------------------------------------------------------------ */
+
+const C = {
+  wall: "#2b2620",
+  wallTrim: "#39312a",
+  floorA: "#241f1a",
+  floorB: "#282219",
+  deskTop: "#6b4f32",
+  deskEdge: "#7d5c3a",
+  deskFront: "#46341f",
+  monitor: "#1b1f26",
+  monitorFrame: "#0f1216",
+  skin: "#f0c8a0",
+  hair: "#3a2a22",
+  keyboard: "#26211b",
+  shadow: "rgba(0,0,0,0.28)",
+} as const;
+
+const ACTIVITY_COLOR: Record<LiveActivity, string> = {
+  working: "#7ad98f",
+  thinking: "#6aa6ff",
+  waiting: "#ffd166",
+  done: "#7ad98f",
+  error: "#fca5a5",
+};
+
+function drawRoom(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const wallH = 64;
+  ctx.fillStyle = C.wall;
+  ctx.fillRect(0, 0, w, wallH);
+  ctx.fillStyle = C.wallTrim;
+  ctx.fillRect(0, wallH - 4, w, 4);
+  // checker floor
+  const tile = 32;
+  for (let y = wallH; y < h; y += tile) {
+    for (let x = 0; x < w; x += tile) {
+      const even = ((x / tile) | 0) % 2 === ((y / tile) | 0) % 2;
+      ctx.fillStyle = even ? C.floorA : C.floorB;
+      ctx.fillRect(x, y, tile, tile);
+    }
+  }
+}
+
+function drawDesk(
+  ctx: CanvasRenderingContext2D,
+  desk: Desk,
+  now: number,
+  animate: boolean,
+  hovered: boolean,
+) {
+  const { session, index, x, y, w } = desk;
+  const activity = sessionActivity(session);
+  const color = sessionColor(session.id);
+  const glow = ACTIVITY_COLOR[activity];
+  // Per-character phase so neighbours don't move in lockstep.
+  const phase = (index * 0.7) % (Math.PI * 2);
+  const t = animate ? now / 1000 : 0;
+
+  const cx = Math.round(x + w / 2);
+  const sScale = 1.6;
+  const spriteTop = y + 30;
+  const deskLineY = spriteTop + Math.round(33 * sScale);
+
+  if (hovered) {
+    ctx.fillStyle = "rgba(255,255,255,0.04)";
+    ctx.fillRect(x + 4, y + 4, w - 8, CELL_H - 8);
+  }
+
+  // floor shadow under the desk
+  ctx.fillStyle = C.shadow;
+  ellipse(ctx, cx, deskLineY + 30, 46, 9);
+
+  // --- character (drawn behind the desk) ---
+  const bob =
+    activity === "working"
+      ? Math.round(Math.sin(t * 6 + phase) * 1) // small typing bounce
+      : activity === "thinking"
+        ? Math.round(Math.sin(t * 2 + phase) * 2)
+        : activity === "done" || activity === "waiting"
+          ? Math.round(Math.sin(t * 1.4 + phase) * 1)
+          : 0;
+  const shake = activity === "error" ? Math.round(Math.sin(t * 22) * 1.5) : 0;
+  const handDrop = activity === "working" && Math.sin(t * 14 + phase) > 0 ? 2 : 0;
+
+  drawPerson(ctx, cx, spriteTop + bob, sScale, {
+    color,
+    handDrop,
+    shakeX: shake,
+  });
+
+  // --- desk slab in front of the character ---
+  const deskW = Math.round(w * 0.62);
+  const deskX = cx - deskW / 2;
+  ctx.fillStyle = C.deskFront;
+  ctx.fillRect(deskX, deskLineY + 6, deskW, 18);
+  ctx.fillStyle = C.deskTop;
+  ctx.fillRect(deskX - 4, deskLineY, deskW + 8, 8);
+  ctx.fillStyle = C.deskEdge;
+  ctx.fillRect(deskX - 4, deskLineY, deskW + 8, 2);
+
+  // keyboard on the desk
+  ctx.fillStyle = C.keyboard;
+  ctx.fillRect(cx - 18, deskLineY - 5, 36, 6);
+
+  // monitor on the desk corner, screen glowing with the activity colour
+  const mx = deskX + deskW - 30;
+  const my = deskLineY - 26;
+  ctx.fillStyle = C.monitorFrame;
+  ctx.fillRect(mx, my, 26, 20);
+  ctx.fillStyle = activity === "thinking" || activity === "working" ? C.monitor : "#15191f";
+  ctx.fillRect(mx + 2, my + 2, 22, 14);
+  // scanline glow
+  ctx.globalAlpha = activity === "waiting" ? 0.35 : 0.65;
+  ctx.fillStyle = glow;
+  const lines = activity === "working" ? 3 : activity === "thinking" ? 2 : 1;
+  for (let i = 0; i < lines; i++) {
+    const lw = activity === "working" ? 6 + (Math.sin(t * 7 + i) + 1) * 7 : 12;
+    ctx.fillRect(mx + 4, my + 4 + i * 4, Math.min(lw, 18), 2);
+  }
+  ctx.globalAlpha = 1;
+  // monitor stand
+  ctx.fillStyle = C.monitorFrame;
+  ctx.fillRect(mx + 11, my + 20, 4, 4);
+
+  // --- status bubble above the head ---
+  drawBubble(ctx, cx + 22, spriteTop - 6, activity, t);
+
+  // --- subagent companions ---
+  const subs = session.subagents ?? [];
+  const shown = subs.slice(0, 3);
+  shown.forEach((sub, i) => {
+    const sx = x + w - 26 - i * 22;
+    const sy = spriteTop + 18 + (animate ? Math.round(Math.sin(t * 3 + i) * 1.5) : 0);
+    drawPerson(ctx, sx, sy, 0.85, {
+      color: "#c792ea",
+      handDrop: sub.activity === "working" && Math.sin(t * 12 + i) > 0 ? 2 : 0,
+      shakeX: 0,
+    });
+    // tiny activity dot
+    ctx.fillStyle = ACTIVITY_COLOR[sub.activity];
+    ctx.beginPath();
+    ctx.arc(sx, sy - 4, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // --- name plate ---
+  const plateY = y + CELL_H - 30;
+  const title = session.projectName?.trim() || "session";
+  ctx.fillStyle = color;
+  roundRect(ctx, cx - 9, plateY, 18, 16, 4);
+  ctx.fill();
+  ctx.fillStyle = "#000";
+  ctx.font = "bold 11px ui-monospace, monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(String(index), cx, plateY + 8);
+
+  ctx.fillStyle = "#e8e3da";
+  ctx.font = "600 12px ui-sans-serif, system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(truncate(ctx, title, w - 36), cx, plateY + 26);
+
+  // activity caption
+  ctx.fillStyle = glow;
+  ctx.font = "11px ui-sans-serif, system-ui, sans-serif";
+  const caption =
+    activity === "waiting"
+      ? "needs approval"
+      : subs.length
+        ? `${activity} · ${subs.length} subagent${subs.length === 1 ? "" : "s"}`
+        : activity;
+  ctx.fillText(truncate(ctx, caption, w - 24), cx, plateY + 40);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+}
+
+/** A small front-facing pixel character (40×44 grid), scaled and offset. */
+function drawPerson(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  top: number,
+  s: number,
+  o: { color: string; handDrop: number; shakeX: number },
+) {
+  const left = Math.round(cx - 20 * s + o.shakeX);
+  const px = (gx: number, gy: number, gw: number, gh: number, fill: string) => {
+    ctx.fillStyle = fill;
+    ctx.fillRect(
+      Math.round(left + gx * s),
+      Math.round(top + gy * s),
+      Math.ceil(gw * s),
+      Math.ceil(gh * s),
+    );
+  };
+  px(10, 2, 20, 8, C.hair); // hair
+  px(11, 6, 18, 13, C.skin); // head
+  px(15, 11, 3, 3, "#1a1410"); // eyes
+  px(22, 11, 3, 3, "#1a1410");
+  px(9, 19, 22, 15, o.color); // body
+  ctx.globalAlpha = 0.5;
+  px(18, 19, 4, 4, "#ffffff"); // collar
+  ctx.globalAlpha = 1;
+  px(5, 21, 4, 11, o.color); // arms
+  px(31, 21, 4, 11, o.color);
+  px(5, 31 + o.handDrop, 4, 4, C.skin); // hands
+  px(31, 31 + o.handDrop, 4, 4, C.skin);
+}
+
+/** Status bubble: animated dots while busy, a glyph for waiting/done/error. */
+function drawBubble(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  activity: LiveActivity,
+  t: number,
+) {
+  if (activity === "working" || activity === "thinking") {
+    const wBub = 26;
+    ctx.fillStyle = "#1b1f26";
+    roundRect(ctx, x, y - 14, wBub, 16, 5);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.12)";
+    ctx.lineWidth = 1;
+    roundRect(ctx, x, y - 14, wBub, 16, 5);
+    ctx.stroke();
+    for (let i = 0; i < 3; i++) {
+      const a = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(t * 5 - i * 0.9));
+      ctx.globalAlpha = a;
+      ctx.fillStyle = ACTIVITY_COLOR[activity];
+      ctx.beginPath();
+      ctx.arc(x + 7 + i * 6, y - 6, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    return;
+  }
+  const glyph = activity === "error" ? "!" : activity === "waiting" ? "!" : "✓";
+  const tone = ACTIVITY_COLOR[activity];
+  ctx.fillStyle = "#1b1f26";
+  roundRect(ctx, x, y - 16, 18, 18, 5);
+  ctx.fill();
+  ctx.strokeStyle = tone;
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, x, y - 16, 18, 18, 5);
+  ctx.stroke();
+  ctx.fillStyle = tone;
+  ctx.font = "bold 12px ui-sans-serif, system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(glyph, x + 9, y - 6);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+}
+
+/* ------------------------------------------------------------------ */
+/* Small canvas helpers                                               */
+/* ------------------------------------------------------------------ */
+
+function ellipse(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number) {
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+function truncate(ctx: CanvasRenderingContext2D, text: string, maxW: number): string {
+  if (ctx.measureText(text).width <= maxW) return text;
+  let s = text;
+  while (s.length > 1 && ctx.measureText(s + "…").width > maxW) s = s.slice(0, -1);
+  return s + "…";
+}
+
+/* ------------------------------------------------------------------ */
+/* Hover tooltip (DOM overlay)                                        */
+/* ------------------------------------------------------------------ */
+
+function Tooltip({ hover }: { hover: Hover }) {
+  const { session, index } = hover;
+  const activity = sessionActivity(session);
+  return (
+    <div
+      className="pointer-events-none absolute z-10 w-60 -translate-x-1/2 translate-y-2 rounded-lg border border-line bg-elevated p-3 text-xs shadow-lg"
+      style={{ left: hover.left, top: hover.top }}
+    >
+      <div className="mb-1 flex items-center gap-1.5">
         <span
-          className="grid size-5 shrink-0 place-items-center rounded text-[10px] font-bold text-black"
-          style={{ background: color }}
+          className="grid size-4 place-items-center rounded text-[9px] font-bold text-black"
+          style={{ background: sessionColor(session.id) }}
         >
           {index}
         </span>
-        <span className="truncate text-xs font-medium text-ink">{title}</span>
-      </div>
-      <div className="mt-0.5 flex w-full items-center gap-1.5">
+        <span className="truncate font-semibold text-ink">
+          {session.projectName?.trim() || "session"}
+        </span>
         <span
-          className={
-            "inline-block size-1.5 rounded-full " +
-            (activity === "working"
-              ? "bg-running dot-running"
-              : activity === "error"
-                ? "bg-danger"
-                : "bg-muted")
-          }
-        />
-        <span className="truncate text-[11px] capitalize text-faint">
-          {activity}
-          {session.model ? ` · ${session.model}` : ""}
+          className="ml-auto rounded px-1.5 py-0.5 text-[10px] font-medium"
+          style={{ background: `${ACTIVITY_COLOR[activity]}22`, color: ACTIVITY_COLOR[activity] }}
+        >
+          {activity === "waiting" ? "needs approval" : activity}
         </span>
       </div>
-    </div>
-  );
-}
-
-function StatusBubble({ activity }: { activity: Activity }) {
-  if (activity === "working") {
-    return (
-      <div className="absolute -top-1 right-2 flex items-center gap-0.5 rounded-md border border-line bg-elevated px-1.5 py-1">
-        {[0, 1, 2].map((d) => (
-          <span
-            key={d}
-            className="size-1 rounded-full bg-running"
-            style={{ animation: `ccc-dot 1s ${d * 0.18}s infinite` }}
-          />
-        ))}
+      {session.prompt?.trim() && (
+        <p className="mb-1 line-clamp-3 text-faint">{session.prompt.trim()}</p>
+      )}
+      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted">
+        {session.model && <span>model: {session.model}</span>}
+        {session.effort && <span>effort: {session.effort}</span>}
+        {session.repoFullName && <span>{session.repoFullName}</span>}
       </div>
-    );
-  }
-  const label = activity === "error" ? "!" : "✓";
-  const tone =
-    activity === "error" ? "text-danger border-danger/50" : "text-running border-running/50";
-  return (
-    <div
-      className={`absolute -top-1 right-2 grid size-5 place-items-center rounded-md border bg-elevated text-xs font-bold ${tone}`}
-    >
-      {label}
+      {(session.subagents?.length ?? 0) > 0 && (
+        <div className="mt-2 border-t border-line pt-1.5">
+          <p className="mb-1 text-[10px] uppercase tracking-wide text-faint">Subagents</p>
+          <ul className="space-y-0.5">
+            {session.subagents!.slice(0, 5).map((sub) => (
+              <li key={sub.id} className="flex items-center gap-1.5">
+                <span
+                  className="size-1.5 shrink-0 rounded-full"
+                  style={{ background: ACTIVITY_COLOR[sub.activity] }}
+                />
+                <span className="truncate text-faint">{sub.label}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
-
-/** A small front-facing pixel character built from crisp rects. */
-function Character({ color, activity }: { color: string; activity: Activity }) {
-  const skin = "#f0c8a0";
-  const hair = "#3a2a22";
-  const anim =
-    activity === "working"
-      ? "ccc-bob 0.9s ease-in-out infinite"
-      : activity === "error"
-        ? "ccc-shake 0.4s ease-in-out infinite"
-        : "ccc-idle 3s ease-in-out infinite";
-  const handAnim = activity === "working" ? "ccc-type 0.32s steps(2) infinite" : "none";
-
-  return (
-    <svg
-      width="76"
-      height="76"
-      viewBox="0 0 40 44"
-      style={{ imageRendering: "pixelated", shapeRendering: "crispEdges", animation: anim }}
-      aria-hidden="true"
-    >
-      {/* hair */}
-      <rect x="10" y="2" width="20" height="8" fill={hair} />
-      {/* head */}
-      <rect x="11" y="6" width="18" height="13" fill={skin} />
-      {/* eyes */}
-      <rect x="15" y="11" width="3" height="3" fill="#1a1410" />
-      <rect x="22" y="11" width="3" height="3" fill="#1a1410" />
-      {/* body / shirt */}
-      <rect x="9" y="19" width="22" height="15" fill={color} />
-      {/* collar accent */}
-      <rect x="18" y="19" width="4" height="4" fill="#ffffff" opacity="0.5" />
-      {/* arms */}
-      <rect x="5" y="21" width="4" height="11" fill={color} />
-      <rect x="31" y="21" width="4" height="11" fill={color} />
-      {/* hands (type) */}
-      <g style={{ animation: handAnim, transformOrigin: "center" }}>
-        <rect x="5" y="31" width="4" height="4" fill={skin} />
-        <rect x="31" y="31" width="4" height="4" fill={skin} />
-      </g>
-      {/* keyboard */}
-      <rect x="7" y="35" width="26" height="4" fill="#26211b" />
-      <rect x="9" y="36" width="22" height="1" fill="#4a4036" />
-    </svg>
-  );
-}
-
-const KEYFRAMES = `
-@keyframes ccc-bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-2px)} }
-@keyframes ccc-idle { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-1px)} }
-@keyframes ccc-shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-1.5px)} 75%{transform:translateX(1.5px)} }
-@keyframes ccc-type { 0%{transform:translateY(0)} 100%{transform:translateY(2px)} }
-@keyframes ccc-dot { 0%,100%{opacity:0.25} 50%{opacity:1} }
-`;

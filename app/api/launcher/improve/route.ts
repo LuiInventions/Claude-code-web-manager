@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { improvePrompt } from "@/lib/prompt-improver";
+import { friendlyAiError } from "@/lib/openai";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -23,6 +24,6 @@ export async function POST(req: NextRequest) {
     const improvedPrompt = await improvePrompt(projectPath, prompt);
     return Response.json({ improvedPrompt });
   } catch (err) {
-    return Response.json({ error: (err as Error).message }, { status: 400 });
+    return Response.json({ error: friendlyAiError(err) }, { status: 400 });
   }
 }

@@ -61,15 +61,18 @@ export const PROVIDERS: AiProvider[] = [
     label: "Groq",
     baseUrl: "https://api.groq.com/openai/v1",
     envVar: "GROQ_API_KEY",
-    defaultModel: "openai/gpt-oss-20b",
+    // The gpt-oss-* models are gated on Groq (require accepting separate terms),
+    // so using one as the default makes the very first "Improve prompt" call fail
+    // with 403 acces denied. Default to a model available to every key instead.
+    defaultModel: "llama-3.3-70b-versatile",
     models: [
-      "openai/gpt-oss-20b",
-      "openai/gpt-oss-120b",
       "llama-3.3-70b-versatile",
       "llama-3.1-8b-instant",
       "qwen3-32b",
       "moonshotai/kimi-k2-instruct",
       "deepseek-r1-distill-llama-70b",
+      "openai/gpt-oss-20b",
+      "openai/gpt-oss-120b",
     ],
     listModels: true,
     keysUrl: "https://console.groq.com/keys",

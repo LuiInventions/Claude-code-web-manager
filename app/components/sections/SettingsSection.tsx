@@ -34,6 +34,14 @@ interface VoiceOption {
   gender: string;
 }
 
+interface ProviderTestResult {
+  provider: string;
+  label: string;
+  ok: boolean;
+  model?: string;
+  error?: string;
+}
+
 export default function SettingsSection() {
   const [cfg, setCfg] = useState<PublicConfig | null>(null);
   const [projectsDir, setProjectsDir] = useState("");
@@ -47,6 +55,8 @@ export default function SettingsSection() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResults, setTestResults] = useState<ProviderTestResult[] | null>(null);
 
   const loadConfig = useCallback(
     () =>
@@ -122,6 +132,28 @@ export default function SettingsSection() {
       setError((e as Error).message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Verify provider keys actually work (POST /api/providers/test). With a
+  // provider id → just that one (with the chosen model); without → every keyed
+  // provider. Surfaces the real failure (e.g. Groq's gated-model 403).
+  const runTest = async (body: { provider?: string; model?: string }) => {
+    setTesting(true);
+    setTestResults(null);
+    setError(null);
+    try {
+      const r = await fetch("/api/providers/test", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      setTestResults((d.results ?? []) as ProviderTestResult[]);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -236,6 +268,51 @@ export default function SettingsSection() {
                 {provider.keysUrl}
               </a>
             </p>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => runTest({ provider: cfg.aiProvider, model })}
+              disabled={testing || !cfg.hasAiKey}
+            >
+              {testing ? <Spinner className="size-4" /> : "Test connection"}
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => runTest({})}
+              disabled={testing}
+              title="Test every provider that has a key set"
+            >
+              Test all keys
+            </Button>
+          </div>
+
+          {testResults && (
+            <ul className="space-y-1 rounded-md border border-line bg-raised p-2.5 text-xs">
+              {testResults.length === 0 ? (
+                <li className="text-faint">No provider keys set to test.</li>
+              ) : (
+                testResults.map((res) => (
+                  <li key={res.provider} className="flex items-start gap-2">
+                    <span
+                      className={
+                        "mt-1 inline-block size-1.5 shrink-0 rounded-full " +
+                        (res.ok ? "bg-running" : "bg-danger")
+                      }
+                    />
+                    <span className="font-medium text-ink">{res.label}</span>
+                    {res.ok ? (
+                      <span className="text-faint">
+                        OK{res.model ? ` · ${res.model}` : ""}
+                      </span>
+                    ) : (
+                      <span className="text-danger">{res.error}</span>
+                    )}
+                  </li>
+                ))
+              )}
+            </ul>
           )}
 
           <div className="h-px bg-line" />

@@ -8,6 +8,14 @@ import { useEffect, useRef } from "react";
  * mode). Connects to /ws/claude-pty, which spawns `claude` in a real PTY cwd'd
  * to the project. The user sees the running session live and can type into it —
  * no separate OS window. Mount one per session (key by session id).
+ *
+ * Sizing: xterm must be fit to a *settled* container. The launcher collapses its
+ * sidebar when a session starts, so an immediate synchronous fit would measure a
+ * mid-transition width and leave the chat interface visually shifted until the
+ * user toggled the sidebar. We therefore (a) defer the initial fit across two
+ * animation frames, (b) refit when the socket opens, (c) refit a few times while
+ * the sidebar slide settles, and (d) refit whenever `layoutNonce` changes (the
+ * launcher bumps it on sidebar toggle / active-batch switch).
  */
 
 const XTERM_THEME = {
@@ -44,6 +52,7 @@ export default function ClaudeCmdPane({
   repoFullName,
   projectName,
   batchId,
+  layoutNonce,
   onExit,
 }: {
   id: string;
@@ -55,6 +64,8 @@ export default function ClaudeCmdPane({
   repoFullName?: string;
   projectName?: string;
   batchId?: string;
+  /** Bumped by the launcher on layout changes (sidebar toggle, tab switch) to force a refit. */
+  layoutNonce?: number;
   onExit?: (code: number) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -63,10 +74,41 @@ export default function ClaudeCmdPane({
     onExitRef.current = onExit;
   });
 
+  // Held so an external relayout (layoutNonce) or the ResizeObserver can refit
+  // the same terminal instance created inside the async setup effect.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fitRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const termRef = useRef<any>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  // Fit to the (current) container size and tell the PTY the new dimensions.
+  const refit = () => {
+    const fit = fitRef.current;
+    const term = termRef.current;
+    const ws = wsRef.current;
+    if (!fit || !term) return;
+    try {
+      fit.fit();
+    } catch {
+      /* container not measurable yet */
+    }
+    if (ws && ws.readyState === WebSocket.OPEN)
+      ws.send(JSON.stringify({ t: "resize", c: term.cols, r: term.rows }));
+  };
+  const refitRef = useRef(refit);
+  refitRef.current = refit;
+
+  // Two rAFs: let the browser apply the latest layout before we measure.
+  const deferredRefit = () => {
+    requestAnimationFrame(() => requestAnimationFrame(() => refitRef.current()));
+  };
+
   useEffect(() => {
     let disposed = false;
     let ws: WebSocket | null = null;
     let resizeObs: ResizeObserver | null = null;
+    const timers: number[] = [];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let term: any = null;
 
@@ -88,7 +130,12 @@ export default function ClaudeCmdPane({
       const fit = new FitAddon();
       term.loadAddon(fit);
       term.open(el);
-      fit.fit();
+      fitRef.current = fit;
+      termRef.current = term;
+
+      // Defer the first fit until the container has settled (the sidebar may be
+      // collapsing right now); the resize message below corrects the PTY size.
+      deferredRefit();
 
       const proto = location.protocol === "https:" ? "wss" : "ws";
       const qs = new URLSearchParams({
@@ -105,6 +152,9 @@ export default function ClaudeCmdPane({
       if (origin) qs.set("origin", origin);
       if (repoFullName) qs.set("repoFullName", repoFullName);
       ws = new WebSocket(`${proto}://${location.host}/ws/claude-pty?${qs}`);
+      wsRef.current = ws;
+
+      ws.onopen = () => deferredRefit();
 
       ws.onmessage = (ev) => {
         try {
@@ -126,22 +176,19 @@ export default function ClaudeCmdPane({
           ws.send(JSON.stringify({ t: "in", d }));
       });
 
-      const doFit = () => {
-        try {
-          fit.fit();
-        } catch {
-          /* container not measurable yet */
-        }
-        if (ws && ws.readyState === WebSocket.OPEN)
-          ws.send(JSON.stringify({ t: "resize", c: term.cols, r: term.rows }));
-      };
-      resizeObs = new ResizeObserver(doFit);
+      resizeObs = new ResizeObserver(() => refitRef.current());
       resizeObs.observe(el);
+
+      // Catch the sidebar slide / late layout without relying on a single frame.
+      for (const ms of [60, 200, 450]) {
+        timers.push(window.setTimeout(() => refitRef.current(), ms));
+      }
       term.focus();
     })();
 
     return () => {
       disposed = true;
+      timers.forEach((t) => clearTimeout(t));
       resizeObs?.disconnect();
       try {
         ws?.close();
@@ -153,10 +200,22 @@ export default function ClaudeCmdPane({
       } catch {
         /* noop */
       }
+      fitRef.current = null;
+      termRef.current = null;
+      wsRef.current = null;
     };
     // Connect once per mounted session (keyed by session id upstream).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // External relayout (sidebar opened/closed, active batch switched): refit once
+  // the transition has settled. Harmless extra refit on first mount.
+  useEffect(() => {
+    deferredRefit();
+    const t = window.setTimeout(() => refitRef.current(), 280);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layoutNonce]);
 
   return (
     <div className="min-h-0 flex-1 bg-canvas p-2">
