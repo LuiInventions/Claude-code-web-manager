@@ -10,9 +10,10 @@
  *   - agent-flow    — https://github.com/patoles/agent-flow
  */
 
-import type { LiveActivity, DetectedSubagent } from "./session-activity";
+import type { LiveActivity, DetectedSubagent, ToolKind } from "./session-activity";
+import { numberInstances } from "./window-instances";
 
-export type { LiveActivity, DetectedSubagent } from "./session-activity";
+export type { LiveActivity, DetectedSubagent, ToolKind } from "./session-activity";
 
 export type SessionStatus = "running" | "done" | "error";
 
@@ -33,6 +34,10 @@ export interface VisualSession {
   batchId?: string;
   /** Rich live activity parsed server-side from the output tail. */
   activity?: LiveActivity;
+  /** Coarse category of the tool the agent is currently running. */
+  tool?: ToolKind;
+  /** Short target of that tool: file basename / search pattern / command / host. */
+  detail?: string;
   /** In-session subagents (Task tool) detected server-side. */
   subagents?: DetectedSubagent[];
   /** ms timestamp of the last output byte. */
@@ -102,6 +107,34 @@ export function avatarIndex(id: string, count: number): number {
 /** Deterministic character/node colour for a session id. */
 export function sessionColor(id: string): string {
   return CHARACTER_COLORS[avatarIndex(id, CHARACTER_COLORS.length)];
+}
+
+/** Number of distinct hand-drawn character looks (hair/skin/shirt) in the office. */
+export const CHARACTER_VARIANTS = 6;
+
+/** Deterministic 0..5 character look for a session id (stable across renders). */
+export function avatarVariant(id: string): number {
+  return avatarIndex(id, CHARACTER_VARIANTS);
+}
+
+/**
+ * Stable, unique 1-based number per session — identical to the Launcher's
+ * numbering (oldest = #1). Keyed on `startedAt` (the PTY spawn time, the
+ * analogue of the Launcher's `createdAt`), ties broken by id, so a session shows
+ * the SAME #N in the Launcher and the Sessions office. Delegates to the shared
+ * `numberInstances` so the two stay in lock-step. Returns a Map id → number.
+ */
+export function numberSessions(sessions: VisualSession[]): Map<string, number> {
+  return new Map(
+    numberInstances(
+      sessions.map((s) => ({
+        id: s.id,
+        kind: "claude" as const,
+        label: s.projectName,
+        createdAt: s.startedAt,
+      })),
+    ).map((n) => [n.instance.id, n.number]),
+  );
 }
 
 /** Human label for a session (project name, falling back to a generic term). */

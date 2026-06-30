@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   avatarIndex,
+  avatarVariant,
   CHARACTER_COLORS,
+  CHARACTER_VARIANTS,
   groupByBatch,
   hashId,
+  numberSessions,
   sessionColor,
   statusActivity,
   type VisualSession,
@@ -66,5 +69,39 @@ describe("sessions visual helpers", () => {
   it("groupByBatch preserves first-seen order", () => {
     const groups = groupByBatch([s({ id: "z" }), s({ id: "y" }), s({ id: "x" })]);
     expect(groups.map((g) => g.key)).toEqual(["s:z", "s:y", "s:x"]);
+  });
+});
+
+describe("numberSessions — Launcher-consistent numbering (oldest = #1)", () => {
+  it("numbers oldest = #1 regardless of the array order coming in", () => {
+    const a = s({ id: "a", startedAt: 100 });
+    const b = s({ id: "b", startedAt: 200 });
+    const c = s({ id: "c", startedAt: 300 });
+    // The API returns sessions newest-first; numbering must not depend on that.
+    const newestFirst = numberSessions([c, b, a]);
+    expect(newestFirst.get("a")).toBe(1);
+    expect(newestFirst.get("b")).toBe(2);
+    expect(newestFirst.get("c")).toBe(3);
+    const oldestFirst = numberSessions([a, b, c]);
+    expect(oldestFirst.get("a")).toBe(1);
+    expect(oldestFirst.get("c")).toBe(3);
+  });
+
+  it("breaks startedAt ties by id and keeps numbers unique", () => {
+    const m = numberSessions([s({ id: "y", startedAt: 5 }), s({ id: "x", startedAt: 5 })]);
+    expect(m.get("x")).toBe(1);
+    expect(m.get("y")).toBe(2);
+    expect(new Set([...m.values()]).size).toBe(2);
+  });
+});
+
+describe("avatarVariant", () => {
+  it("is stable and within [0, CHARACTER_VARIANTS)", () => {
+    for (const id of ["c_a1", "c_zz9", "session-x"]) {
+      const v = avatarVariant(id);
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThan(CHARACTER_VARIANTS);
+      expect(avatarVariant(id)).toBe(v); // stable
+    }
   });
 });
