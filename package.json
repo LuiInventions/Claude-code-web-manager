@@ -1,6 +1,6 @@
 {
   "name": "claude-code-control-center",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "Local control center for your PC, projects, and Claude Code — runs only on 127.0.0.1.",
   "author": {

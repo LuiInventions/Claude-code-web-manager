@@ -72,10 +72,11 @@ to loopback, so nothing is ever exposed to your network.
 - 🗂️ **Local Projects** — every folder in your projects directory at a glance.
 - 🚀 **Up to 6 parallel Claude Code sessions** in a live terminal grid, backed by real
   server-side PTYs that survive page reloads.
-- 🎮 **Sessions, visualized** — a dedicated tab renders every launcher session graphically,
-  live: a **pixel-art office** (a character per agent, inspired by *pixel-agents*) or a
-  **flow graph** (a node per session, inspired by *agent-flow*) — your pick, switchable
-  any time.
+- 🎮 **Sessions, visualized** — a dedicated tab renders every launcher session live as a
+  **pixel-art office** (inspired by *pixel-agents*): a character per agent across **Work**,
+  **Meeting**, and **Break** rooms, animated by exactly what each agent is doing — down to
+  the file it's editing or the command it's running — with subagents as their own little
+  people and each desk numbered to match the Launcher.
 - 🧠 **Prompt improver & "KI Modus"** — let any of **11 AI providers** (OpenAI, Groq,
   xAI/Grok, OpenRouter, DeepSeek, Mistral, Together, Fireworks, Perplexity, Gemini,
   Cerebras) sharpen your prompt, or split one big task into focused sub-sessions. Fully
@@ -129,30 +130,32 @@ page. Reports can optionally be **read aloud** via text-to-speech (Cartesia Soni
 
 ### Sessions — visualize your agents
 
-The **Sessions** tab turns the launcher's live Claude Code sessions into a graphical view —
-every session you start in the Launcher shows up here within a couple of seconds, and
-disappears when it's stopped. Pick the look you prefer (the choice is remembered):
+The **Sessions** tab turns the launcher's live Claude Code sessions into a single,
+graphical **pixel office** — a native re-creation of
+[**pixel-agents**](https://github.com/pixel-agents-hq/pixel-agents). Every session you
+start in the Launcher shows up here within ~1 second and disappears when it's stopped.
 
-- **Pixel office** — a native re-creation of
-  [**pixel-agents**](https://github.com/pixel-agents-hq/pixel-agents): one shared **office
-  room** (rendered on a canvas) where every session is a pixel character at its own desk.
-  Each character animates to its **live activity** — typing while working, bobbing with
-  thought-dots while thinking, raising an amber **"needs approval"** flag when it's waiting
-  for you, a green ✓ when done, a red shake on error. **In-session subagents** (the Task
-  tool) show up as smaller companions beside their parent. Hover a desk for the project,
-  prompt, model, and its subagents.
-- **Flow graph** — a native re-creation of
-  [**agent-flow**](https://github.com/patoles/agent-flow): a **force-directed graph** of
-  hex nodes. The Launcher is the root; each session is a node wired to it (**KI-Modus**
-  splits fan out from a shared batch hub), and each subagent is a smaller hex linked to its
-  parent. Nodes settle on their own, **pulse with their live activity colour**, and can be
-  dragged around.
+It's one shared office rendered on a canvas, split into **rooms**:
 
-Both views are **built into the app** (offline, no extra install), rendered natively in the
-style of the upstream projects, and driven by the same live session registry the Launcher
-uses — including activity and subagent state parsed server-side — so what you see always
-matches what's actually running. Full credit to the two upstream projects that inspired
-each style.
+- **Work Room** — active sessions at desks. Each character animates to its **precise live
+  activity** — typing while editing, reading while searching, running while in a shell,
+  bobbing with thought-dots while thinking, raising an amber **"needs approval"** flag when
+  it's waiting for you, a red shake on error. The desk caption shows **what's being worked
+  on right now** — the file (`✎ PixelOfficeView.tsx`), the search, or the command
+  (`$ npm run build`) — and the monitor glows to match.
+- **Meeting Room** — **KI-Modus** batches (sessions started together) seated around a round
+  table, one table per batch.
+- **Break Room** — finished sessions relaxing on couches with a ✓.
+
+**In-session subagents** (the Task tool) appear as their own little **pixel people** beside
+their parent. Every character wears a **#N name-plate whose number is identical to the
+Launcher's** (oldest = #1), so each session is unambiguous across both tabs. Hover or click
+a character for the project, prompt, model, current action, and its subagents.
+
+The office is **built into the app** (offline, no extra install, no third-party assets),
+rendered natively in the style of pixel-agents, and driven by the same live session
+registry the Launcher uses — including activity, current tool/file, and subagent state
+parsed server-side — so what you see always matches what's actually running.
 
 ### GitHub
 
@@ -399,7 +402,7 @@ app/
                          models, secrets, open, github [+ create, update,
                          visibility, changes], voice [tts, voices])
   components/            Shell, sections (Local Projects/Launcher/Sessions/GitHub/Settings),
-                         sessions/ (pixel-office + flow-graph views), setup
+                         sessions/ (pixel-office view), setup
 build/                   Electron wrapper + electron-builder config + build scripts
 .data/                   Local storage (gitignored): settings.json, secrets.json,
                          index.json, launcher.json
