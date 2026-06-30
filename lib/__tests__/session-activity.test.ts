@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { detectActivity, IDLE_MS } from "../session-activity";
+import { detectActivity, detectTool, IDLE_MS } from "../session-activity";
 
 /** Build a detectActivity input with sensible defaults. */
 function input(p: Partial<Parameters<typeof detectActivity>[0]> = {}) {
@@ -93,5 +93,66 @@ describe("detectActivity — subagents", () => {
   it("returns no subagents once the session is finished", () => {
     const r = detectActivity(input({ status: "done", tail: "● Task(A)" }));
     expect(r.subagents).toEqual([]);
+  });
+});
+
+describe("detectTool — current tool + target", () => {
+  it("edit → file basename", () => {
+    expect(detectTool("● Edit(app/components/sections/sessions/PixelOfficeView.tsx)")).toEqual({
+      tool: "edit",
+      detail: "PixelOfficeView.tsx",
+    });
+  });
+
+  it("read → file basename, strips key + quotes", () => {
+    expect(detectTool('● Read(file_path: "lib/sessions.ts")')).toEqual({
+      tool: "read",
+      detail: "sessions.ts",
+    });
+  });
+
+  it("bash → the command", () => {
+    expect(detectTool("● Bash(npm run build)")).toEqual({ tool: "bash", detail: "npm run build" });
+  });
+
+  it("bash → truncates a long command", () => {
+    const cmd = "npm run build && npm run test && npm run lint && echo done please";
+    expect(detectTool(`● Bash(${cmd})`)?.detail).toHaveLength(40);
+  });
+
+  it("search → the pattern", () => {
+    const r = detectTool('● Grep(pattern: "useEffect")');
+    expect(r?.tool).toBe("search");
+    expect(r?.detail).toBe("useEffect");
+  });
+
+  it("web → the host", () => {
+    expect(detectTool("● WebFetch(https://github.com/foo/bar)")).toEqual({
+      tool: "web",
+      detail: "github.com",
+    });
+  });
+
+  it("uses the LAST (most recent) tool near the tail", () => {
+    expect(detectTool("● Read(a.ts)\n● Edit(b.ts)")?.detail).toBe("b.ts");
+  });
+
+  it("returns undefined when no tool is present", () => {
+    expect(detectTool("╭───────────╮\n│ >         │\n╰───────────╯")).toBeUndefined();
+  });
+});
+
+describe("detectActivity — tool/detail wiring", () => {
+  it("attaches tool + detail while running", () => {
+    const r = detectActivity(input({ tail: "● Edit(lib/x.ts)" }));
+    expect(r.activity).toBe("working");
+    expect(r.tool).toBe("edit");
+    expect(r.detail).toBe("x.ts");
+  });
+
+  it("omits tool/detail once the session is finished", () => {
+    const r = detectActivity(input({ status: "done", tail: "● Edit(lib/x.ts)" }));
+    expect(r.tool).toBeUndefined();
+    expect(r.detail).toBeUndefined();
   });
 });

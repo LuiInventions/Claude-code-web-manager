@@ -17,6 +17,9 @@
 
 export type LiveActivity = "thinking" | "working" | "waiting" | "done" | "error";
 
+/** Coarse category of the tool the agent is currently running. */
+export type ToolKind = "edit" | "read" | "search" | "bash" | "web" | "task" | "other";
+
 export interface DetectedSubagent {
   /** Stable per session: ordinal within the parent's output ("s0", "s1", …). */
   id: string;
@@ -28,6 +31,10 @@ export interface DetectedSubagent {
 export interface ActivitySignal {
   activity: LiveActivity;
   subagents: DetectedSubagent[];
+  /** Coarse category of the most recent tool near the tail (running only). */
+  tool?: ToolKind;
+  /** Short human target of that tool: file basename / search pattern / command. */
+  detail?: string;
 }
 
 /** Idle gap (ms) after which a running-but-silent session counts as waiting. */
@@ -48,6 +55,74 @@ const THINKING_RE =
 
 // In-session subagents spawned via the Task tool.
 const SUBAGENT_RE = /Task\(([^)]*)\)/g;
+
+// Every tool marker `Name(args)`, captured globally so we can take the LAST
+// (most recent) one near the tail to describe what the agent is doing right now.
+const TOOL_CALL_RE =
+  /\b(Edit|MultiEdit|Write|NotebookEdit|Read|Grep|Glob|Search|Bash|WebFetch|WebSearch|Task)\(([^)]*)\)/g;
+
+const TOOL_KIND: Record<string, ToolKind> = {
+  Edit: "edit",
+  MultiEdit: "edit",
+  Write: "edit",
+  NotebookEdit: "edit",
+  Read: "read",
+  Grep: "search",
+  Glob: "search",
+  Search: "search",
+  Bash: "bash",
+  WebFetch: "web",
+  WebSearch: "web",
+  Task: "task",
+};
+
+/** Last path segment of a file path (handles both / and \ separators). */
+function basename(p: string): string {
+  const parts = p.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] || p;
+}
+
+/** Strip a leading `key:`, surrounding quotes, and trailing args from a tool arg. */
+function cleanArg(raw: string): string {
+  // Strip a leading `key:` label (e.g. `file_path: "…"`) — require a space after
+  // the colon so a URL scheme like `https://…` is left intact.
+  let s = raw.trim().replace(/^\w+\s*:\s+/, "").trim();
+  s = s.replace(/^["'`]+|["'`]+$/g, "").trim();
+  // Multi-arg calls (e.g. Edit(path, old, new)) — keep the first segment.
+  const comma = s.indexOf(",");
+  if (comma > 0) s = s.slice(0, comma).trim();
+  return s;
+}
+
+/** Host of a URL, or the string unchanged when it isn't a URL. */
+function hostOf(url: string): string {
+  const m = url.match(/^[a-z]+:\/\/([^/]+)/i);
+  return m ? m[1] : url;
+}
+
+/** Trim a string to at most `n` chars, ending with an ellipsis when cut. */
+function shorten(s: string, n: number): string {
+  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+}
+
+/**
+ * The most recent tool call near the tail, mapped to a coarse kind and a short
+ * human-readable target (file basename, search pattern, command, or host).
+ * Returns undefined when no tool marker is present.
+ */
+export function detectTool(tail: string): { tool: ToolKind; detail?: string } | undefined {
+  const matches = [...tail.matchAll(TOOL_CALL_RE)];
+  const m = matches[matches.length - 1];
+  if (!m) return undefined;
+  const tool = TOOL_KIND[m[1]] ?? "other";
+  const arg = cleanArg(m[2] || "");
+  if (!arg) return { tool };
+  let detail: string;
+  if (tool === "edit" || tool === "read") detail = basename(arg);
+  else if (tool === "web") detail = hostOf(arg);
+  else detail = shorten(arg, 40);
+  return { tool, detail };
+}
 
 /** Coarse activity + subagents for one session, from its readable output tail. */
 export function detectActivity(opts: {
@@ -73,7 +148,8 @@ export function detectActivity(opts: {
   else if (idle) activity = "waiting";
   else activity = "working";
 
-  return { activity, subagents: detectSubagents(tail) };
+  const tool = detectTool(tail);
+  return { activity, subagents: detectSubagents(tail), tool: tool?.tool, detail: tool?.detail };
 }
 
 function detectSubagents(tail: string): DetectedSubagent[] {
