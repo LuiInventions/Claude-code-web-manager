@@ -1,6 +1,6 @@
 {
   "name": "claude-code-control-center",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "description": "Local control center for your PC, projects, and Claude Code — runs only on 127.0.0.1.",
   "author": {
@@ -32,6 +32,7 @@
     "next": "^15.5.19",
     "node-pty": "^1.1.0",
     "openai": "^6.44.0",
+    "pngjs": "^7.0.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-markdown": "^10.1.0",
@@ -42,6 +43,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pngjs": "^6.0.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/ws": "^8.18.1",

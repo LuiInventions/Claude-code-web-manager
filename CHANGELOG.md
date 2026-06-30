@@ -4,6 +4,30 @@ All notable changes to Claude Code Control Center are documented here. Versions
 follow `package.json`; each `v*` tag publishes a self-contained Windows installer
 (`cc-control-center-Setup-<version>.exe`) via GitHub Actions.
 
+## 1.5.0 — 2026-06-30
+
+### Sessions — the office is now the real pixel-agents engine
+
+- **Vendored the actual [pixel-agents](https://github.com/pixel-agents-hq/pixel-agents)
+  office** instead of a hand-drawn re-creation. The Sessions tab now renders
+  pixel-agents' own `OfficeCanvas` and engine **byte-for-byte unchanged**:
+  genuine pixel-art sprites (6 characters, ~24 furniture sets, floor/wall tiles,
+  pets), real A\* pathfinding, the character animation FSM, matrix spawn/despawn
+  effects, and middle-mouse pan + Ctrl-wheel zoom.
+- **New adapter `useSessionMessages.ts`** is the only hand-written piece: it maps
+  our live launcher sessions (`lib/sessions`) onto the office's own `OfficeState`
+  (agents seated by activity, reading-vs-typing animation per tool, waiting/done
+  bubbles), and renders **in-session subagents as their own pixel characters**.
+- **Sprite pipeline served locally:** a new `GET /api/sessions/office-assets`
+  route runs pixel-agents' own PNG decoders (`lib/pixel-agents/**`, vendored) to
+  turn the bundled assets (`public/pixel-agents-assets/**`) into the sprite
+  pixel-grids the office consumes — no VS Code extension host or WebSocket
+  backend required.
+- **Removed** the previous custom hand-drawn `PixelOfficeView.tsx`.
+- **Build:** added a webpack `resolve.extensionAlias` so the vendored office's
+  `.js` import specifiers resolve to their TypeScript sources; added the `pngjs`
+  dependency for server-side PNG decoding.
+
 ## 1.4.0 — 2026-06-30
 
 ### Sessions — the Pixel Office is now the only visualization

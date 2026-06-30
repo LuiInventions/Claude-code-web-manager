@@ -1,10 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { Boxes, RefreshCw } from "lucide-react";
 import { EmptyState } from "../ui";
 import type { VisualSession } from "@/lib/sessions";
-import PixelOfficeView from "./sessions/PixelOfficeView";
+
+// The office renders to a <canvas> and uses browser-only APIs, so load it
+// client-side only (no SSR) to avoid hydration of the canvas on the server.
+const OfficeView = dynamic(() => import("../sessions/OfficeView"), { ssr: false });
 
 /**
  * Sessions tab — a live pixel-office view of every Claude Code session running
@@ -63,7 +67,7 @@ export default function SessionsSection() {
             />
           </div>
         ) : (
-          <PixelOfficeView sessions={sessions} />
+          <OfficeView sessions={sessions} />
         )}
       </div>
 
