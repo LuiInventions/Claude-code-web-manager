@@ -1,13 +1,12 @@
 /**
- * Pure, client-safe helpers for the Sessions tab visualizations (pixel-office +
- * flow-graph). No node imports, so this is importable from "use client"
- * components. The data comes from /api/launcher/live-sessions, which lists the
- * launcher's live Claude Code PTY sessions; each one gets a stable visual
- * identity here so a session keeps the same character/colour across refreshes.
+ * Pure, client-safe helpers for the Sessions tab's pixel-office visualization.
+ * No node imports, so this is importable from "use client" components. The data
+ * comes from /api/launcher/live-sessions, which lists the launcher's live Claude
+ * Code PTY sessions; each one gets a stable visual identity here so a session
+ * keeps the same character/colour across refreshes.
  *
- * The two views are native re-creations of the upstream projects' designs:
- *   - pixel-agents  — https://github.com/pixel-agents-hq/pixel-agents
- *   - agent-flow    — https://github.com/patoles/agent-flow
+ * The office is a native re-creation of the upstream project's design:
+ *   - pixel-agents — https://github.com/pixel-agents-hq/pixel-agents
  */
 
 import type { LiveActivity, DetectedSubagent, ToolKind } from "./session-activity";
@@ -30,7 +29,7 @@ export interface VisualSession {
   origin?: "github";
   repoFullName?: string;
   startedAt: number;
-  /** KI-Modus splits share a batchId; used to group sessions in the flow view. */
+  /** KI-Modus splits share a batchId; groups them at the office's Meeting Room table. */
   batchId?: string;
   /** Rich live activity parsed server-side from the output tail. */
   activity?: LiveActivity;
@@ -150,7 +149,7 @@ export interface SessionGroup {
 /**
  * Group sessions by batchId (KI-Modus splits share one), preserving first-seen
  * order. Sessions without a batchId become their own singleton group. Used by
- * the flow view to draw a batch hub node linking its sub-sessions.
+ * the office to seat each multi-session batch around its own Meeting Room table.
  */
 export function groupByBatch(sessions: VisualSession[]): SessionGroup[] {
   const map = new Map<string, VisualSession[]>();
