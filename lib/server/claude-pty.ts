@@ -7,10 +7,10 @@ import {
   buildInteractiveArgs,
   getCodeCli,
   normalizeCliOption,
-  resolveCliBin,
   spawnEnv,
   type CodeCliId,
 } from "../code-clis";
+import { resolveCliBin } from "./cli-bin";
 import { getUsage, isBlocked } from "../usage-store";
 import {
   tailText,

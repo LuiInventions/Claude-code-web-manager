@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { getConfig } from "../config";
-import { getCodeCli, resolveCliBin, spawnEnv } from "../code-clis";
+import { getCodeCli, spawnEnv } from "../code-clis";
+import { resolveCliBin } from "./cli-bin";
 
 /**
  * Page the selected CLI into the OS file cache so the next PTY opens faster.

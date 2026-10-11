@@ -1,5 +1,3 @@
-import { execFileSync } from "node:child_process";
-
 /**
  * The coding CLIs the launcher can drive in a PTY.
  *
@@ -178,33 +176,4 @@ export function spawnEnv(id: CodeCliId): NodeJS.ProcessEnv {
     }
   }
   return env;
-}
-
-const binCache = new Map<string, string | null>();
-
-/**
- * Absolute path of `bin` via `which` / `where`, or null when it is not on PATH.
- * Cached for the process — the lookup itself is not free on the first session.
- */
-export function resolveCliBin(bin: string): string | null {
-  if (binCache.has(bin)) return binCache.get(bin) ?? null;
-  const cmd = process.platform === "win32" ? "where" : "which";
-  let found: string | null = null;
-  try {
-    const out = execFileSync(cmd, [bin], {
-      encoding: "utf8",
-      windowsHide: true,
-      timeout: 4000,
-    });
-    found = out.split(/\r?\n/).map((s) => s.trim()).find(Boolean) ?? null;
-  } catch {
-    found = null;
-  }
-  binCache.set(bin, found);
-  return found;
-}
-
-/** True when the CLI executable is on PATH. */
-export function codeCliInstalled(id: CodeCliId): boolean {
-  return resolveCliBin(getCodeCli(id).bin) !== null;
 }

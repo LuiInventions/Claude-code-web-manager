@@ -1,7 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { WebSocket } from "ws";
 import { getConfig } from "../config";
-import { resolveCliBin, spawnEnv } from "../code-clis";
+import { spawnEnv } from "../code-clis";
+import { resolveCliBin } from "./cli-bin";
 import { saveLauncherSession, type LauncherSession } from "../launcher-store";
 import { normalizeModel, normalizeEffort } from "../launcher-config";
 import { recordRateLimit, getUsage, isBlocked } from "../usage-store";

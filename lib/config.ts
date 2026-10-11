@@ -6,11 +6,11 @@ import { PROVIDERS, DEFAULT_PROVIDER_ID, getProvider } from "./providers";
 import { appVersion } from "./version";
 import {
   CODE_CLIS,
-  codeCliInstalled,
   getCodeCli,
   normalizeCodeCli,
   type CodeCliId,
 } from "./code-clis";
+import { codeCliInstalled } from "./server/cli-bin";
 
 /**
  * Central configuration. Precedence (highest first):
