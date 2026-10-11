@@ -6,9 +6,27 @@ import os from "node:os";
 import path from "node:path";
 import { installBridge } from "./secrets";
 
-// App root holds `.next`, `next.config.ts` and `node_modules`. With asar: false
-// the packaged layout is resources/app/build/electron, so two levels up resolves
-// the app root in BOTH packaged and dev runs.
+// Next (non-Windows) calls fs.realpathSync.native, which skips Electron's asar
+// patch and throws ENOTDIR for paths inside app.asar. Fall back to the patched
+// realpath. Must run before the server (and therefore `next`) is loaded.
+const nativeRealpath = fs.realpathSync.native;
+if (typeof nativeRealpath === "function") {
+  fs.realpathSync.native = ((target: fs.PathLike, options?: fs.RealpathSyncOptions) => {
+    try {
+      return nativeRealpath(target, options as never);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOTDIR" || code === "ENOENT" || code === "EINVAL" || code === "ENOTSUP") {
+        return fs.realpathSync(target, options);
+      }
+      throw err;
+    }
+  }) as typeof fs.realpathSync.native;
+}
+
+// App root holds `.next`, `next.config.mjs` and `node_modules`. Packaged, that
+// root is resources/app.asar (Electron treats it as a directory). Dev, it is
+// the repo root. Two levels up from this file is that root in both layouts.
 const ROOT = path.resolve(__dirname, "..", "..");
 
 // --------------------------------------------------------------- logging

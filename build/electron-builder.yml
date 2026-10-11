@@ -9,12 +9,20 @@ productName: Claude Code Control Center
 copyright: © 2026 LT Digital Concepts (Luis Kleemann)
 # node-pty ships runtime-agnostic N-API prebuilds (prebuilds/win32-x64), so no
 # native rebuild against Electron's ABI is needed — skip it to avoid requiring a
-# C++ toolchain. The prebuilt .node files are asarUnpacked below.
+# C++ toolchain. Binaries are unpacked from the asar (see asarUnpack).
 npmRebuild: false
-# Keep the app unpacked on disk (no asar) so the custom Next server can read
-# `.next`/`next.config.mjs` and node-pty can load its prebuilt .node files via
-# plain filesystem paths.
-asar: false
+# One archive instead of the raw node_modules tree. NSIS was writing every
+# file twice (7z extract into a temp dir, then CopyFiles) and a loose tree is
+# tens of thousands of files, which is why Setup sat on "installing" for
+# minutes. Electron's fs can read `.next` and `public` inside the asar. The
+# Next server is required in the Electron main process, so that patch applies.
+# Native addons and node-pty's helper exe/dll cannot live in the archive.
+asar: true
+asarUnpack:
+  - node_modules/node-pty/**/*
+  - node_modules/@next/swc-*/**/*
+  - node_modules/@img/**/*
+  - node_modules/sharp/**/*
 directories:
   output: build/dist
   buildResources: build/resources
@@ -23,6 +31,14 @@ files:
   - build/electron/dist/**/*
   - build/resources/**/*
   - .next/**/*
+  # Webpack's compile cache is ~100MB+ and is never read at runtime.
+  - "!.next/cache"
+  - "!.next/cache/**"
+  - "!.next/trace"
+  - "!.next/diagnostics"
+  - "!.next/diagnostics/**"
+  - "!.next/types"
+  - "!.next/types/**"
   # `public/**` must ship: the office-assets route reads the vendored
   # pixel-agents sprites/layout from public/pixel-agents-assets at runtime
   # (the build runs with --experimental-build-mode compile, which skips
@@ -31,7 +47,18 @@ files:
   - public/**/*
   - next.config.mjs
   - package.json
+  # electron-builder still collects production node_modules itself; this line
+  # keeps that, and the `!` patterns below are applied to those modules.
   - node_modules/**/*
+  - "!**/*.map"
+  # The x64 installer only loads prebuilds/win32-x64. The other prebuilds are
+  # ~30MB each, and the C++ sources are not used at runtime.
+  - "!node_modules/node-pty/prebuilds/darwin-*/**"
+  - "!node_modules/node-pty/prebuilds/linux-*/**"
+  - "!node_modules/node-pty/prebuilds/win32-arm64/**"
+  - "!node_modules/node-pty/deps/**"
+  - "!node_modules/node-pty/src/**"
+  - "!node_modules/node-pty/third_party/**"
 win:
   icon: build/resources/icon.ico
   # electron-builder v26 nests signing options under `signtoolOptions`. The
@@ -51,6 +78,14 @@ nsis:
   # it keeps installs from requiring admin rights.
   perMachine: false
   allowToChangeInstallationDirectory: true
+  # Default packaging is a non-solid 7z at LZMA level 9, built so electron-updater
+  # can download a blockmap. This app has no auto-updater, and that 7z is extracted
+  # into a temp directory and then copied file by file. Zip/deflate is extracted
+  # straight into the install directory and inflates much faster. `store` (no
+  # compression) would be faster still, but it would ship the raw Electron and
+  # SWC binaries and roughly double the download.
+  differentialPackage: false
+  useZip: true
   installerIcon: build/resources/icon.ico
   uninstallerIcon: build/resources/icon.ico
   installerHeaderIcon: build/resources/icon.ico

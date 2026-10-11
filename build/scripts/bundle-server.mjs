@@ -1,6 +1,7 @@
 // Bundles the custom server (start + lib) to a single CJS file Electron requires,
 // and compiles the electron main/preload/secrets entries to JS.
-// Native + framework deps stay external (resolved from node_modules, asarUnpacked).
+// Native + framework deps stay external (resolved from node_modules; native
+// addons are asar-unpacked, everything else is inside app.asar).
 import { build } from "esbuild";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

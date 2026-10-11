@@ -1,5 +1,6 @@
 import { createServer, type Server } from "node:http";
 import next from "next";
+import nextConfig from "../../next.config.mjs";
 import { getConfig } from "../config";
 import { handleWsUpgrade } from "./ws-hub";
 import { startUsagePoller } from "./usage-poller";
@@ -23,7 +24,20 @@ export async function startServer(
 
   // `dir` lets the Electron main process point Next at the app root (where
   // `.next` lives) independently of the working directory. Defaults to cwd.
-  const app = next({ dev, dir: opts.dir, hostname: host, port });
+  //
+  // Packaged, next.config.mjs sits inside app.asar. Next loads it with an ESM
+  // import(), and Node's ESM loader cannot read asar entries. esbuild inlines
+  // the same object into server.cjs. `next build` still reads the file.
+  const packagedElectron =
+    Boolean(process.versions.electron) &&
+    (process as NodeJS.Process & { defaultApp?: boolean }).defaultApp !== true;
+  const app = next({
+    dev,
+    dir: opts.dir,
+    hostname: host,
+    port,
+    ...(packagedElectron ? { conf: nextConfig } : {}),
+  });
   await app.prepare();
 
   const handle = app.getRequestHandler();

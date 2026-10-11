@@ -4,6 +4,25 @@ All notable changes to Claude Code Control Center are documented here. Versions
 follow `package.json`; each `v*` tag publishes a self-contained Windows installer
 (`cc-control-center-Setup-<version>.exe`) via GitHub Actions.
 
+## 1.9.1 — 2026-10-11
+
+### Installer — Setup no longer unpacks tens of thousands of files
+
+The app's own code is small. The old Setup.exe was not: `asar` was off, so NSIS
+unpacked the whole production `node_modules` tree (tens of thousands of files)
+from a non-solid LZMA 7z into a temp folder and then copied every file again.
+Windows then scanned each new file. That is the 3–4 minute install. The new
+package is one archive plus the few native binaries that cannot live inside it,
+and the installer extracts that archive straight into the install folder.
+
+- The app is now one `app.asar`. Native pieces that cannot live in an archive
+  stay unpacked: `node-pty` (including its conpty/winpty helper) and the
+  Next/sharp `.node` binaries.
+- The installer payload is a zip (deflate), extracted directly into the install
+  folder. The per-user NSIS wizard is unchanged.
+- `.next/cache` (the webpack compile cache, about 100MB) is no longer shipped,
+  nor are source maps or node-pty prebuilds for other operating systems.
+
 ## 1.9.0 — 2026-10-11
 
 Built on **1.7.0**. Release **1.8.0** (the per-folder warm pool of six pre-spawned
