@@ -70,8 +70,16 @@ interface ReviewPage {
   title: string;
 }
 
-/** Selectable number of Claude boxes opened per Start. */
+/** Selectable number of CLI boxes opened per Start. */
 const BOX_COUNTS = [1, 2, 3, 4, 5, 6] as const;
+
+interface CodeCliOpt {
+  id: string;
+  label: string;
+  shortLabel: string;
+  models: { label: string; value: string }[];
+  efforts: { label: string; value: string }[];
+}
 
 /** Symmetric grid geometry for a number of visible boxes (≤2 → 1 column). */
 function gridShape(n: number): { cols: number; rows: number } {
@@ -112,9 +120,24 @@ export default function LauncherSection({
   const [reviewing, setReviewing] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [hasAiKey, setHasAiKey] = useState(false);
+  const [codeCli, setCodeCli] = useState<CodeCliOpt | null>(null);
   const { speak } = useSpeak();
 
-  const blocked = !!(usage?.blockedUntil && usage.blockedUntil > nowTs);
+  const cliName = codeCli?.shortLabel ?? "Claude Code";
+  const modelOptions = codeCli?.models ?? MODEL_OPTIONS;
+  const effortOptions = codeCli?.efforts ?? EFFORT_OPTIONS;
+  // The usage bar and its block are Claude Code's rate limit. Grok and Codex
+  // keep starting when that limit is hit.
+  const blocked =
+    (codeCli?.id ?? "claude") === "claude" &&
+    !!(usage?.blockedUntil && usage.blockedUntil > nowTs);
+
+  // Drop a model/effort that belongs to the previously selected CLI.
+  useEffect(() => {
+    if (!codeCli) return;
+    setModel((m) => (codeCli.models.some((o) => o.value === m) ? m : ""));
+    setEffort((e) => (codeCli.efforts.some((o) => o.value === e) ? e : ""));
+  }, [codeCli]);
 
   // origin/repoFullName carried from a Jarvis/GitHub prefill into the next start.
   const pendingOriginRef = useRef<{ origin: "github"; repoFullName?: string } | null>(null);
@@ -127,13 +150,42 @@ export default function LauncherSection({
       .catch(() => {});
   }, []);
 
-  // Whether an AI provider key is configured — gates the prompt-improver and
-  // session-review actions (they need an AI provider).
+  // xterm is imported when a box mounts. Start that download as soon as the
+  // launcher is open so the first session does not wait on the chunk.
   useEffect(() => {
-    fetch("/api/settings")
-      .then((r) => r.json())
-      .then((c: { hasAiKey?: boolean }) => setHasAiKey(Boolean(c.hasAiKey)))
-      .catch(() => {});
+    void import("@xterm/xterm");
+    void import("@xterm/addon-fit");
+  }, []);
+
+  // Whether an AI provider key is configured — gates the prompt-improver and
+  // session-review actions (they need an AI provider). Also tracks the coding
+  // CLI chosen in setup/settings, polled so a change there shows up here
+  // without a reload (sections stay mounted when you switch tabs).
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      fetch("/api/settings")
+        .then((r) => r.json())
+        .then(
+          (c: {
+            hasAiKey?: boolean;
+            codeCli?: string;
+            codeClis?: CodeCliOpt[];
+          }) => {
+            if (cancelled) return;
+            setHasAiKey(Boolean(c.hasAiKey));
+            const list = c.codeClis ?? [];
+            const next = list.find((x) => x.id === c.codeCli) ?? list[0] ?? null;
+            setCodeCli((prev) => (prev?.id === next?.id ? prev : next));
+          },
+        )
+        .catch(() => {});
+    load();
+    const id = setInterval(load, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, []);
 
   // Also offer the connected GitHub repos (cloned ones) in the same dropdown.
@@ -392,7 +444,7 @@ export default function LauncherSection({
   // the one destructive action and is confirmed first.
   const closeSession = (id: string) => {
     const ok = window.confirm(
-      "Really stop this Claude session?\n\n" +
+      `Really stop this ${cliName} session?\n\n` +
         "It continues running in the background (even after page reload) " +
         "until the PC is shut down. Stopping ends it permanently.",
     );
@@ -409,7 +461,7 @@ export default function LauncherSection({
   const closeAllSessions = () => {
     if (sessions.length === 0) return;
     const ok = window.confirm(
-      `Really stop all ${sessions.length} Claude session${sessions.length === 1 ? "" : "s"}?\n\n` +
+      `Really stop all ${sessions.length} ${cliName} session${sessions.length === 1 ? "" : "s"}?\n\n` +
         "They keep running in the background (even after page reload) until the " +
         "PC is shut down. Stopping ends them all permanently.",
     );
@@ -542,7 +594,9 @@ export default function LauncherSection({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <UsageBar usage={usage} now={nowTs} />
+      {(codeCli?.id ?? "claude") === "claude" && (
+        <UsageBar usage={usage} now={nowTs} />
+      )}
       <div className="flex min-h-0 flex-1">
         {/* Left: form + sessions — collapsible to maximize the terminal */}
         {sidebarOpen && (
@@ -612,7 +666,7 @@ export default function LauncherSection({
                   onChange={(e) => setModel(e.target.value)}
                   className="h-9 w-full cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
                 >
-                  {MODEL_OPTIONS.map((o) => (
+                  {modelOptions.map((o) => (
                     <option key={o.label} value={o.value}>
                       {o.label}
                     </option>
@@ -628,7 +682,7 @@ export default function LauncherSection({
                   onChange={(e) => setEffort(e.target.value)}
                   className="h-9 w-full cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
                 >
-                  {EFFORT_OPTIONS.map((o) => (
+                  {effortOptions.map((o) => (
                     <option key={o.label} value={o.value}>
                       {o.label}
                     </option>
@@ -636,6 +690,9 @@ export default function LauncherSection({
                 </select>
               </label>
             </div>
+            <p className="text-[11px] text-faint">
+              Sessions open with {cliName}. Change it in Settings.
+            </p>
 
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-medium uppercase tracking-wide text-faint">
@@ -647,7 +704,7 @@ export default function LauncherSection({
                     key={n}
                     type="button"
                     onClick={() => setBoxCount(n)}
-                    title={`Open ${n} Claude box${n > 1 ? "es" : ""} simultaneously`}
+                    title={`Open ${n} ${cliName} box${n > 1 ? "es" : ""} simultaneously`}
                     className={cn(
                       "cursor-pointer px-3 py-1.5 text-xs font-medium transition-colors",
                       boxCount === n
@@ -754,7 +811,7 @@ export default function LauncherSection({
                     onClick={start}
                     disabled={!improved.trim() || blocked}
                   >
-                    {blocked ? "Limit reached" : "Start Claude Code"}
+                    {blocked ? "Limit reached" : `Start ${cliName}`}
                   </Button>
                 </div>
               </>
@@ -1056,7 +1113,7 @@ export default function LauncherSection({
                   <Rocket className="size-6" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className="text-sm font-medium text-ink">Claude Code Launcher</h3>
+                  <h3 className="text-sm font-medium text-ink">{cliName} Launcher</h3>
                   <p className="mx-auto max-w-sm text-sm text-muted">
                     Select a project, write a prompt, choose the number of boxes, start —
                     sessions then run live as a terminal grid here.

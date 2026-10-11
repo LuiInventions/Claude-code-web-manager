@@ -26,6 +26,8 @@ export interface VisualSession {
   exitCode?: number;
   model?: string;
   effort?: string;
+  /** Coding CLI that owns the PTY: claude, grok, or codex. */
+  cli?: string;
   origin?: "github";
   repoFullName?: string;
   startedAt: number;

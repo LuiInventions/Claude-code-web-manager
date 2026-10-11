@@ -4,6 +4,35 @@ All notable changes to Claude Code Control Center are documented here. Versions
 follow `package.json`; each `v*` tag publishes a self-contained Windows installer
 (`cc-control-center-Setup-<version>.exe`) via GitHub Actions.
 
+## 1.9.0 — 2026-10-11
+
+Built on **1.7.0**. Release **1.8.0** (the per-folder warm pool of six pre-spawned
+Claude sessions) was faulty and has been removed from `main` and from the releases.
+
+### Code CLIs — Claude Code, Grok, and ChatGPT Codex
+
+- The launcher starts one of three coding CLIs. Pick it on the first-run screen
+  or change it later in **Settings → Code CLI**. The choice is stored in
+  `.data/settings.json` as `codeCli` (`claude`, `grok`, or `codex`).
+- **Claude Code** (`claude`) still launches with `--dangerously-skip-permissions`.
+- **Grok** (`grok`, Grok Build) launches with `--permission-mode bypassPermissions`.
+- **ChatGPT Codex** (`codex`) launches with `--dangerously-bypass-approvals-and-sandbox`.
+- Model and effort dropdowns follow the selected CLI. An empty "Standard" omits
+  the flag. The Claude usage bar and its rate-limit block apply only when Claude
+  Code is selected.
+
+### Faster session open
+
+- The PTY starts as soon as the launcher box mounts. xterm loads in parallel and
+  replays any output that arrived early. The launcher also preloads xterm.
+- Claude's update check is skipped for sessions started here
+  (`DISABLE_AUTOUPDATER`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`), unless
+  those variables are already set.
+- On boot the server runs `<cli> --version` once so the binary is in the OS
+  cache. It does not keep idle agent sessions.
+- The Claude `/usage` scrape no longer runs at the same moment as a live
+  session, and it waits 25s after startup.
+
 ## 1.7.0 — 2026-06-30
 
 ### Sessions — still camera, full-bleed office, live captions, agent numbers, richer layout

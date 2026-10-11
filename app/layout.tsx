@@ -17,7 +17,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Claude Code Control Center",
   description:
-    "Local control center for your PC, projects, and Claude Code. Runs only on 127.0.0.1.",
+    "Local control center for your PC, projects, and code CLIs (Claude Code, Grok, ChatGPT Codex). Runs only on 127.0.0.1.",
 };
 
 export const viewport: Viewport = {

@@ -1,8 +1,10 @@
 import type { NextRequest } from "next/server";
 import { existsSync } from "node:fs";
 import { getPublicConfig } from "@/lib/config";
+import { isCodeCliId, type CodeCliId } from "@/lib/code-clis";
 import { writeSettings } from "@/lib/settings";
 import { appVersion } from "@/lib/version";
+import { warmCodeCli } from "@/lib/server/cli-warm";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,7 @@ export async function POST(req: NextRequest) {
     aiModel?: string;
     openaiModel?: string;
     cartesiaVoice?: string;
+    codeCli?: string;
     /** Sent by the setup screen on "Loslegen" — stamps this app version. */
     setupComplete?: boolean;
   };
@@ -32,6 +35,7 @@ export async function POST(req: NextRequest) {
     aiModel?: string;
     openaiModel?: string;
     cartesiaVoice?: string;
+    codeCli?: CodeCliId;
     setupVersion?: string;
   } = {};
 
@@ -46,6 +50,13 @@ export async function POST(req: NextRequest) {
   if (typeof body.aiModel === "string") patch.aiModel = body.aiModel.trim();
   if (typeof body.openaiModel === "string") patch.openaiModel = body.openaiModel.trim();
   if (typeof body.cartesiaVoice === "string") patch.cartesiaVoice = body.cartesiaVoice.trim();
+  if (typeof body.codeCli === "string" && body.codeCli.trim()) {
+    const id = body.codeCli.trim();
+    if (!isCodeCliId(id)) {
+      return Response.json({ error: `Unbekannte Code-CLI: ${id}` }, { status: 400 });
+    }
+    patch.codeCli = id;
+  }
   // Mark first-run setup complete for THIS version so the gate (config.ready)
   // doesn't re-show the welcome screen until the next update. Only stamp once a
   // valid, existing projects folder is present — otherwise `ready` would stay
@@ -63,5 +74,6 @@ export async function POST(req: NextRequest) {
   }
 
   writeSettings(patch);
+  if (patch.codeCli) warmCodeCli();
   return Response.json(getPublicConfig());
 }

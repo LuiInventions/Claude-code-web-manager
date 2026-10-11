@@ -63,7 +63,7 @@ export default function SessionsSection() {
             <EmptyState
               icon={Boxes}
               title="No live sessions yet"
-              description="Start a Claude Code session from the Launcher — it appears here instantly as a character in the office."
+              description="Start a session from the Launcher — it appears here instantly as a character in the office."
             />
           </div>
         ) : (

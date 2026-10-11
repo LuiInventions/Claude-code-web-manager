@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AudioLines, Check, FolderOpen, KeyRound, Save, Server, Sparkles } from "lucide-react";
+import { AudioLines, Check, FolderOpen, KeyRound, Save, Server, Sparkles, Terminal } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Badge, Button, Card, Input, Spinner } from "../ui";
 
@@ -14,10 +14,20 @@ interface ProviderOpt {
   models: string[];
 }
 
+interface CodeCliOpt {
+  id: string;
+  label: string;
+  bin: string;
+  hint: string;
+  installed: boolean;
+}
+
 interface PublicConfig {
   projectsDir: string;
   aiProvider: string;
   aiModel: string;
+  codeCli: string;
+  codeClis: CodeCliOpt[];
   hasAiKey: boolean;
   providers: ProviderOpt[];
   providerStatus: Record<string, boolean>;
@@ -157,6 +167,10 @@ export default function SettingsSection() {
     }
   };
 
+  const changeCodeCli = async (id: string) => {
+    await saveSettings({ codeCli: id });
+  };
+
   const changeProvider = async (id: string) => {
     const next = cfg?.providers.find((p) => p.id === id);
     // Reset the model to the new provider's default so it never carries over a
@@ -181,6 +195,37 @@ export default function SettingsSection() {
   return (
     <div className="min-h-0 flex-1 overflow-auto">
       <div className="mx-auto max-w-2xl space-y-4 p-6">
+        <Card className="space-y-3 p-5">
+          <Label
+            icon={Terminal}
+            title="Code CLI"
+            hint="Which CLI the launcher starts. Claude Code, Grok, or ChatGPT Codex."
+          />
+          <select
+            value={cfg.codeCli}
+            onChange={(e) => changeCodeCli(e.target.value)}
+            className="h-9 w-full cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
+          >
+            {cfg.codeClis.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+                {c.installed ? "" : " (not installed)"}
+              </option>
+            ))}
+          </select>
+          {cfg.codeClis.find((c) => c.id === cfg.codeCli)?.hint && (
+            <p className="text-xs text-faint">
+              {cfg.codeClis.find((c) => c.id === cfg.codeCli)?.hint}
+            </p>
+          )}
+          {cfg.codeClis.find((c) => c.id === cfg.codeCli)?.installed === false && (
+            <p className="text-xs text-danger">
+              `{cfg.codeClis.find((c) => c.id === cfg.codeCli)?.bin}` was not found on PATH.
+              Install it before starting a session.
+            </p>
+          )}
+        </Card>
+
         <Card className="space-y-3 p-5">
           <Label
             icon={FolderOpen}

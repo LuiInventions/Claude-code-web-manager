@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { CodeCliId } from "./code-clis";
 
 /**
  * Runtime-editable settings, persisted to .data/settings.json.
@@ -20,6 +21,11 @@ export interface Settings {
   openaiModel?: string;
   /** Cartesia voice id override (German voice for Jarvis). */
   cartesiaVoice?: string;
+  /**
+   * Coding CLI the launcher spawns: Claude Code, Grok, or ChatGPT Codex.
+   * Chosen on the first-run screen and changeable in Settings.
+   */
+  codeCli?: CodeCliId;
   /**
    * App version that last completed first-run setup. When it differs from the
    * running version the welcome/provider screen runs again after an update.

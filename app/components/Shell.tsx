@@ -33,10 +33,10 @@ interface SectionDef {
 }
 
 const MAIN_SECTIONS: SectionDef[] = [
-  { id: "launcher", label: "Launcher", desc: "Improve prompt & launch Claude Code", icon: Rocket },
-  { id: "sessions", label: "Sessions", desc: "Live Claude Code sessions, visualized", icon: Gamepad2 },
+  { id: "launcher", label: "Launcher", desc: "Improve a prompt & launch a code CLI", icon: Rocket },
+  { id: "sessions", label: "Sessions", desc: "Live code-CLI sessions, visualized", icon: Gamepad2 },
   { id: "dashboard", label: "Local Projects", desc: "All your local projects at a glance", icon: LayoutDashboard },
-  { id: "github", label: "GitHub", desc: "Connect repos & edit with Claude", icon: Code },
+  { id: "github", label: "GitHub", desc: "Connect repos & edit with your code CLI", icon: Code },
 ];
 
 const SETTINGS_SECTION: SectionDef = {

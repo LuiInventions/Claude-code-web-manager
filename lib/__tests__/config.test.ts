@@ -73,6 +73,15 @@ describe("config (multi-provider)", () => {
     const pub = getPublicConfig();
     expect(pub.appVersion).toBe("9.9.9");
     expect(pub.ready).toBe(true);
+    expect(pub.codeCli).toBe("claude");
+    expect(pub.codeClis.map((c) => c.id)).toEqual(["claude", "grok", "codex"]);
+
+    writeSettings({ codeCli: "grok" });
+    expect(getConfig().codeCli).toBe("grok");
+    expect(getPublicConfig().codeCli).toBe("grok");
+
+    writeSettings({ codeCli: "not-a-cli" as "grok" });
+    expect(getConfig().codeCli).toBe("claude");
 
     // A version bump invalidates setup again — the after-update gate that
     // re-shows the welcome screen (the GitHub token lives elsewhere, untouched).

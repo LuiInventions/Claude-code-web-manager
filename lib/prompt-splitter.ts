@@ -1,10 +1,11 @@
 import { getModel, getOpenAI } from "./openai";
+import { activeCodeCliLabel } from "./config";
 import { getOrBuildIndex } from "./indexer";
 import { buildContextFromDisk } from "./prompt-improver";
 
 /**
  * "KI Modus": rework a large developer task and split it into 1–6 independent,
- * well-structured sub-tasks for PARALLEL Claude Code sessions. The model decides
+ * well-structured sub-tasks for parallel sessions of the selected code CLI. The model decides
  * the optimal count so no single session is overwhelmed. parseSplitResponse is
  * pure (unit-tested); splitPrompt adds project context and calls the model.
  */
@@ -72,7 +73,7 @@ export async function splitPrompt(
 
   const instructions = [
     "Du zerlegst eine große Entwickler-Aufgabe in 1 bis 6 unabhängige, klar",
-    "strukturierte Teil-Aufgaben für PARALLELE Claude-Code-Sessions. Jede Teil-Aufgabe",
+    `strukturierte Teil-Aufgaben für PARALLELE ${activeCodeCliLabel()}-Sessions. Jede Teil-Aufgabe`,
     "muss eigenständig, konkret und direkt umsetzbar sein und darf eine Session nicht",
     "überfordern. Entscheide selbst die optimale Anzahl: kleine Aufgabe → 1; große oder",
     "mehrteilige → mehr (maximal 6). Vermeide Überschneidungen und gefährliche",

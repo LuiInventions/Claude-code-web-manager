@@ -1,45 +1,24 @@
 /**
- * Shared model + effort options for the Claude Code launcher.
- * Used by the launcher UI (dropdowns) and validated server-side before the
- * values become CLI flags (`--model`, `--effort`). Empty value = omit the flag
- * (Claude Code's own default).
+ * Claude Code model + effort options.
+ *
+ * The launcher's dropdowns follow the selected code CLI (`lib/code-clis.ts`).
+ * These exports stay for the Claude print-mode runner and as the fallback
+ * while the launcher is still loading settings. Empty value = omit the flag.
  */
 
-export interface Option {
-  /** Human label shown in the dropdown. */
-  label: string;
-  /** CLI value passed to claude; "" means "use Claude Code's default". */
-  value: string;
-}
+import { getCodeCli, normalizeCliOption, type CliOption } from "./code-clis";
 
-export const MODEL_OPTIONS: Option[] = [
-  { label: "Standard", value: "" },
-  { label: "Opus 4.8", value: "opus" },
-  { label: "Sonnet 4.6", value: "sonnet" },
-  { label: "Haiku 4.5", value: "haiku" },
-  { label: "Fable 5", value: "fable" },
-];
+export type Option = CliOption;
 
-export const EFFORT_OPTIONS: Option[] = [
-  { label: "Standard", value: "" },
-  { label: "low", value: "low" },
-  { label: "medium", value: "medium" },
-  { label: "high", value: "high" },
-  { label: "xhigh", value: "xhigh" },
-  { label: "max", value: "max" },
-];
+export const MODEL_OPTIONS: Option[] = getCodeCli("claude").models;
+export const EFFORT_OPTIONS: Option[] = getCodeCli("claude").efforts;
 
-const MODEL_VALUES = new Set(MODEL_OPTIONS.map((o) => o.value).filter(Boolean));
-const EFFORT_VALUES = new Set(EFFORT_OPTIONS.map((o) => o.value).filter(Boolean));
-
-/** Returns a safe `--model` value, or undefined if it should be omitted. */
+/** Returns a safe Claude `--model` value, or undefined if it should be omitted. */
 export function normalizeModel(v: unknown): string | undefined {
-  const s = typeof v === "string" ? v.trim() : "";
-  return MODEL_VALUES.has(s) ? s : undefined;
+  return normalizeCliOption("claude", "model", v);
 }
 
-/** Returns a safe `--effort` value, or undefined if it should be omitted. */
+/** Returns a safe Claude `--effort` value, or undefined if it should be omitted. */
 export function normalizeEffort(v: unknown): string | undefined {
-  const s = typeof v === "string" ? v.trim() : "";
-  return EFFORT_VALUES.has(s) ? s : undefined;
+  return normalizeCliOption("claude", "effort", v);
 }

@@ -20,15 +20,9 @@
 </p>
 
 > [!TIP]
-> **🆕 New — v1.6.0 is available.** Fixes the **brown/empty office** in the
-> **Sessions** tab: running Claude Code sessions now render the full
-> [pixel-agents](https://github.com/pixel-agents-hq/pixel-agents) office —
-> genuine pixel-art sprites (characters, furniture, floors, walls, pets), real
-> pathfinding, animations and pan/zoom — fed by your live launcher sessions, with
-> **subagents as their own characters**. (The v1.5.0 installer shipped without the
-> office assets, so the room appeared empty.)
-> [**Download v1.6.0**](https://github.com/LuiInventions/Claude-code-web-manager/releases/tag/v1.6.0)
-> · [**Changelog**](CHANGELOG.md)
+> **v1.9.0** launches **Claude Code**, **Grok**, or **ChatGPT Codex**. Pick the
+> CLI on the first-run screen or later in Settings. v1.8.0 was withdrawn.
+> [**Changelog**](CHANGELOG.md)
 
 <img width="1920" height="1080" alt="Desktop Screenshot 2026 06 28 - 19 27 23 07" src="https://github.com/user-attachments/assets/961f27e3-c90e-4594-bbbc-ce2fa462e56b" />
 
@@ -42,8 +36,8 @@ no overview of your projects, and no memory of what each run actually accomplish
 **Claude Code Control Center** wraps it in a real interface:
 
 - **Browse your projects** as cards — stack, Git status, size, README — and drill into any of them.
-- **Launch Claude Code** with a prompt (optionally AI-improved or split into parallel
-  sub-tasks) into a grid of live terminals that survive browser reloads.
+- **Launch Claude Code, Grok, or ChatGPT Codex** with a prompt (optionally AI-improved
+  or split into parallel sub-tasks) into a grid of live terminals that survive browser reloads.
 - **Review** what each session did — a language model reads the terminal output and
   tells you what's done and what's still open, optionally read aloud.
 - **Work on GitHub repos** as if they were local: clone, edit with Claude, then
@@ -125,9 +119,9 @@ The Launcher is the heart of the app. The flow:
    it entirely with **Start without improvement**.
 3. **(Optional) KI Modus** — instead of one session, let the model **split** your task
    into 1–6 structured sub-prompts that run in parallel (e.g. "tests", "docs", "refactor").
-4. **Choose model & effort** — Opus 4.8 / Sonnet 4.6 / Haiku 4.5 / Fable 5 and a reasoning
-   effort (`low` → `max`), or leave both on *Standard* to use Claude Code's own defaults.
-5. **Start** — Claude Code opens in a **live terminal grid of up to six sessions**, each
+4. **Choose model & effort** — the dropdowns follow the selected code CLI (Claude Code,
+   Grok, or ChatGPT Codex), or leave both on *Standard* to use that CLI's own defaults.
+5. **Start** — the selected CLI opens in a **live terminal grid of up to six sessions**, each
    box stably numbered #1–#6.
 
 Sessions are backed by **real server-side PTYs**, so they keep running — and keep their
@@ -185,7 +179,8 @@ repositories as if they were local projects:
 
 ### Settings
 
-Choose your **AI provider** — OpenAI, Groq, xAI (Grok), OpenRouter, DeepSeek, Mistral,
+Choose the **code CLI** the launcher starts — Claude Code, Grok, or ChatGPT Codex —
+on the first-run screen or here. Then choose your **AI provider** — OpenAI, Groq, xAI (Grok), OpenRouter, DeepSeek, Mistral,
 Together, Fireworks, Perplexity, Google Gemini, or Cerebras (11 in all) — enter its key,
 and **pick a model from a dropdown of that provider's current models**. The dropdown is
 shown for **every** provider, even before you add a key, and is enriched with the
@@ -232,7 +227,8 @@ contributors want **Option B** (run from source).
 2. **Run it.** It installs per-user (no admin rights required) and adds a Start-menu
    shortcut. The whole UI runs in its own window while the loopback server stays internal.
 3. **First launch → setup screen.** Pick your projects folder (native folder picker),
-   choose an AI provider and model from the dropdowns, and (optionally) enter its key.
+   choose the code CLI (Claude Code, Grok, or ChatGPT Codex), choose an AI provider
+   and model from the dropdowns, and (optionally) enter its key.
 
 > **Publisher & the "Unknown publisher" prompt.** The app is published by
 > **LT Digital Concepts (Luis Kleemann)** — you'll see that name in the file's
@@ -252,7 +248,8 @@ stored **encrypted** (Windows DPAPI via Electron `safeStorage`) in your user pro
 never in the app folder, and stay editable later under **Settings**. User data lives in
 the per-user `userData` directory, so the app keeps your settings across updates.
 
-> You still need the **Claude Code CLI** installed and logged in. An **AI provider key**
+> You still need the **code CLI you selected** installed and logged in
+> (`claude`, `grok`, or `codex`). An **AI provider key**
 > is **optional** (any one of 11 providers) and only powers the prompt improver, KI Modus,
 > and reviews — see [Requirements](#requirements).
 
@@ -328,11 +325,13 @@ npm run dev
 
 - **Windows 11**, **Node.js ≥ 20.9** (developed/tested on Node 24)
 - **git** on your `PATH`
-- **Claude Code CLI** (`claude`) installed and logged in
+- **One code CLI** installed and logged in: **Claude Code** (`claude`), **Grok**
+  (`grok`, [Grok Build](https://x.ai/cli)), or **ChatGPT Codex** (`codex`). Pick it
+  in the app. The others are optional.
 - *(Optional)* an API key for **any one of 11 AI providers** (OpenAI, Groq, xAI/Grok,
   OpenRouter, DeepSeek, Mistral, Together, Fireworks, Perplexity, Gemini, Cerebras) —
   powers the prompt improver, KI Modus, and reviews. Without one the app still launches
-  and supervises Claude; only these AI features are disabled.
+  and supervises the selected code CLI; only these AI features are disabled.
 - *(Optional)* a **Cartesia API key** for voice (speech-to-text input + reading reviews
   aloud), and a **Picovoice access key** for the local wake-word. Everything else works
   without them.

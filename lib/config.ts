@@ -4,6 +4,13 @@ import { readSettings } from "./settings";
 import { readSecrets, secretsStatus } from "./secrets";
 import { PROVIDERS, DEFAULT_PROVIDER_ID, getProvider } from "./providers";
 import { appVersion } from "./version";
+import {
+  CODE_CLIS,
+  codeCliInstalled,
+  getCodeCli,
+  normalizeCodeCli,
+  type CodeCliId,
+} from "./code-clis";
 
 /**
  * Central configuration. Precedence (highest first):
@@ -46,6 +53,8 @@ export interface AppConfig {
   /** Picovoice AccessKey for the local Porcupine wake-word engine (free tier). */
   picovoiceAccessKey: string | undefined;
   claudeBin: string;
+  /** Coding CLI the launcher spawns (claude, grok, or codex). */
+  codeCli: CodeCliId;
   dataDir: string;
 }
 
@@ -111,6 +120,7 @@ export function getConfig(): AppConfig {
     voiceLanguage: process.env.VOICE_LANGUAGE?.trim() || "de",
     picovoiceAccessKey: secrets.picovoiceAccessKey,
     claudeBin: process.env.CLAUDE_BIN?.trim() || "claude",
+    codeCli: normalizeCodeCli(settings.codeCli),
     dataDir: path.join(process.cwd(), ".data"),
   };
 }
@@ -146,6 +156,19 @@ export interface PublicConfig {
   cartesiaVoice: string;
   host: string;
   port: number;
+  /** Active coding CLI. */
+  codeCli: CodeCliId;
+  /** Every coding CLI, with its model/effort dropdowns and whether the binary is on PATH. */
+  codeClis: {
+    id: CodeCliId;
+    label: string;
+    shortLabel: string;
+    bin: string;
+    hint: string;
+    installed: boolean;
+    models: { label: string; value: string }[];
+    efforts: { label: string; value: string }[];
+  }[];
 }
 
 export function getPublicConfig(): PublicConfig {
@@ -177,5 +200,21 @@ export function getPublicConfig(): PublicConfig {
     cartesiaVoice: c.cartesiaVoice,
     host: c.host,
     port: c.port,
+    codeCli: c.codeCli,
+    codeClis: CODE_CLIS.map((cli) => ({
+      id: cli.id,
+      label: cli.label,
+      shortLabel: cli.shortLabel,
+      bin: cli.bin,
+      hint: cli.hint,
+      installed: codeCliInstalled(cli.id),
+      models: cli.models,
+      efforts: cli.efforts,
+    })),
   };
+}
+
+/** Label of the active coding CLI, for prompts that mention the agent by name. */
+export function activeCodeCliLabel(): string {
+  return getCodeCli(getConfig().codeCli).label;
 }

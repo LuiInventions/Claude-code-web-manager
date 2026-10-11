@@ -116,6 +116,54 @@ export default function ClaudeCmdPane({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let term: any = null;
 
+    // Open the PTY before xterm finishes loading. Output that arrives early is
+    // buffered and written once the terminal exists, so the CLI's own startup
+    // overlaps the widget import instead of waiting for it.
+    const pending: { t: string; d?: string; code?: number }[] = [];
+    let termReady = false;
+    const writeMsg = (msg: { t: string; d?: string; code?: number }) => {
+      if (!term) return;
+      if (msg.t === "out" && msg.d) term.write(msg.d);
+      else if (msg.t === "exit") {
+        term.write(`\r\n\x1b[90m[Session beendet · Code ${msg.code}]\x1b[0m\r\n`);
+        onExitRef.current?.(msg.code ?? 0);
+      }
+    };
+
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    const qs = new URLSearchParams({
+      id,
+      cwd,
+      prompt,
+      model,
+      effort,
+      cols: "80",
+      rows: "24",
+    });
+    if (projectName) qs.set("projectName", projectName);
+    if (batchId) qs.set("batchId", batchId);
+    if (createdAt) qs.set("startedAt", String(createdAt));
+    if (origin) qs.set("origin", origin);
+    if (repoFullName) qs.set("repoFullName", repoFullName);
+    ws = new WebSocket(`${proto}://${location.host}/ws/claude-pty?${qs}`);
+    wsRef.current = ws;
+    ws.onopen = () => {
+      if (termReady) deferredRefit();
+    };
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data as string) as {
+          t: string;
+          d?: string;
+          code?: number;
+        };
+        if (!termReady) pending.push(msg);
+        else writeMsg(msg);
+      } catch {
+        /* ignore non-JSON frames */
+      }
+    };
+
     (async () => {
       const { Terminal } = await import("@xterm/xterm");
       const { FitAddon } = await import("@xterm/addon-fit");
@@ -136,45 +184,13 @@ export default function ClaudeCmdPane({
       term.open(el);
       fitRef.current = fit;
       termRef.current = term;
+      termReady = true;
+      for (const msg of pending) writeMsg(msg);
+      pending.length = 0;
 
       // Defer the first fit until the container has settled (the sidebar may be
       // collapsing right now); the resize message below corrects the PTY size.
       deferredRefit();
-
-      const proto = location.protocol === "https:" ? "wss" : "ws";
-      const qs = new URLSearchParams({
-        id,
-        cwd,
-        prompt,
-        model,
-        effort,
-        cols: String(term.cols),
-        rows: String(term.rows),
-      });
-      if (projectName) qs.set("projectName", projectName);
-      if (batchId) qs.set("batchId", batchId);
-      if (createdAt) qs.set("startedAt", String(createdAt));
-      if (origin) qs.set("origin", origin);
-      if (repoFullName) qs.set("repoFullName", repoFullName);
-      ws = new WebSocket(`${proto}://${location.host}/ws/claude-pty?${qs}`);
-      wsRef.current = ws;
-
-      ws.onopen = () => deferredRefit();
-
-      ws.onmessage = (ev) => {
-        try {
-          const msg = JSON.parse(ev.data as string);
-          if (msg.t === "out") term.write(msg.d);
-          else if (msg.t === "exit") {
-            term.write(
-              `\r\n\x1b[90m[Session beendet · Code ${msg.code}]\x1b[0m\r\n`,
-            );
-            onExitRef.current?.(msg.code);
-          }
-        } catch {
-          /* ignore non-JSON frames */
-        }
-      };
 
       term.onData((d: string) => {
         if (ws && ws.readyState === WebSocket.OPEN)

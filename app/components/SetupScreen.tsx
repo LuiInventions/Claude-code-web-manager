@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Cpu, FolderOpen, KeyRound, Rocket, Sparkles } from "lucide-react";
+import { Cpu, FolderOpen, KeyRound, Rocket, Sparkles, Terminal } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button, Card, Input } from "./ui";
 
@@ -14,8 +14,18 @@ interface ProviderOpt {
   models: string[];
 }
 
+interface CodeCliOpt {
+  id: string;
+  label: string;
+  bin: string;
+  hint: string;
+  installed: boolean;
+}
+
 export default function SetupScreen({ onReady }: { onReady: () => void }) {
   const [projectsDir, setProjectsDir] = useState("");
+  const [codeCli, setCodeCli] = useState("claude");
+  const [codeClis, setCodeClis] = useState<CodeCliOpt[]>([]);
   const [providers, setProviders] = useState<ProviderOpt[]>([]);
   const [provider, setProvider] = useState("openai");
   const [model, setModel] = useState("");
@@ -28,11 +38,23 @@ export default function SetupScreen({ onReady }: { onReady: () => void }) {
   useEffect(() => {
     fetch("/api/settings")
       .then((r) => r.json())
-      .then((c: { providers?: ProviderOpt[]; aiProvider?: string; aiModel?: string }) => {
-        setProviders(c.providers ?? []);
-        if (c.aiProvider) setProvider(c.aiProvider);
-        if (c.aiModel) setModel(c.aiModel);
-      })
+      .then(
+        (c: {
+          providers?: ProviderOpt[];
+          aiProvider?: string;
+          aiModel?: string;
+          projectsDir?: string;
+          codeCli?: string;
+          codeClis?: CodeCliOpt[];
+        }) => {
+          setProviders(c.providers ?? []);
+          setCodeClis(c.codeClis ?? []);
+          if (c.projectsDir) setProjectsDir(c.projectsDir);
+          if (c.codeCli) setCodeCli(c.codeCli);
+          if (c.aiProvider) setProvider(c.aiProvider);
+          if (c.aiModel) setModel(c.aiModel);
+        },
+      )
       .catch(() => {});
   }, []);
 
@@ -70,6 +92,7 @@ export default function SetupScreen({ onReady }: { onReady: () => void }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           projectsDir: projectsDir.trim(),
+          codeCli,
           aiProvider: provider,
           aiModel: model.trim() || undefined,
           // Stamp this version so the welcome screen doesn't reappear until the
@@ -118,6 +141,38 @@ export default function SetupScreen({ onReady }: { onReady: () => void }) {
               <Button variant="secondary" icon={FolderOpen} onClick={pick}>
                 Wählen
               </Button>
+            )}
+          </div>
+        </Card>
+
+        <Card className="space-y-2 p-5">
+          <Field
+            icon={Terminal}
+            title="Code-CLI"
+            hint="Welche CLI die Sitzungen startet. Später unter Einstellungen änderbar."
+          />
+          <div className="grid gap-2">
+            {(codeClis.length ? codeClis : [{ id: "claude", label: "Claude Code", bin: "claude", hint: "", installed: true }]).map(
+              (c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setCodeCli(c.id)}
+                  className={`cursor-pointer rounded-md border px-3 py-2 text-left transition-colors ${
+                    codeCli === c.id
+                      ? "border-accent bg-surface"
+                      : "border-line bg-raised hover:border-line"
+                  }`}
+                >
+                  <div className="text-sm font-medium text-ink">{c.label}</div>
+                  {c.hint && <div className="text-xs text-faint">{c.hint}</div>}
+                  {!c.installed && (
+                    <div className="text-xs text-danger">
+                      `{c.bin}` ist nicht im PATH
+                    </div>
+                  )}
+                </button>
+              ),
             )}
           </div>
         </Card>

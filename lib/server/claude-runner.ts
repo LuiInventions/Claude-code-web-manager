@@ -1,6 +1,7 @@
-import { spawn, execFileSync, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { WebSocket } from "ws";
 import { getConfig } from "../config";
+import { resolveCliBin, spawnEnv } from "../code-clis";
 import { saveLauncherSession, type LauncherSession } from "../launcher-store";
 import { normalizeModel, normalizeEffort } from "../launcher-config";
 import { recordRateLimit, getUsage, isBlocked } from "../usage-store";
@@ -11,29 +12,11 @@ import { recordRateLimit, getUsage, isBlocked } from "../usage-store";
  * each run is identified by an id. Session metadata is persisted for history.
  */
 
-let resolvedBin: string | null = null;
+/** Absolute `claude` path, or the configured CLAUDE_BIN, or the bare name. */
 export function resolveClaudeBin(): string {
-  if (resolvedBin) return resolvedBin;
   const configured = getConfig().claudeBin;
-  if (configured && configured !== "claude") {
-    resolvedBin = configured;
-    return configured;
-  }
-  try {
-    const out = execFileSync("where", ["claude"], {
-      encoding: "utf8",
-      windowsHide: true,
-    });
-    const first = out.split(/\r?\n/).map((s) => s.trim()).find(Boolean);
-    if (first) {
-      resolvedBin = first;
-      return first;
-    }
-  } catch {
-    /* fall back to PATH lookup by name */
-  }
-  resolvedBin = "claude";
-  return "claude";
+  if (configured && configured !== "claude") return configured;
+  return resolveCliBin("claude") ?? "claude";
 }
 
 interface Live {
@@ -85,7 +68,7 @@ function startRun(
   try {
     child = spawn(resolveClaudeBin(), args, {
       cwd: opts.projectPath,
-      env: process.env,
+      env: spawnEnv("claude"),
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"], // ignore stdin -> no 3s wait
     });

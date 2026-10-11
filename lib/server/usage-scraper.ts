@@ -1,5 +1,6 @@
 import * as pty from "node-pty";
 import { resolveClaudeBin } from "./claude-runner";
+import { spawnEnv } from "../code-clis";
 import { parseUsagePanel, type ParsedUsage } from "../usage-parse";
 
 /**
@@ -45,7 +46,7 @@ export function scrapeUsage(): Promise<ScrapeResult> {
         // Scrape from the server's own (trusted) working dir — an untrusted
         // folder would pop a "trust this folder?" dialog that swallows /usage.
         cwd: process.cwd(),
-        env: process.env as Record<string, string>,
+        env: spawnEnv("claude") as Record<string, string>,
       });
     } catch (e) {
       finish({ ok: false, error: `spawn failed: ${(e as Error).message}` });

@@ -1,4 +1,6 @@
+import { getConfig } from "../config";
 import { recordScrapedUsage, markUsageStale } from "../usage-store";
+import { listPtySessions } from "./claude-pty";
 import { scrapeUsage } from "./usage-scraper";
 
 /**
@@ -15,6 +17,11 @@ let running = false;
 
 async function tick(): Promise<void> {
   if (running) return; // never overlap scrapes
+  // The bar is Claude's /usage panel. Scraping it boots a second Claude TUI,
+  // which competes with the session the user just opened. Skip it unless
+  // Claude is the selected CLI and no launcher session is running.
+  if (getConfig().codeCli !== "claude") return;
+  if (listPtySessions().some((s) => s.status === "running")) return;
   running = true;
   try {
     const r = await scrapeUsage();
@@ -31,7 +38,10 @@ async function tick(): Promise<void> {
 export function startUsagePoller(): void {
   if (started) return;
   started = true;
-  void tick(); // prime immediately so the bar isn't empty on first load
+  // Wait before the first scrape so opening the app and starting a session
+  // does not share the CPU with a throwaway Claude.
+  const first = setTimeout(() => void tick(), 25_000);
+  first.unref?.();
   const timer = setInterval(() => void tick(), INTERVAL_MS);
   timer.unref?.(); // don't keep the process alive on its own
 }

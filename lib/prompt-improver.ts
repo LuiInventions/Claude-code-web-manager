@@ -1,12 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { getAiClient, getModel } from "./openai";
+import { activeCodeCliLabel } from "./config";
 import { getOrBuildIndex } from "./indexer";
 import { detectStackFromFiles, frameworksFromPackageJson } from "./stack-detect";
 
 /**
  * Turns a rough developer prompt into a clear, project-specific, actionable
- * instruction for Claude Code. Returns only the improved prompt.
+ * instruction for the selected code CLI. Returns only the improved prompt.
  *
  * The improver always gives the model real context about the SELECTED project:
  * if the project is in the prebuilt index we use that; otherwise we build the
@@ -124,7 +125,7 @@ export async function improvePrompt(
 
   const instructions = [
     "Du bist Experte darin, vage Entwickler-Prompts in präzise, umsetzbare",
-    "Anweisungen für Claude Code (einen autonomen Coding-Agenten) zu verwandeln.",
+    `Anweisungen für ${activeCodeCliLabel()} (einen autonomen Coding-Agenten) zu verwandeln.`,
     "Verbessere den Roh-Prompt: konkretisiere ihn, mache ihn projektbezogen,",
     "eindeutig und direkt umsetzbar. Beziehe dich auf den realen Projekt-Stack",
     "und die Struktur. Erfinde keine Fakten.",

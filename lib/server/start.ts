@@ -3,6 +3,7 @@ import next from "next";
 import { getConfig } from "../config";
 import { handleWsUpgrade } from "./ws-hub";
 import { startUsagePoller } from "./usage-poller";
+import { warmCodeCli } from "./cli-warm";
 
 export interface RunningServer {
   host: string;
@@ -59,6 +60,7 @@ export async function startServer(
         );
       }
       startUsagePoller();
+      warmCodeCli();
       resolve();
     });
   });

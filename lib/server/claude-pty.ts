@@ -2,7 +2,15 @@ import { WebSocket } from "ws";
 import * as pty from "node-pty";
 import os from "node:os";
 import { resolveClaudeBin } from "./claude-runner";
-import { normalizeModel, normalizeEffort } from "../launcher-config";
+import { getConfig } from "../config";
+import {
+  buildInteractiveArgs,
+  getCodeCli,
+  normalizeCliOption,
+  resolveCliBin,
+  spawnEnv,
+  type CodeCliId,
+} from "../code-clis";
 import { getUsage, isBlocked } from "../usage-store";
 import {
   tailText,
@@ -40,6 +48,8 @@ export interface PtyMeta {
   prompt: string;
   model: string;
   effort: string;
+  /** Coding CLI that owns this PTY. */
+  cli: CodeCliId;
   origin?: "github";
   repoFullName?: string;
   projectName: string;
@@ -210,8 +220,11 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
 
   const cwd = url.searchParams.get("cwd")?.trim() || os.homedir();
   const prompt = url.searchParams.get("prompt") ?? "";
-  const model = normalizeModel(url.searchParams.get("model"));
-  const effort = normalizeEffort(url.searchParams.get("effort"));
+  // The Settings choice is the source of truth, so a launcher tab that has not
+  // refreshed yet still starts the CLI the user just picked.
+  const cli = getConfig().codeCli;
+  const model = normalizeCliOption(cli, "model", url.searchParams.get("model"));
+  const effort = normalizeCliOption(cli, "effort", url.searchParams.get("effort"));
   const cols = Number(url.searchParams.get("cols")) || 80;
   const rows = Number(url.searchParams.get("rows")) || 24;
   const origin =
@@ -230,37 +243,42 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
   };
 
-  const block = isBlocked(getUsage(), Date.now());
-  if (block.blocked) {
-    const until = block.until ? new Date(block.until).toLocaleString("de-DE") : "?";
-    send({
-      t: "out",
-      d: `\r\n\x1b[31m[Claude-Limit erreicht — nicht verfügbar bis ${until}]\x1b[0m\r\n`,
-    });
-    send({ t: "exit", code: 1 });
-    ws.close();
-    return;
+  // The usage bar is Claude-only. Grok and Codex must still start when Claude
+  // is rate-limited.
+  if (cli === "claude") {
+    const block = isBlocked(getUsage(), Date.now());
+    if (block.blocked) {
+      const until = block.until ? new Date(block.until).toLocaleString("de-DE") : "?";
+      send({
+        t: "out",
+        d: `\r\n\x1b[31m[Claude-Limit erreicht — nicht verfügbar bis ${until}]\x1b[0m\r\n`,
+      });
+      send({ t: "exit", code: 1 });
+      ws.close();
+      return;
+    }
   }
 
-  // Options first, positional prompt last (claude [options] [prompt]).
-  const args: string[] = ["--dangerously-skip-permissions"];
-  if (model) args.push("--model", model);
-  if (effort) args.push("--effort", effort);
-  if (prompt) args.push(prompt);
+  const args = buildInteractiveArgs(cli, { prompt, model, effort });
+  const spec = getCodeCli(cli);
+  const bin =
+    cli === "claude"
+      ? resolveClaudeBin()
+      : resolveCliBin(spec.bin) ?? spec.bin;
 
   let term: pty.IPty;
   try {
-    term = pty.spawn(resolveClaudeBin(), args, {
+    term = pty.spawn(bin, args, {
       name: "xterm-256color",
       cols,
       rows,
       cwd,
-      env: process.env as Record<string, string>,
+      env: spawnEnv(cli) as Record<string, string>,
     });
   } catch (err) {
     send({
       t: "out",
-      d: `\r\n\x1b[31m[failed to start claude: ${(err as Error).message}]\x1b[0m\r\n`,
+      d: `\r\n\x1b[31m[failed to start ${spec.bin}: ${(err as Error).message}]\x1b[0m\r\n`,
     });
     ws.close();
     return;
@@ -277,6 +295,7 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
       prompt,
       model: model ?? "",
       effort: effort ?? "",
+      cli,
       origin,
       repoFullName,
       projectName,
