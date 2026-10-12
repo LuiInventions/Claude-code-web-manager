@@ -51,8 +51,9 @@ export type { RemotePublicStatus };
  * only works once. The first `ssh` is a real terminal. The password and the
  * 2FA code are written only after that process prints the matching prompt.
  * After the shell answers, a small broker starts inside that same ssh session.
- * Later CLIs attach to the broker. A second ssh login is not used: servers
- * that require keyboard-interactive on every connection reject it with exit 255.
+ * The local forward is `ssh -L` on that first login. `~C` is not used: Windows
+ * OpenSSH does not open it from this terminal. A second ssh login is not used:
+ * servers that require keyboard-interactive on every connection reject it with exit 255.
  * The 2FA code is never stored.
  */
 
@@ -63,8 +64,10 @@ interface Live {
   knownHosts: string;
   sshBin: string;
   login: pty.IPty | null;
-  /** Local end of the forward to the broker. 0 until the forward is up. */
+  /** Local end of the -L forward. Set before ssh starts. */
   brokerLocal: number;
+  /** Remote broker port, chosen before ssh starts so -L can name it. */
+  brokerRemote: number;
 }
 
 interface PendingSave {
@@ -356,26 +359,38 @@ export function remoteBrokerPort(): number | null {
   return port > 0 ? port : null;
 }
 
-function pingBroker(port: number): Promise<void> {
+function pingOnce(port: number): Promise<void> {
   return new Promise((resolve, reject) => {
     const sock = net.connect(port, "127.0.0.1");
     const timer = setTimeout(() => {
       sock.destroy();
-      reject(new Error("Der Sitzungs-Tunnel antwortet nicht."));
-    }, 4000);
+      reject(new Error("timeout"));
+    }, 1500);
     sock.on("connect", () => sock.write("PING\n"));
     sock.on("data", (chunk) => {
-      if (chunk.toString("utf8").includes("PONG")) {
-        clearTimeout(timer);
-        sock.end();
-        resolve();
-      }
+      if (!chunk.toString("utf8").includes("PONG")) return;
+      clearTimeout(timer);
+      sock.end();
+      resolve();
     });
     sock.on("error", (err) => {
       clearTimeout(timer);
+      sock.destroy();
       reject(err);
     });
   });
+}
+
+async function pingBroker(port: number): Promise<void> {
+  for (let i = 0; i < 8; i++) {
+    try {
+      await pingOnce(port);
+      return;
+    } catch {
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+  throw new Error("Die Weiterleitung für Sitzungen konnte nicht geöffnet werden.");
 }
 
 async function stopRemoteClis(): Promise<void> {
@@ -531,6 +546,21 @@ export async function beginRemote(input: {
   const dir = fs.mkdtempSync(remoteKeyPrefix());
   const knownHosts = path.join(dir, "known_hosts");
   fs.writeFileSync(knownHosts, "");
+  let localPort = 0;
+  try {
+    localPort = await freePort();
+  } catch {
+    fs.rmSync(dir, { recursive: true, force: true });
+    if (my !== hub().gen) return remoteStatus();
+    state.connecting = false;
+    state.error = "Ein lokaler Port für die Sitzungen konnte nicht geöffnet werden.";
+    return remoteStatus();
+  }
+  if (!localPort || my !== hub().gen) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    return remoteStatus();
+  }
+  const remotePort = 40000 + Math.floor(Math.random() * 20000);
   const live: Live = {
     dir,
     user: target.user,
@@ -538,13 +568,20 @@ export async function beginRemote(input: {
     knownHosts,
     sshBin: tools.ssh,
     login: null,
-    brokerLocal: 0,
+    brokerLocal: localPort,
+    brokerRemote: remotePort,
   };
 
   try {
     live.login = pty.spawn(
       tools.ssh,
-      ["-tt", "-o", "EscapeChar=~", ...sshBaseArgs({ knownHosts }), `${target.user}@${target.host}`],
+      [
+        "-tt",
+        "-L",
+        `127.0.0.1:${localPort}:127.0.0.1:${remotePort}`,
+        ...sshBaseArgs({ knownHosts }),
+        `${target.user}@${target.host}`,
+      ],
       {
         name: "xterm-256color",
         cols: 80,
@@ -579,12 +616,10 @@ function runAuth(my: number, live: Live): void {
   let otpHolding = false;
   let otpQuietUntil = 0;
   let hostkeySent = false;
-  let forwardStarted = false;
   let pinging = false;
-  /** -L line held until OpenSSH prints `ssh>`. `~C` reads that as a new line. */
-  let forwardSpec = "";
-  let escapeBuf = "";
-  let stage: "auth" | "probe" | "broker" | "forward" = "auth";
+  let brokerSent = false;
+  let brokerTimer: ReturnType<typeof setTimeout> | null = null;
+  let stage: "auth" | "probe" | "quiet" | "broker" = "auth";
   let probes = 0;
   let settled = false;
 
@@ -647,6 +682,7 @@ function runAuth(my: number, live: Live): void {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (brokerTimer) clearTimeout(brokerTimer);
       clearInterval(probeTimer);
       const current = hub();
       current.needsOtp = false;
@@ -671,44 +707,36 @@ function runAuth(my: number, live: Live): void {
       if (transcript.length > 80000) transcript = transcript.slice(-60000);
       pushView(chunk);
       if (stage === "probe" && transcript.includes("CCC_READY_ok")) {
-        stage = "broker";
-        arm(20000);
-        live.login?.write(`${brokerLaunchCommand()}\n`);
+        stage = "quiet";
+        arm(20000, "Die Weiterleitung für Sitzungen konnte nicht geöffnet werden.");
+        // Turn echo off before the long broker line, then start it.
+        live.login?.write("stty -echo\n");
+        brokerTimer = setTimeout(startBroker, 500);
         return;
       }
+      if (stage === "quiet") return;
       if (stage === "broker" && transcript.includes("CCC_BROKER_MISSING")) {
         finish(new Error("Auf dem Server fehlt python3. Damit können Sitzungen ohne erneute Anmeldung nicht gestartet werden."));
         return;
       }
-      if (stage === "broker") {
-        const found = transcript.match(/CCC_BROKER (\d+)/);
-        if (found) openForward(Number(found[1]));
+      if (stage === "broker" && transcript.includes("CCC_BROKER_BIND")) {
+        finish(new Error("Der Port für Sitzungen ist auf dem Server belegt."));
         return;
       }
-      if (stage === "forward") {
-        if (/Port forwarding failed|Bad forwarding specification/i.test(chunk)) {
-          finish(new Error("Die Weiterleitung für Sitzungen konnte nicht geöffnet werden."));
-          return;
-        }
-        if (forwardSpec) {
-          escapeBuf += chunk;
-          if (escapeBuf.includes("ssh>")) {
-            const spec = forwardSpec;
-            forwardSpec = "";
-            arm(15000, "Die Weiterleitung für Sitzungen konnte nicht geöffnet werden.");
-            live.login?.write(spec);
-          }
-          return;
-        }
-        if (pinging || live.brokerLocal <= 0) return;
-        if (chunk.includes("Forwarding port.") || transcript.includes("Forwarding port.")) {
-          pinging = true;
-          void pingBroker(live.brokerLocal)
-            .then(() => {
-              if (my === hub().gen) finish();
-            })
-            .catch((err: Error) => finish(err));
-        }
+      if (stage === "broker" && /administratively prohibited|Could not request local forwarding/i.test(chunk)) {
+        finish(new Error("Die Weiterleitung für Sitzungen konnte nicht geöffnet werden."));
+        return;
+      }
+      if (stage === "broker") {
+        const found = transcript.match(/CCC_BROKER (\d+)/);
+        if (!found || pinging || Number(found[1]) !== live.brokerRemote) return;
+        pinging = true;
+        void pingBroker(live.brokerLocal)
+          .then(() => {
+            if (my === hub().gen) finish();
+          })
+          .catch((err: Error) => finish(err));
+        return;
       }
       const kind = classifySshTail(transcript);
       if (kind === "hostkey" && !hostkeySent) {
@@ -733,21 +761,12 @@ function runAuth(my: number, live: Live): void {
       }
     });
 
-    function openForward(remotePort: number) {
-      if (forwardStarted || !live.login || my !== hub().gen) return;
-      forwardStarted = true;
-      void freePort()
-        .then((local) => {
-          if (my !== hub().gen || !live.login) return;
-          live.brokerLocal = local;
-          stage = "forward";
-          forwardSpec = `-L127.0.0.1:${local}:127.0.0.1:${remotePort}\n`;
-          escapeBuf = "";
-          arm(15000, "Die Weiterleitung für Sitzungen konnte nicht geöffnet werden.");
-          // Newline so ~ is at the start of a line. The -L spec follows `ssh>`.
-          live.login.write("\n~C");
-        })
-        .catch((err: Error) => finish(err));
+    function startBroker() {
+      if (brokerSent || stage === "auth" || !live.login || my !== hub().gen) return;
+      brokerSent = true;
+      if (brokerTimer) clearTimeout(brokerTimer);
+      stage = "broker";
+      live.login.write(`${brokerLaunchCommand(live.brokerRemote)}\n`);
     }
 
     function askForPassword() {

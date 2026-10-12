@@ -5,10 +5,12 @@ import { brokerLaunchCommand, brokerSource } from "../server/remote-broker";
 
 describe("remote session broker", () => {
   it("does not echo the result markers in the launch command", () => {
-    const cmd = brokerLaunchCommand();
+    const cmd = brokerLaunchCommand(33841);
     expect(cmd.includes("CCC_BROKER_MISSING")).toBe(false);
+    expect(cmd.includes("CCC_BROKER_BIND")).toBe(false);
     expect(/CCC_BROKER \d/.test(cmd)).toBe(false);
     expect(cmd.includes("CCC_BROKER_%s")).toBe(true);
+    expect(cmd.includes("CCC_PORT=33841")).toBe(true);
   });
 
   // The broker uses Unix pty/fcntl. It runs on the server, not on the Windows app.

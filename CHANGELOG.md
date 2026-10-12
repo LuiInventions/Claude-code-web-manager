@@ -5,6 +5,13 @@ follow `package.json`. From 1.9.6 each `v*` tag publishes
 `jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
 `cc-control-center-Setup-<version>.exe`.
 
+## 1.9.8 — 2026-10-12
+
+### Remote sessions, and copying text
+
+- The session forward is opened with the first `ssh -L`. Windows OpenSSH was not accepting `~C` after the broker had started, which stopped login with "Die Weiterleitung für Sitzungen konnte nicht geöffnet werden."
+- Text in the app can be copied. Ctrl+C copies a selection, including in the terminals. In a code CLI, Ctrl+C without a selection still interrupts the program. Right-click copies a terminal selection and offers copy and paste for the rest of the window.
+
 ## 1.9.7 — 2026-10-12
 
 ### Jarvis Control Center

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell } from "electron";
 import { spawnSync } from "node:child_process";
 import net from "node:net";
 import fs from "node:fs";
@@ -178,6 +178,15 @@ async function boot(): Promise<void> {
     },
   });
 
+  mainWindow.setMenuBarVisibility(false);
+  mainWindow.webContents.on("context-menu", (_event, params) => {
+    Menu.buildFromTemplate([
+      { role: "copy", enabled: params.editFlags.canCopy || params.selectionText.length > 0 },
+      { role: "paste", enabled: params.editFlags.canPaste },
+      { role: "selectAll" },
+    ]).popup({ window: mainWindow ?? undefined });
+  });
+
   mainWindow.once("ready-to-show", () => mainWindow?.show());
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -229,7 +238,26 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
 
-  Menu.setApplicationMenu(null);
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      {
+        label: "Edit",
+        submenu: [
+          { role: "undo" },
+          { role: "redo" },
+          { type: "separator" },
+          { role: "cut" },
+          { role: "copy" },
+          { role: "paste" },
+          { role: "selectAll" },
+        ],
+      },
+    ]),
+  );
+
+  ipcMain.handle("ccc:copy-text", (_event, text: unknown) => {
+    if (typeof text === "string" && text) clipboard.writeText(text);
+  });
 
   ipcMain.handle("ccc:pick-folder", async () => {
     const res = await dialog.showOpenDialog(mainWindow ?? undefined!, {

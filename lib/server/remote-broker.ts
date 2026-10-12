@@ -11,7 +11,11 @@ const BROKER_PY = `
 import base64, fcntl, os, pty, select, signal, socket, struct, termios, threading
 s = socket.socket()
 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-s.bind(("127.0.0.1", 0))
+try:
+    s.bind(("127.0.0.1", int(os.environ.get("CCC_PORT", "0"))))
+except (OSError, ValueError):
+    print("CCC_BROKER_BIND", flush=True)
+    raise SystemExit(1)
 s.listen(16)
 print("CCC_BROKER %d" % s.getsockname()[1], flush=True)
 lock = threading.Lock()
@@ -134,13 +138,14 @@ while True:
     threading.Thread(target=handle, args=(client,), daemon=True).start()
 `.trim();
 
-/** Shell command that starts the broker. The echoed line must not contain the result markers. */
-export function brokerLaunchCommand(): string {
+/** Shell command that starts the broker on a chosen loopback port. The echoed line must not contain the result markers. */
+export function brokerLaunchCommand(port: number): string {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("bad broker port");
   const b64 = Buffer.from(BROKER_PY, "utf8").toString("base64");
-  const py = `python3 -c 'import base64; exec(base64.b64decode("${b64}"))'`;
-  const py2 = `python -c 'import base64; exec(base64.b64decode("${b64}"))'`;
+  const run = (bin: string) =>
+    `env CCC_PORT=${port} ${bin} -c 'import base64; exec(base64.b64decode("${b64}"))'`;
   // `||` works in bash, zsh, and fish. `if/fi` does not.
-  return `${py} || ${py2} || printf 'CCC_BROKER_%s\\n' MISSING`;
+  return `${run("python3")} || ${run("python")} || printf 'CCC_BROKER_%s\\n' MISSING`;
 }
 
 export function brokerSource(): string {

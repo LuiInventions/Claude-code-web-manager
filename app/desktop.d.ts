@@ -5,6 +5,7 @@ declare global {
     cccDesktop?: {
       isDesktop: true;
       pickFolder: () => Promise<string | null>;
+      copyText: (text: string) => Promise<void>;
     };
   }
 }

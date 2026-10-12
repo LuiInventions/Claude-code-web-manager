@@ -2,6 +2,7 @@
 
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef } from "react";
+import { enableTermCopy } from "../term-copy";
 
 const THEME = {
   background: "#000000",
@@ -62,6 +63,7 @@ export default function SshLoginPane() {
       const fit = new FitAddon();
       created.loadAddon(fit);
       created.open(el);
+      enableTermCopy(created, el);
       term = created;
       termRef.current = created;
       fitRef.current = fit;

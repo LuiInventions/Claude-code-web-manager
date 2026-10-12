@@ -96,6 +96,7 @@
     color: var(--ink);
     font-feature-settings: "cv11", "ss01";
     text-rendering: optimizeLegibility;
+    user-select: text;
   }
 
   ::selection {

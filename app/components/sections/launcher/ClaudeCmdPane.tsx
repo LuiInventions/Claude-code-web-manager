@@ -2,6 +2,7 @@
 
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef } from "react";
+import { enableTermCopy } from "../../term-copy";
 
 /**
  * Live, interactive Claude Code session rendered in the web (launcher "CMD"
@@ -190,6 +191,7 @@ export default function ClaudeCmdPane({
       const fit = new FitAddon();
       term.loadAddon(fit);
       term.open(el);
+      enableTermCopy(term, el);
       fitRef.current = fit;
       termRef.current = term;
       termReady = true;
