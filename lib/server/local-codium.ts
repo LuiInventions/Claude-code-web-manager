@@ -1,10 +1,15 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
 import { getConfig } from "../config";
+import {
+  decodeCliOutput,
+  editorSpawnSpec,
+  installedEditorCandidates,
+  preferEditorHit,
+} from "../editor-bin";
 import { readSettings } from "../settings";
 import { codiumServeArgs, parseCodiumOutput } from "../remote-ssh";
-import { resolveCliBin } from "./cli-bin";
 import { startCodiumProxy } from "./codium-proxy";
 
 /**
@@ -106,12 +111,54 @@ function freePort(): Promise<number> {
   });
 }
 
+function whereAll(name: string): string[] {
+  const cmd = process.platform === "win32" ? "where" : "which";
+  try {
+    const out = execFileSync(cmd, [name], {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 4000,
+    });
+    return out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/** PATH hits first (Codium, then Code), then the usual Windows install folders. */
+function editorCandidates(): string[] {
+  const fromPath = [preferEditorHit(whereAll("codium")), preferEditorHit(whereAll("code"))].filter(
+    (p): p is string => Boolean(p),
+  );
+  const installed = installedEditorCandidates(process.env, process.platform).filter((p) => {
+    try {
+      return fs.existsSync(p);
+    } catch {
+      return false;
+    }
+  });
+  const seen = new Set<string>();
+  const all: string[] = [];
+  for (const p of [...fromPath, ...installed]) {
+    const key = process.platform === "win32" ? p.toLowerCase() : p;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    all.push(p);
+  }
+  return all;
+}
+
 function commandOutput(bin: string, args: string[], cwd: string): Promise<string> {
   return new Promise((resolve) => {
-    let out = "";
+    const chunks: Buffer[] = [];
+    const spec = editorSpawnSpec(bin, args);
     let proc: ChildProcess;
     try {
-      proc = spawn(bin, args, { cwd, windowsHide: true });
+      proc = spawn(spec.file, spec.args, {
+        cwd,
+        windowsHide: true,
+        windowsVerbatimArguments: spec.windowsVerbatimArguments,
+      });
     } catch {
       resolve("");
       return;
@@ -122,18 +169,17 @@ function commandOutput(bin: string, args: string[], cwd: string): Promise<string
       } catch {
         /* already gone */
       }
-      resolve(out);
-    }, 20000);
+      resolve(decodeCliOutput(Buffer.concat(chunks)));
+    }, 12000);
     const done = () => {
       clearTimeout(timer);
-      resolve(out);
+      resolve(decodeCliOutput(Buffer.concat(chunks)));
     };
-    proc.stdout?.on("data", (chunk: Buffer) => {
-      out += chunk.toString("utf8");
-    });
-    proc.stderr?.on("data", (chunk: Buffer) => {
-      out += chunk.toString("utf8");
-    });
+    const take = (chunk: Buffer) => {
+      chunks.push(chunk);
+    };
+    proc.stdout?.on("data", take);
+    proc.stderr?.on("data", take);
     proc.on("error", done);
     proc.on("close", done);
   });
@@ -148,14 +194,27 @@ async function launch(dir: string): Promise<void> {
   state.url = "";
   state.error = "";
 
-  const bin = resolveCliBin("codium") || resolveCliBin("code");
-  if (!bin) {
+  const candidates = editorCandidates();
+  if (candidates.length === 0) {
     state.starting = false;
     state.error = "VS Codium fehlt auf diesem PC (`codium` oder `code`).";
     return;
   }
-  const helpText = await commandOutput(bin, ["serve-web", "--help"], dir);
-  if (my !== hub().gen) return;
+  let bin = "";
+  let helpText = "";
+  for (const candidate of candidates) {
+    const text = await commandOutput(candidate, ["serve-web", "--help"], dir);
+    if (my !== hub().gen) return;
+    if (!bin) {
+      bin = candidate;
+      helpText = text;
+    }
+    if (text.includes("serve-web")) {
+      bin = candidate;
+      helpText = text;
+      break;
+    }
+  }
   if (!helpText.includes("serve-web")) {
     if (my !== hub().gen) return;
     state.starting = false;
@@ -172,17 +231,25 @@ async function launch(dir: string): Promise<void> {
     state.error = "VS Codium konnte keinen lokalen Port wählen.";
     return;
   }
-  const proc = spawn(bin, args, {
+  const spec = editorSpawnSpec(bin, args);
+  const proc = spawn(spec.file, spec.args, {
     cwd: dir,
     windowsHide: true,
     env: process.env,
     stdio: ["ignore", "pipe", "pipe"],
+    windowsVerbatimArguments: spec.windowsVerbatimArguments,
   });
   state.proc = proc;
-  let output = "";
+  const chunks: Buffer[] = [];
   const take = (chunk: Buffer) => {
-    output += chunk.toString("utf8");
-    if (output.length > 20000) output = output.slice(-10000);
+    chunks.push(chunk);
+    let buf = Buffer.concat(chunks);
+    if (buf.length > 20000) {
+      buf = buf.subarray(buf.length - 10000);
+      chunks.length = 0;
+      chunks.push(buf);
+    }
+    const output = decodeCliOutput(buf);
     const parsed = parseCodiumOutput(output);
     if (parsed.missing) {
       state.error = "VS Codium fehlt auf diesem PC (`codium` oder `code`).";

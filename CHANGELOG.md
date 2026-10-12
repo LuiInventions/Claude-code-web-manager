@@ -5,6 +5,13 @@ follow `package.json`. From 1.9.6 each `v*` tag publishes
 `jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
 `cc-control-center-Setup-<version>.exe`.
 
+## 1.9.10 — 2026-10-12
+
+### VS Codium, and one Remote rail
+
+- VS Codium on Windows is started through its `.cmd` shim. `serve-web --help` was coming back empty, so the editor stopped with "VS Codium kann serve-web nicht."
+- The Remote tab is one black rail, the same width as the file list. **Starten** opens sessions in the **Ordner** field. The description under that button is gone. The file search sits under **Starten** and ends above **Trennen**. The connected IP is green, on the right of **Trennen**. Clicking a folder writes that path into **Ordner**.
+
 ## 1.9.9 — 2026-10-12
 
 ### Remote terminal, server files, and two launchers

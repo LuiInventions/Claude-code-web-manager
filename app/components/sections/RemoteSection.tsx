@@ -165,34 +165,24 @@ export default function RemoteSection() {
   return (
     <div className="flex h-full min-h-0">
       {status.connected && (
-        <aside className="flex w-64 shrink-0 flex-col border-r border-line bg-elevated">
-          <div className="border-b border-line px-5 py-5">
-            <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-faint">Remote</div>
-            <div className="mt-2 truncate text-[15px] font-medium text-ink">
-              {status.user}@{status.host}
-            </div>
-            <div className="mt-1 text-xs text-muted">Verbunden</div>
-          </div>
-          <div className="flex flex-1 flex-col gap-5 px-5 py-5">
-            <div>
-              <div className="mb-2 text-xs text-muted">Sessions</div>
-              <div className="grid grid-cols-6 gap-1.5">
-                {BOX_COUNTS.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setBoxCount(n)}
-                    className={cn(
-                      "h-9 rounded-md text-sm font-medium transition-colors",
-                      boxCount === n
-                        ? "bg-ink text-canvas"
-                        : "bg-raised text-muted hover:text-ink",
-                    )}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
+        <aside className="flex w-72 shrink-0 flex-col border-r border-line bg-canvas">
+          <div className="flex flex-col gap-3 px-3 py-3">
+            <div className="grid grid-cols-6 gap-1.5">
+              {BOX_COUNTS.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setBoxCount(n)}
+                  className={cn(
+                    "h-9 rounded-md text-sm font-medium transition-colors",
+                    boxCount === n
+                      ? "bg-ink text-canvas"
+                      : "bg-raised text-muted hover:text-ink",
+                  )}
+                >
+                  {n}
+                </button>
+              ))}
             </div>
             <label className="flex flex-col gap-1.5">
               <span className="text-xs text-muted">Ordner</span>
@@ -206,14 +196,11 @@ export default function RemoteSection() {
               />
             </label>
             <Button variant="primary" icon={Play} className="w-full" onClick={startEmpty}>
-              Start without prompt
+              Starten
             </Button>
-            <p className="text-xs leading-5 text-faint">
-              Öffnet {boxCount} leere {cli === "claude" ? "Claude" : cli === "grok" ? "Grok" : "Codex"}-Sitzung
-              {boxCount > 1 ? "en" : ""} in diesem Ordner. Einen Pfad aus der Dateiliste kopierst du mit Rechtsklick.
-            </p>
           </div>
-          <div className="border-t border-line p-5">
+          <RemoteFiles path={cwd.trim() || "~"} onPathChange={setCwd} />
+          <div className="flex items-center justify-between gap-3 border-t border-line px-3 py-3">
             <button
               type="button"
               onClick={disconnect}
@@ -221,11 +208,12 @@ export default function RemoteSection() {
             >
               Trennen
             </button>
+            <span className="truncate font-mono text-xs text-running" title={status.host}>
+              {status.host}
+            </span>
           </div>
         </aside>
       )}
-
-      {status.connected && <RemoteFiles onUsePath={setCwd} />}
 
       <div className="flex min-w-0 flex-1 flex-col">
         {status.connected ? (
@@ -238,7 +226,7 @@ export default function RemoteSection() {
           >
             {boxes.length === 0 && (
               <div className="grid place-items-center text-sm text-faint">
-                Start without prompt öffnet die Code-CLI auf dem Server.
+                Starten öffnet die Code-CLI auf dem Server.
               </div>
             )}
             {boxes.map((box) => (
