@@ -1,4 +1,5 @@
 import net from "node:net";
+import { viewFromBuffer, type FileView } from "../file-view";
 
 /**
  * One Python process on the server, started from the already authenticated ssh
@@ -93,6 +94,35 @@ def do_find(raw, query):
                 return {"path": root, "query": query, "entries": hits}
     return {"path": root, "query": query, "entries": hits}
 
+def do_read(raw):
+    path = safe_path(raw)
+    if not os.path.isfile(path):
+        return {"error": "Keine Datei.", "path": path}
+    size = os.path.getsize(path)
+    name = os.path.basename(path)
+    if size > 8 * 1024 * 1024:
+        return {"path": path, "name": name, "size": size, "tooLarge": True}
+    with open(path, "rb") as handle:
+        data = handle.read()
+    return {"path": path, "name": name, "size": size, "b64": base64.b64encode(data).decode("ascii")}
+
+def do_write(raw, payload):
+    path = safe_path(raw)
+    if os.path.isdir(path):
+        return {"error": "Ordner kann nicht gespeichert werden.", "path": path}
+    try:
+        data = base64.b64decode(payload)
+    except Exception:
+        return {"error": "Inhalt ungueltig.", "path": path}
+    if len(data) > 2 * 1024 * 1024:
+        return {"error": "Datei zu gross.", "path": path}
+    parent = os.path.dirname(path)
+    if parent and not os.path.isdir(parent):
+        return {"error": "Ordner fehlt.", "path": path}
+    with open(path, "wb") as handle:
+        handle.write(data)
+    return {"ok": True, "path": path}
+
 def send_json(conn, payload):
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     conn.sendall(b"OK " + body + b"\\n")
@@ -142,7 +172,7 @@ def read_line(conn):
         if not chunk:
             return None, b""
         buf += chunk
-        if len(buf) > 1000000:
+        if len(buf) > 12000000:
             return None, b""
     line, rest = buf.split(b"\\n", 1)
     return line.decode("utf-8", "replace"), rest
@@ -199,6 +229,14 @@ def handle(conn):
             query = base64.b64decode(parts[2]).decode("utf-8", "replace")
             send_json(conn, do_find(raw, query))
             return
+        if op == "READ" and len(parts) == 2:
+            raw = base64.b64decode(parts[1]).decode("utf-8", "replace")
+            send_json(conn, do_read(raw))
+            return
+        if op == "WRITE" and len(parts) == 3:
+            raw = base64.b64decode(parts[1]).decode("utf-8", "replace")
+            send_json(conn, do_write(raw, parts[2]))
+            return
         conn.sendall(b"ERR bad\\n")
         conn.close()
     except Exception as exc:
@@ -242,13 +280,13 @@ export interface RemoteFsListing {
 }
 
 /** One short request to the broker. The reply is a single line. */
-export function brokerRequest(port: number, line: string): Promise<string> {
+export function brokerRequest(port: number, line: string, timeoutMs = 8000): Promise<string> {
   return new Promise((resolve, reject) => {
     const sock = net.connect(port, "127.0.0.1");
     const timer = setTimeout(() => {
       sock.destroy();
       reject(new Error("Zeitüberschreitung."));
-    }, 8000);
+    }, timeoutMs);
     let buf = Buffer.alloc(0);
     sock.on("connect", () => sock.write(line.endsWith("\n") ? line : `${line}\n`));
     sock.on("data", (chunk: Buffer) => {
@@ -282,6 +320,43 @@ export async function remoteFind(port: number, path: string, query: string): Pro
   const root = Buffer.from(path, "utf8").toString("base64");
   const q = Buffer.from(query, "utf8").toString("base64");
   return parseBrokerJson(await brokerRequest(port, `FIND ${root} ${q}`));
+}
+
+interface RemoteFilePayload {
+  path?: string;
+  name?: string;
+  size?: number;
+  b64?: string;
+  tooLarge?: boolean;
+  error?: string;
+  ok?: boolean;
+}
+
+function parseBrokerPayload<T>(line: string): T {
+  if (!line.startsWith("OK ")) throw new Error(line.replace(/^ERR\s?/, "") || "Abfrage fehlgeschlagen.");
+  return JSON.parse(line.slice(3)) as T;
+}
+
+export async function remoteReadFile(port: number, filePath: string): Promise<FileView> {
+  const b64 = Buffer.from(filePath, "utf8").toString("base64");
+  const data = parseBrokerPayload<RemoteFilePayload>(await brokerRequest(port, `READ ${b64}`, 30000));
+  if (data.error) throw new Error(data.error);
+  const name = data.name || filePath.split(/[\\/]/).filter(Boolean).pop() || filePath;
+  const resolved = data.path || filePath;
+  if (data.tooLarge) {
+    return { path: resolved, name, size: data.size ?? 0, kind: "binary", tooLarge: true };
+  }
+  const buf = Buffer.from(data.b64 || "", "base64");
+  return viewFromBuffer(resolved, name, buf);
+}
+
+export async function remoteWriteFile(port: number, filePath: string, content: string): Promise<void> {
+  const pathB64 = Buffer.from(filePath, "utf8").toString("base64");
+  const bodyB64 = Buffer.from(content, "utf8").toString("base64");
+  const data = parseBrokerPayload<RemoteFilePayload>(
+    await brokerRequest(port, `WRITE ${pathB64} ${bodyB64}`, 30000),
+  );
+  if (data.error || !data.ok) throw new Error(data.error || "Speichern fehlgeschlagen.");
 }
 
 export interface RemoteCliHandle {

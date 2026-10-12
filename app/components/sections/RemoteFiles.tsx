@@ -33,9 +33,11 @@ function parentDir(path: string): string {
 export default function RemoteFiles({
   path,
   onPathChange,
+  onOpenFile,
 }: {
   path: string;
   onPathChange: (path: string) => void;
+  onOpenFile?: (path: string, name: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [listing, setListing] = useState<Listing>({ entries: [] });
@@ -113,6 +115,7 @@ export default function RemoteFiles({
             type="button"
             onClick={() => {
               if (entry.dir) openDir(entry.path);
+              else onOpenFile?.(entry.path, entry.name);
             }}
             onContextMenu={(e) => {
               e.preventDefault();

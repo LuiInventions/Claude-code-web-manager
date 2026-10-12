@@ -44,10 +44,12 @@ function parentDir(path: string): string {
 export default function LocalFiles({
   path,
   onPathChange,
+  onOpenFile,
   floor,
 }: {
   path: string;
   onPathChange: (path: string) => void;
+  onOpenFile?: (path: string, name: string) => void;
   /** Hide Zurück once the parent would leave this folder. */
   floor?: string;
 }) {
@@ -133,6 +135,7 @@ export default function LocalFiles({
             type="button"
             onClick={() => {
               if (entry.type === "dir") openDir(entry.path);
+              else onOpenFile?.(entry.path, entry.name);
             }}
             onContextMenu={(e) => {
               e.preventDefault();

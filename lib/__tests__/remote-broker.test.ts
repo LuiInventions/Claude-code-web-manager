@@ -1,7 +1,17 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { spawn } from "node:child_process";
 import net from "node:net";
 import { describe, expect, it } from "vitest";
-import { brokerLaunchCommand, brokerSource, openRemoteCli, remoteList } from "../server/remote-broker";
+import {
+  brokerLaunchCommand,
+  brokerSource,
+  openRemoteCli,
+  remoteList,
+  remoteReadFile,
+  remoteWriteFile,
+} from "../server/remote-broker";
 
 describe("remote session broker", () => {
   it("does not echo the result markers in the launch command", () => {
@@ -104,6 +114,35 @@ describe("remote session broker", () => {
     } finally {
       handle.kill();
       proc.kill();
+    }
+  });
+
+  it.skipIf(process.platform === "win32")("reads and writes a remote file", async () => {
+    const proc = spawn("python3", ["-c", brokerSource()], { stdio: ["ignore", "pipe", "pipe"] });
+    const port = await new Promise<number>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("no broker port")), 4000);
+      let buf = "";
+      proc.stdout?.on("data", (chunk) => {
+        buf += chunk.toString("utf8");
+        const match = buf.match(/CCC_BROKER (\d+)/);
+        if (match) {
+          clearTimeout(timer);
+          resolve(Number(match[1]));
+        }
+      });
+    });
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccc-remote-file-"));
+    const file = path.join(dir, "note.ts");
+    fs.writeFileSync(file, "export const n = 1\n");
+    try {
+      const view = await remoteReadFile(port, file);
+      expect(view.kind).toBe("text");
+      expect(view.content).toBe("export const n = 1\n");
+      await remoteWriteFile(port, file, "export const n = 2\n");
+      expect(fs.readFileSync(file, "utf8")).toBe("export const n = 2\n");
+    } finally {
+      proc.kill();
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 });

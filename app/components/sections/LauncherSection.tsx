@@ -9,7 +9,6 @@ import {
   Loader2,
   Play,
   Plus,
-  Rocket,
   Sparkles,
   Split,
   Wand2,
@@ -21,7 +20,8 @@ import type { SectionCommand } from "../app-commands";
 import { MODEL_OPTIONS, EFFORT_OPTIONS } from "@/lib/launcher-config";
 import ClaudeCmdPane from "./launcher/ClaudeCmdPane";
 import LocalFiles from "./LocalFiles";
-import { SessionBar, SidebarToggle } from "./SessionBar";
+import FileWorkbench, { type OpenFile } from "./FileWorkbench";
+import { ViewBar } from "./SessionBar";
 import UsageBar from "./launcher/UsageBar";
 import { useSpeak } from "../use-speak";
 import Markdown from "../Markdown";
@@ -134,6 +134,9 @@ export default function LauncherSection({
   const [usage, setUsage] = useState<UsageState | null>(null);
   const [nowTs, setNowTs] = useState(() => Date.now());
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
+  const [activeFile, setActiveFile] = useState<string | null>(null);
+  const [pane, setPane] = useState<"files" | "sessions">("files");
   const [reviews, setReviews] = useState<ReviewPage[]>([]);
   const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
@@ -413,6 +416,7 @@ export default function LauncherSection({
     setSessions((prev) => [...batch, ...prev]);
     setSelectedId(batch[0].id);
     refreshUsage();
+    setPane("sessions");
     setSidebarOpen(false); // maximize the terminals when a batch starts
     pendingOriginRef.current = null;
     setRaw("");
@@ -568,7 +572,7 @@ export default function LauncherSection({
   // each ClaudeCmdPane so it re-fits its xterm once the layout settles, fixing
   // the "panes shifted until the sidebar is toggled" bug at start.
   const layoutNonce =
-    (sidebarOpen ? 1 : 0) + 2 * batchIds.indexOf(activeBatchId ?? "");
+    (sidebarOpen ? 1 : 0) + 2 * batchIds.indexOf(activeBatchId ?? "") + (pane === "sessions" ? 8 : 0);
 
   // Stable per-instance numbers (oldest = #1) so each window can be referenced
   // unambiguously in the list and grid, even as newer ones are added.
@@ -664,16 +668,33 @@ export default function LauncherSection({
     }
   };
 
+  const openListedFile = (path: string, name: string) => {
+    setOpenFiles((prev) => (prev.some((file) => file.path === path) ? prev : [...prev, { path, name }]));
+    setActiveFile(path);
+    setPane("files");
+  };
+
+  const closeListedFile = (path: string) => {
+    const rest = openFiles.filter((file) => file.path !== path);
+    setOpenFiles(rest);
+    setActiveFile((cur) => (cur === path ? (rest[rest.length - 1]?.path ?? null) : cur));
+  };
+
   const openFolder = async () => {
     let target = "";
     try {
-      const r = await fetch("/api/settings");
-      const c = (await r.json()) as { projectsDir?: string; githubDir?: string };
-      target = (source === "github" ? c.githubDir : c.projectsDir) || "";
+      const r = await fetch("/api/folders");
+      const c = (await r.json()) as { projectsDir?: string; clonesDir?: string | null };
+      target = (source === "github" ? c.clonesDir : c.projectsDir) || "";
     } catch {
       return;
     }
     if (!target) return;
+    const desktop = window.cccDesktop;
+    if (desktop?.openPath) {
+      const err = await desktop.openPath(target);
+      if (!err) return;
+    }
     await fetch("/api/open", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -766,6 +787,7 @@ export default function LauncherSection({
               <LocalFiles
                 path={projectPath}
                 floor={selectedGithub?.path}
+                onOpenFile={openListedFile}
                 onPathChange={(next) => {
                   if (source === "github" && selectedGithub && !sameOrInside(next, selectedGithub.path)) return;
                   setProjectPath(next);
@@ -783,21 +805,33 @@ export default function LauncherSection({
         {/* Right: live terminals as a symmetric grid. Every pane stays mounted
             (non-active batches are display:none) so a PTY is never killed. */}
         <div className="relative flex min-w-0 flex-1 flex-col">
-          {sessions.length > 0 ? (
-            <>
-              <SessionBar
-                sidebarOpen={sidebarOpen}
-                onToggleSidebar={() => setSidebarOpen((v) => !v)}
-                count={visibleCount}
-                onCloseAll={closeAllSessions}
-              />
-              <div
-                className="grid min-h-0 flex-1 gap-2 p-2"
-                style={{
-                  gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-                  gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
-                }}
-              >
+          <ViewBar
+            sidebarOpen={sidebarOpen}
+            onToggleSidebar={() => setSidebarOpen((v) => !v)}
+            pane={pane}
+            onPane={setPane}
+            count={sessions.length > 0 ? visibleCount : 0}
+            onCloseAll={closeAllSessions}
+          />
+          <div className={sessions.length > 0 && pane !== "files" ? "hidden" : "flex min-h-0 flex-1 flex-col"}>
+            <FileWorkbench
+              source="local"
+              files={openFiles}
+              activePath={activeFile}
+              onActivate={setActiveFile}
+              onClose={closeListedFile}
+            />
+          </div>
+          {sessions.length > 0 && (
+            <div
+              className={
+                pane === "sessions" ? "grid min-h-0 flex-1 gap-2 p-2" : "hidden"
+              }
+              style={{
+                gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+              }}
+            >
                 {sessions.map((s) => (
                   <div
                     key={s.id}
@@ -844,25 +878,7 @@ export default function LauncherSection({
                     />
                   </div>
                 ))}
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="absolute left-3 top-3 z-10">
-                <SidebarToggle open={sidebarOpen} onToggle={() => setSidebarOpen((v) => !v)} />
-              </div>
-              <div className="flex h-full flex-col items-center justify-center gap-3 p-10 text-center">
-                <div className="flex size-12 items-center justify-center rounded-xl border border-line bg-surface text-accent">
-                  <Rocket className="size-6" />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-sm font-medium text-ink">{cliName}</h3>
-                  <p className="mx-auto max-w-sm text-sm text-muted">
-                    Ordner wählen und Starten. Die Sitzung läuft hier als Terminal.
-                  </p>
-                </div>
-              </div>
-            </>
+            </div>
           )}
           {activeReview && (
             <div className="absolute inset-0 z-30 flex min-h-0 flex-col bg-canvas">

@@ -1,9 +1,11 @@
+import path from "node:path";
 import { describe, it, expect } from "vitest";
 import {
   setRepoStatus,
   setRepoPrivate,
   addOrReplaceRepo,
   findRepoPath,
+  cloneContainer,
   type StoredRepo,
 } from "../github-store";
 
@@ -73,5 +75,30 @@ describe("findRepoPath", () => {
   });
   it("returns null for an unknown fullName", () => {
     expect(findRepoPath(repos, "octo/zzz")).toBeNull();
+  });
+});
+
+describe("cloneContainer", () => {
+  it("returns the folder that holds the cloned repos", () => {
+    const root = path.resolve("/work/clones");
+    expect(
+      cloneContainer([path.join(root, "alpha"), path.join(root, "beta")]),
+    ).toBe(root);
+  });
+
+  it("prefers the folder that contains the most clones", () => {
+    const clones = path.resolve("/work/clones");
+    const other = path.resolve("/work/other");
+    expect(
+      cloneContainer([
+        path.join(clones, "a"),
+        path.join(clones, "b"),
+        path.join(other, "c"),
+      ]),
+    ).toBe(clones);
+  });
+
+  it("returns null when nothing is cloned", () => {
+    expect(cloneContainer(["", "  "])).toBeNull();
   });
 });

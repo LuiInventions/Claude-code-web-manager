@@ -11,7 +11,7 @@ import {
   Settings as SettingsIcon,
   type LucideIcon,
 } from "lucide-react";
-import { cn, EmptyState } from "./ui";
+import { Button, cn, EmptyState } from "./ui";
 import { play as playSfx, resume as resumeSfx } from "@/lib/sfx";
 import {
   AppCommandsContext,
@@ -56,16 +56,11 @@ export default function Shell() {
   const [opened, setOpened] = useState<Set<SectionId>>(
     () => new Set<SectionId>(["launcher", "codium"]),
   );
-  const [navCollapsed, setNavCollapsed] = useState(false);
-  const [host, setHost] = useState("127.0.0.1:3000");
   const [command, setCommand] = useState<{
     target: SectionId;
     payload: unknown;
     nonce: number;
   } | null>(null);
-
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time window read on mount (SSR-safe)
-  useEffect(() => setHost(window.location.host), []);
 
   // Global, app-wide subtle click feedback on any interactive element.
   useEffect(() => {
@@ -118,13 +113,15 @@ export default function Shell() {
               <NavItem key={s.id} def={s} active={active === s.id} onClick={() => go(s.id)} />
             ))}
           </nav>
-          <div className="space-y-2 border-t border-line px-3 py-3">
-            <NavItem
-              def={SETTINGS_SECTION}
-              active={active === "settings"}
+          <div className="border-t border-line px-3 py-3">
+            <Button
+              variant={active === "settings" ? "primary" : "secondary"}
+              icon={SettingsIcon}
+              className="w-full"
               onClick={() => go("settings")}
-            />
-            <ServerStatus host={host} />
+            >
+              Settings
+            </Button>
           </div>
         </aside>
 
@@ -207,12 +204,4 @@ function NavItem({
   );
 }
 
-function ServerStatus({ host }: { host: string }) {
-  return (
-    <div className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2">
-      <span className="size-1.5 rounded-full bg-running dot-running" />
-      <span className="font-mono text-[11px] text-muted">{host}</span>
-      <span className="ml-auto text-[10px] uppercase tracking-wide text-faint">loopback</span>
-    </div>
-  );
-}
+

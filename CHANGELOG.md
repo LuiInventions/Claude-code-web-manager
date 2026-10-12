@@ -5,6 +5,15 @@ follow `package.json`. From 1.9.6 each `v*` tag publishes
 `jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
 `cc-control-center-Setup-<version>.exe`.
 
+## 1.9.15 — 2026-10-13
+
+### File view, the clone folder, and Settings
+
+- **Ordner öffnen** on GitHub opens the folder that holds the cloned repos.
+- A left-click on a file in Local, GitHub, or Remote opens it where the sessions sit. CodeMirror shows the code with line numbers and color. Text files can be edited and saved. Images, PDF, audio, and video open in the viewer.
+- When a session is running, **Dateien** and **Sessions** switch that area.
+- The loopback line under Settings is gone. The Settings button is the same size as **Ordner öffnen**.
+
 ## 1.9.14 — 2026-10-12
 
 ### GitHub repos, the Local folder, and Dusk

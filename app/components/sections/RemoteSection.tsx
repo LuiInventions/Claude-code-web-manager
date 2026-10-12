@@ -4,8 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Play, X } from "lucide-react";
 import { Button, Input } from "../ui";
 import ClaudeCmdPane from "./launcher/ClaudeCmdPane";
+import FileWorkbench, { type OpenFile } from "./FileWorkbench";
 import RemoteFiles from "./RemoteFiles";
-import { SessionBar, SidebarToggle } from "./SessionBar";
+import { ViewBar } from "./SessionBar";
 import SshLoginPane from "./SshLoginPane";
 import type { RemotePublicStatus } from "@/lib/remote-ssh";
 
@@ -47,6 +48,10 @@ export default function RemoteSection() {
   const [busy, setBusy] = useState(false);
   const [boxCount, setBoxCount] = useState(1);
   const [boxes, setBoxes] = useState<Box[]>([]);
+  const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
+  const [activeFile, setActiveFile] = useState<string | null>(null);
+  const [pane, setPane] = useState<"files" | "sessions">("files");
+  const [fitNonce, setFitNonce] = useState(0);
   const [cli, setCli] = useState("claude");
   const [cwd, setCwd] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -149,6 +154,10 @@ export default function RemoteSection() {
     setOtp("");
   };
 
+  useEffect(() => {
+    if (pane === "sessions") setFitNonce((n) => n + 1);
+  }, [pane, boxes.length]);
+
   const current = status.servers.find((s) => s.id === status.serverId);
   const showLogin = !status.connecting && !status.connected && !status.needsPassword && !status.needsOtp;
   const { cols, rows } = gridShape(boxes.length || 1);
@@ -162,6 +171,19 @@ export default function RemoteSection() {
       createdAt: started + i,
     }));
     setBoxes((prev) => [...batch, ...prev]);
+    setPane("sessions");
+  };
+
+  const openListedFile = (path: string, name: string) => {
+    setOpenFiles((prev) => (prev.some((file) => file.path === path) ? prev : [...prev, { path, name }]));
+    setActiveFile(path);
+    setPane("files");
+  };
+
+  const closeListedFile = (path: string) => {
+    const rest = openFiles.filter((file) => file.path !== path);
+    setOpenFiles(rest);
+    setActiveFile((cur) => (cur === path ? (rest[rest.length - 1]?.path ?? null) : cur));
   };
 
   const closeAll = () => {
@@ -214,7 +236,7 @@ export default function RemoteSection() {
               Starten
             </Button>
           </div>
-          <RemoteFiles path={cwd.trim() || "~"} onPathChange={setCwd} />
+          <RemoteFiles path={cwd.trim() || "~"} onPathChange={setCwd} onOpenFile={openListedFile} />
           <div className="flex items-center justify-between gap-3 border-t border-line px-3 py-3">
             <button
               type="button"
@@ -231,32 +253,35 @@ export default function RemoteSection() {
       )}
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        {status.connected && boxes.length > 0 && (
-          <SessionBar
+        {status.connected && (
+          <ViewBar
             sidebarOpen={sidebarOpen}
             onToggleSidebar={() => setSidebarOpen((v) => !v)}
+            pane={pane}
+            onPane={setPane}
             count={boxes.length}
             onCloseAll={closeAll}
           />
         )}
-        {status.connected && boxes.length === 0 && (
-          <div className="absolute left-3 top-3 z-10">
-            <SidebarToggle open={sidebarOpen} onToggle={() => setSidebarOpen((v) => !v)} />
+        {status.connected && (
+          <div className={boxes.length > 0 && pane !== "files" ? "hidden" : "flex min-h-0 flex-1 flex-col"}>
+            <FileWorkbench
+              source="remote"
+              files={openFiles}
+              activePath={activeFile}
+              onActivate={setActiveFile}
+              onClose={closeListedFile}
+            />
           </div>
         )}
-        {status.connected ? (
+        {status.connected && boxes.length > 0 && (
           <div
-            className="grid min-h-0 flex-1 gap-2 p-2"
+            className={pane === "sessions" ? "grid min-h-0 flex-1 gap-2 p-2" : "hidden"}
             style={{
               gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
               gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
             }}
           >
-            {boxes.length === 0 && (
-              <div className="grid place-items-center text-sm text-faint">
-                Starten öffnet die Code-CLI auf dem Server.
-              </div>
-            )}
             {boxes.map((box) => (
               <div
                 key={box.id}
@@ -286,11 +311,13 @@ export default function RemoteSection() {
                   cli={cli}
                   projectName={`${status.user}@${status.host}`}
                   createdAt={box.createdAt}
+                  layoutNonce={fitNonce}
                 />
               </div>
             ))}
           </div>
-        ) : (
+        )}
+        {!status.connected && (
           <div className="grid flex-1 place-items-center px-6">
             <form
               className="w-full max-w-md space-y-3"

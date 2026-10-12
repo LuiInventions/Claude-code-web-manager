@@ -1,3 +1,4 @@
+import path from "node:path";
 import { readJson, writeJson } from "./store";
 import type { GithubRepo, GithubUser } from "./github";
 
@@ -107,4 +108,27 @@ export function clearGithubState(): void {
 /** Resolve a known repo's local clone path by its `owner/name`, or null. */
 export function findRepoPath(repos: StoredRepo[], fullName: string): string | null {
   return repos.find((r) => r.fullName === fullName)?.localPath ?? null;
+}
+
+/**
+ * Directory that holds the cloned repos. Paths are the clone folders themselves.
+ * The parent that contains the most of them wins, so a stale path does not
+ * send Explorer to the projects folder.
+ */
+export function cloneContainer(localPaths: string[]): string | null {
+  const counts = new Map<string, { path: string; n: number }>();
+  for (const raw of localPaths) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    const parent = path.dirname(path.resolve(trimmed));
+    const key = process.platform === "win32" ? parent.toLowerCase() : parent;
+    const cur = counts.get(key);
+    if (cur) cur.n += 1;
+    else counts.set(key, { path: parent, n: 1 });
+  }
+  let best: { path: string; n: number } | null = null;
+  for (const item of counts.values()) {
+    if (!best || item.n > best.n) best = item;
+  }
+  return best?.path ?? null;
 }

@@ -266,6 +266,11 @@ if (!app.requestSingleInstanceLock()) {
     return res.canceled || res.filePaths.length === 0 ? null : res.filePaths[0];
   });
 
+  ipcMain.handle("ccc:open-path", async (_event, target: unknown) => {
+    if (typeof target !== "string" || !target.trim()) return "missing path";
+    return shell.openPath(target);
+  });
+
   app.whenReady().then(boot).catch((err) => fatal(err));
 
   app.on("activate", () => {
