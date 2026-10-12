@@ -4,11 +4,11 @@ import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef } from "react";
 
 const THEME = {
-  background: "#0a0f1a",
-  foreground: "#e6edf3",
-  cursor: "#3b82f6",
-  cursorAccent: "#0a0f1a",
-  selectionBackground: "rgba(59,130,246,0.30)",
+  background: "#000000",
+  foreground: "#f5f5f5",
+  cursor: "#f5f5f5",
+  cursorAccent: "#000000",
+  selectionBackground: "rgba(255,255,255,0.16)",
 };
 
 /**

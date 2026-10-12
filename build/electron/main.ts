@@ -29,6 +29,21 @@ if (typeof nativeRealpath === "function") {
 // the repo root. Two levels up from this file is that root in both layouts.
 const ROOT = path.resolve(__dirname, "..", "..");
 
+// Keep settings and the GitHub token when the product name changes. Copy the
+// old folder once, then pin userData before the app is ready.
+{
+  const next = path.join(app.getPath("appData"), "jarvis-control-center");
+  const legacy = path.join(app.getPath("appData"), "claude-code-control-center");
+  try {
+    if (!fs.existsSync(next) && fs.existsSync(legacy)) {
+      fs.cpSync(legacy, next, { recursive: true });
+    }
+  } catch {
+    /* the new folder is still usable empty */
+  }
+  app.setPath("userData", next);
+}
+
 // --------------------------------------------------------------- logging
 let LOG_FILE = path.join(os.tmpdir(), "ccc-startup.log");
 
@@ -52,7 +67,7 @@ function fatal(err: unknown): void {
   log("FATAL", err);
   try {
     dialog.showErrorBox(
-      "Claude Code Control Center — Startfehler",
+      "Jarvis Control Center — Startfehler",
       `${err instanceof Error ? err.stack || err.message : String(err)}\n\nLog: ${LOG_FILE}`,
     );
   } catch {
@@ -152,8 +167,8 @@ async function boot(): Promise<void> {
     width: 1280,
     height: 860,
     show: false,
-    backgroundColor: "#0b0b0f",
-    title: "Claude Code Control Center",
+    backgroundColor: "#000000",
+    title: "Jarvis Control Center",
     icon: resolveIcon(),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),

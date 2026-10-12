@@ -1,6 +1,5 @@
 import { WebSocket } from "ws";
 import * as pty from "node-pty";
-import fs from "node:fs";
 import os from "node:os";
 import { resolveClaudeBin } from "./claude-runner";
 import { getConfig } from "../config";
@@ -14,7 +13,8 @@ import {
 } from "../code-clis";
 import { resolveCliBin } from "./cli-bin";
 import { buildRemoteCliCommand } from "../remote-ssh";
-import { remoteExecArgs } from "./remote-session";
+import { openRemoteCli } from "./remote-broker";
+import { remoteBrokerPort } from "./remote-session";
 import { getUsage, isBlocked } from "../usage-store";
 import {
   tailText,
@@ -63,9 +63,17 @@ export interface PtyMeta {
   startedAt: number;
 }
 
+interface TermHandle {
+  onData(listener: (data: string) => void): void;
+  onExit(listener: (event: { exitCode: number; signal?: number }) => void): void;
+  write(data: string): void;
+  resize(columns: number, rows: number): void;
+  kill(signal?: string): void;
+}
+
 interface PtySession {
   id: string;
-  term: pty.IPty;
+  term: TermHandle;
   buffer: string;
   status: "running" | "done" | "error";
   exitCode?: number;
@@ -271,15 +279,10 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
 
   const args = buildInteractiveArgs(cli, { prompt, model, effort });
   const spec = getCodeCli(cli);
-  let bin: string;
-  let spawnArgs: string[];
-  let spawnCwd = cwd;
-  let env = spawnEnv(cli) as Record<string, string>;
+  let term: TermHandle;
   if (where === "remote") {
-    const remote = remoteExecArgs(
-      buildRemoteCliCommand({ cwd, bin: spec.bin, args, cli }),
-    );
-    if (!remote) {
+    const port = remoteBrokerPort();
+    if (!port) {
       send({
         t: "out",
         d: "\r\n\x1b[31m[Nicht mit dem Server verbunden.]\x1b[0m\r\n",
@@ -288,32 +291,32 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
       ws.close();
       return;
     }
-    bin = remote.bin;
-    spawnArgs = remote.args;
-    const home = process.env.USERPROFILE || process.env.HOME || "";
-    spawnCwd = home && fs.existsSync(home) ? home : process.cwd();
-    env = process.env as Record<string, string>;
-  } else {
-    bin = cli === "claude" ? resolveClaudeBin() : resolveCliBin(spec.bin) ?? spec.bin;
-    spawnArgs = args;
-  }
-
-  let term: pty.IPty;
-  try {
-    term = pty.spawn(bin, spawnArgs, {
-      name: "xterm-256color",
+    term = openRemoteCli({
+      port,
+      command: buildRemoteCliCommand({ cwd, bin: spec.bin, args, cli }),
       cols,
       rows,
-      cwd: spawnCwd,
-      env,
     });
-  } catch (err) {
-    send({
-      t: "out",
-      d: `\r\n\x1b[31m[failed to start ${where === "remote" ? "ssh" : spec.bin}: ${(err as Error).message}]\x1b[0m\r\n`,
-    });
-    ws.close();
-    return;
+  } else {
+    const bin = cli === "claude" ? resolveClaudeBin() : resolveCliBin(spec.bin) ?? spec.bin;
+    const spawnArgs = args;
+    const env = spawnEnv(cli) as Record<string, string>;
+    try {
+      term = pty.spawn(bin, spawnArgs, {
+        name: "xterm-256color",
+        cols,
+        rows,
+        cwd,
+        env,
+      });
+    } catch (err) {
+      send({
+        t: "out",
+        d: `\r\n\x1b[31m[failed to start ${spec.bin}: ${(err as Error).message}]\x1b[0m\r\n`,
+      });
+      ws.close();
+      return;
+    }
   }
 
   const session: PtySession = {

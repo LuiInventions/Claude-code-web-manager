@@ -1,16 +1,16 @@
-# Claude Code Control Center
+# Jarvis Control Center
 
 > A local mission control for **Claude Code** and your projects — a single app that
 > launches, supervises, and reviews up to six Claude Code sessions at once.
 > Runs **exclusively on `127.0.0.1`**, for you and only you.
 
 <p align="center">
-  <a href="https://github.com/LuiInventions/Claude-code-web-manager/releases/latest">
+  <a href="https://github.com/LuiInventions/jarvis-control-center/releases/latest">
     <img alt="Download the Windows installer" src="https://img.shields.io/badge/⬇%20Download-Windows%20Installer%20(.exe)-2ea44f?style=for-the-badge&logo=windows&logoColor=white" />
   </a>
   &nbsp;
-  <a href="https://github.com/LuiInventions/Claude-code-web-manager/releases/latest">
-    <img alt="Latest release" src="https://img.shields.io/github/v/release/LuiInventions/Claude-code-web-manager?style=for-the-badge&label=latest&color=24292e" />
+  <a href="https://github.com/LuiInventions/jarvis-control-center/releases/latest">
+    <img alt="Latest release" src="https://img.shields.io/github/v/release/LuiInventions/jarvis-control-center?style=for-the-badge&label=latest&color=24292e" />
   </a>
 </p>
 
@@ -20,10 +20,10 @@
 </p>
 
 > [!TIP]
-> **v1.9.5** launches **Claude Code**, **Grok**, or **ChatGPT Codex** locally or,
+> **v1.9.6** is **Jarvis Control Center**. It launches **Claude Code**, **Grok**, or **ChatGPT Codex** locally or,
 > from the **Remote** tab, on your own server. The launcher is **Local** or **GitHub**.
 > **VS Codium** is a local editor in that same Local folder.
-> The Windows Setup installs from one app archive. v1.8.0 was withdrawn.
+> The installer file is `jarvis-control-center-Setup-1.9.6.exe`. v1.8.0 was withdrawn.
 > [**Changelog**](CHANGELOG.md)
 
 <img width="1920" height="1080" alt="Desktop Screenshot 2026 06 28 - 19 27 23 07" src="https://github.com/user-attachments/assets/961f27e3-c90e-4594-bbbc-ce2fa462e56b" />
@@ -35,7 +35,7 @@
 Claude Code is powerful on the command line, but a terminal gives you one session,
 no overview of your projects, and no memory of what each run actually accomplished.
 
-**Claude Code Control Center** wraps it in a real interface:
+**Jarvis Control Center** wraps it in a real interface:
 
 - **Browse your projects** as cards — stack, Git status, size, README — and drill into any of them.
 - **Launch Claude Code, Grok, or ChatGPT Codex** with a prompt (optionally AI-improved
@@ -46,7 +46,7 @@ no overview of your projects, and no memory of what each run actually accomplish
   commit + pull + push with one click.
 
 It ships two ways: as a ready-to-install **Windows desktop app** — just
-[**download the `.exe`**](https://github.com/LuiInventions/Claude-code-web-manager/releases/latest)
+[**download the `.exe`**](https://github.com/LuiInventions/jarvis-control-center/releases/latest)
 and run it — or as a **web app** you start from source. Either way the server binds hard
 to loopback, so nothing is ever exposed to your network.
 
@@ -96,7 +96,7 @@ to loopback, so nothing is ever exposed to your network.
   **wake-word**, plus text-to-speech for reviews (Cartesia + Picovoice).
 - 🐙 **GitHub built in** — connect a token, clone, create repos, flip visibility, and
   **commit + pull + push** in one click (never automatically).
-- 🖥️ **One-click desktop app** — [download a self-contained Windows `.exe`](https://github.com/LuiInventions/Claude-code-web-manager/releases/latest);
+- 🖥️ **One-click desktop app** — [download a self-contained Windows `.exe`](https://github.com/LuiInventions/jarvis-control-center/releases/latest);
   no Node, no terminal, keys encrypted at rest via Windows DPAPI.
 
 ---
@@ -224,8 +224,8 @@ contributors want **Option B** (run from source).
 **This is the easiest way to run the app — no Node.js, no terminal, no `npm install`.**
 
 1. **Download the installer** from the
-   [**latest release**](https://github.com/LuiInventions/Claude-code-web-manager/releases/latest):
-   **`cc-control-center-Setup-<version>.exe`**.
+   [**latest release**](https://github.com/LuiInventions/jarvis-control-center/releases/latest):
+   **`jarvis-control-center-Setup-<version>.exe`**.
 2. **Run it.** It installs per-user (no admin rights required) and adds a Start-menu
    shortcut. The whole UI runs in its own window while the loopback server stays internal.
 3. **First launch → setup screen.** Pick your projects folder (native folder picker),
@@ -264,7 +264,7 @@ npm run electron:build
 ```
 
 This produces, in `build/dist/`, a self-contained **NSIS installer**
-(`cc-control-center-Setup-<version>.exe`). For developing the desktop shell,
+(`jarvis-control-center-Setup-<version>.exe`). For developing the desktop shell,
 `npm run electron:dev` runs it from source with Next.js in dev mode and DevTools available.
 
 </details>
@@ -276,8 +276,8 @@ Open a **PowerShell** terminal.
 **1. Clone**
 
 ```powershell
-git clone https://github.com/LuiInventions/Claude-code-web-manager
-cd Claude-code-web-manager
+git clone https://github.com/LuiInventions/jarvis-control-center
+cd jarvis-control-center
 ```
 
 **2. Install & configure (guided)**

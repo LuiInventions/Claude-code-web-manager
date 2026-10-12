@@ -1,8 +1,18 @@
 # Changelog
 
-All notable changes to Claude Code Control Center are documented here. Versions
-follow `package.json`; each `v*` tag publishes a self-contained Windows installer
-(`cc-control-center-Setup-<version>.exe`) via GitHub Actions.
+All notable changes to Jarvis Control Center are documented here. Versions
+follow `package.json`. From 1.9.6 each `v*` tag publishes
+`jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
+`cc-control-center-Setup-<version>.exe`.
+
+## 1.9.6 — 2026-10-12
+
+### Jarvis Control Center
+
+- The app, the window title, and the Windows installer are **Jarvis Control Center** (`jarvis-control-center-Setup-1.9.6.exe`). Settings from the previous install are copied into the new profile folder. The setup screen shows once more.
+- The interface is black, with quiet borders and no glow.
+- After a remote login the SSH pane on the right closes. The left rail shows the server, counts 1–6, **Start without prompt**, and **Trennen**.
+- A code CLI on the server reuses the SSH login that is already open. A second SSH connection is not started, so a server that asks for keyboard-interactive on every connection no longer ends that session with code 255.
 
 ## 1.9.5 — 2026-10-12
 

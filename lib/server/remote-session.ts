@@ -1,15 +1,15 @@
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 import * as pty from "node-pty";
 import type { WebSocket } from "ws";
+import { brokerLaunchCommand } from "./remote-broker";
 import { readSettings, writeSettings, type RemoteServerRecord } from "../settings";
 import { readSecrets, writeSecrets } from "../secrets";
 import {
   classifySshTail,
   parseLoginTarget,
   remoteServerId,
-  shellQuote,
   sshBaseArgs,
   stripAnsi,
   type RemotePublicStatus,
@@ -50,18 +50,21 @@ export type { RemotePublicStatus };
  * Windows OpenSSH cannot share a connection with ControlMaster, and a 2FA code
  * only works once. The first `ssh` is a real terminal. The password and the
  * 2FA code are written only after that process prints the matching prompt.
- * After the shell answers, a throwaway key is installed and every later CLI
- * is `ssh -i` that key. Disconnect deletes the key. The 2FA code is never stored.
+ * After the shell answers, a small broker starts inside that same ssh session.
+ * Later CLIs attach to the broker. A second ssh login is not used: servers
+ * that require keyboard-interactive on every connection reject it with exit 255.
+ * The 2FA code is never stored.
  */
 
 interface Live {
   dir: string;
   user: string;
   host: string;
-  keyPath: string;
   knownHosts: string;
   sshBin: string;
   login: pty.IPty | null;
+  /** Local end of the forward to the broker. 0 until the forward is up. */
+  brokerLocal: number;
 }
 
 interface PendingSave {
@@ -235,20 +238,6 @@ export function setRemoteDir(dir: string): void {
   writeSettings({ remoteDir: folder });
 }
 
-export function remoteExecArgs(remoteCommand: string): { bin: string; args: string[] } | null {
-  const live = hub().live;
-  if (!live) return null;
-  return {
-    bin: live.sshBin,
-    args: [
-      "-tt",
-      ...sshBaseArgs({ knownHosts: live.knownHosts, identity: live.keyPath }),
-      `${live.user}@${live.host}`,
-      remoteCommand,
-    ],
-  };
-}
-
 function redact(text: string, secrets: string[]): string {
   let out = stripAnsi(text);
   for (const secret of secrets) {
@@ -343,23 +332,50 @@ function killPty(term: pty.IPty | null): void {
 
 async function cleanup(live: Live | null): Promise<void> {
   if (!live) return;
-  if (live.keyPath && fs.existsSync(live.keyPath)) {
-    const remove = spawnSync(
-      live.sshBin,
-      [
-        "-T",
-        ...sshBaseArgs({ knownHosts: live.knownHosts, identity: live.keyPath }),
-        `${live.user}@${live.host}`,
-        "touch ~/.ssh/authorized_keys; grep -v ccc-control-center ~/.ssh/authorized_keys > ~/.ssh/authorized_keys.ccc || true; mv ~/.ssh/authorized_keys.ccc ~/.ssh/authorized_keys",
-      ],
-      { timeout: 8000, cwd: existingCwd() },
-    );
-    void remove;
-  }
   if (hub().loginPty === live.login) hub().loginPty = null;
   killPty(live.login);
   live.login = null;
+  live.brokerLocal = 0;
   fs.rmSync(live.dir, { recursive: true, force: true });
+}
+
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+export function remoteBrokerPort(): number | null {
+  const port = hub().live?.brokerLocal ?? 0;
+  return port > 0 ? port : null;
+}
+
+function pingBroker(port: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const sock = net.connect(port, "127.0.0.1");
+    const timer = setTimeout(() => {
+      sock.destroy();
+      reject(new Error("Der Sitzungs-Tunnel antwortet nicht."));
+    }, 4000);
+    sock.on("connect", () => sock.write("PING\n"));
+    sock.on("data", (chunk) => {
+      if (chunk.toString("utf8").includes("PONG")) {
+        clearTimeout(timer);
+        sock.end();
+        resolve();
+      }
+    });
+    sock.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
 }
 
 async function stopRemoteClis(): Promise<void> {
@@ -494,10 +510,6 @@ export async function beginRemote(input: {
     state.error = "OpenSSH fehlt. ssh.exe wurde nicht gefunden.";
     return remoteStatus();
   }
-  if (!tools.keygen || !fs.existsSync(tools.keygen)) {
-    state.error = "ssh-keygen fehlt. OpenSSH muss installiert sein.";
-    return remoteStatus();
-  }
 
   const my = (state.gen += 1);
   state.connecting = true;
@@ -517,35 +529,22 @@ export async function beginRemote(input: {
 
   resetLoginView();
   const dir = fs.mkdtempSync(remoteKeyPrefix());
-  const keyPath = path.join(dir, "id_ed25519");
   const knownHosts = path.join(dir, "known_hosts");
-  const generated = spawnSync(
-    tools.keygen,
-    ["-t", "ed25519", "-f", keyPath, "-N", "", "-q", "-C", "ccc-control-center"],
-    { timeout: 10000, cwd: existingCwd() },
-  );
-  if (generated.error || generated.status !== 0) {
-    fs.rmSync(dir, { recursive: true, force: true });
-    if (my !== hub().gen) return remoteStatus();
-    state.connecting = false;
-    state.error = "ssh-keygen fehlt. OpenSSH muss installiert sein.";
-    return remoteStatus();
-  }
-  const pubkey = fs.readFileSync(`${keyPath}.pub`, "utf8").trim();
+  fs.writeFileSync(knownHosts, "");
   const live: Live = {
     dir,
     user: target.user,
     host: target.host,
-    keyPath,
     knownHosts,
     sshBin: tools.ssh,
     login: null,
+    brokerLocal: 0,
   };
 
   try {
     live.login = pty.spawn(
       tools.ssh,
-      ["-tt", ...sshBaseArgs({ knownHosts }), `${target.user}@${target.host}`],
+      ["-tt", "-o", "EscapeChar=~", ...sshBaseArgs({ knownHosts }), `${target.user}@${target.host}`],
       {
         name: "xterm-256color",
         cols: 80,
@@ -567,11 +566,11 @@ export async function beginRemote(input: {
 
   state.pending = live;
   state.loginPty = live.login;
-  void runAuth(my, live, pubkey);
+  void runAuth(my, live);
   return remoteStatus();
 }
 
-function runAuth(my: number, live: Live, pubkey: string): void {
+function runAuth(my: number, live: Live): void {
   const state = hub();
   let transcript = "";
   let passwordSent = false;
@@ -580,7 +579,12 @@ function runAuth(my: number, live: Live, pubkey: string): void {
   let otpHolding = false;
   let otpQuietUntil = 0;
   let hostkeySent = false;
-  let stage: "auth" | "probe" | "key" = "auth";
+  let forwardStarted = false;
+  let pinging = false;
+  /** -L line held until OpenSSH prints `ssh>`. `~C` reads that as a new line. */
+  let forwardSpec = "";
+  let escapeBuf = "";
+  let stage: "auth" | "probe" | "broker" | "forward" = "auth";
   let probes = 0;
   let settled = false;
 
@@ -635,9 +639,9 @@ function runAuth(my: number, live: Live, pubkey: string): void {
 
   const done = new Promise<void>((resolve, reject) => {
     let timer = setTimeout(() => reject(new Error("Zeitüberschreitung bei der Anmeldung.")), 45000);
-    const arm = (ms: number) => {
+    const arm = (ms: number, message = "Zeitüberschreitung bei der Anmeldung.") => {
       clearTimeout(timer);
-      timer = setTimeout(() => reject(new Error("Zeitüberschreitung bei der Anmeldung.")), ms);
+      timer = setTimeout(() => reject(new Error(message)), ms);
     };
     const finish = (err?: Error) => {
       if (settled) return;
@@ -664,17 +668,47 @@ function runAuth(my: number, live: Live, pubkey: string): void {
 
     live.login!.onData((chunk) => {
       transcript += chunk;
-      if (transcript.length > 20000) transcript = transcript.slice(-20000);
+      if (transcript.length > 80000) transcript = transcript.slice(-60000);
       pushView(chunk);
       if (stage === "probe" && transcript.includes("CCC_READY_ok")) {
-        stage = "key";
-        const install = `umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; chmod 700 ~/.ssh; grep -q ccc-control-center ~/.ssh/authorized_keys || printf '%s\\n' ${shellQuote(pubkey)} >> ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys; printf 'CCC_KEY_%s\\n' OK\n`;
-        live.login?.write(install);
+        stage = "broker";
+        arm(20000);
+        live.login?.write(`${brokerLaunchCommand()}\n`);
         return;
       }
-      if (stage === "key" && transcript.includes("CCC_KEY_OK")) {
-        finish();
+      if (stage === "broker" && transcript.includes("CCC_BROKER_MISSING")) {
+        finish(new Error("Auf dem Server fehlt python3. Damit können Sitzungen ohne erneute Anmeldung nicht gestartet werden."));
         return;
+      }
+      if (stage === "broker") {
+        const found = transcript.match(/CCC_BROKER (\d+)/);
+        if (found) openForward(Number(found[1]));
+        return;
+      }
+      if (stage === "forward") {
+        if (/Port forwarding failed|Bad forwarding specification/i.test(chunk)) {
+          finish(new Error("Die Weiterleitung für Sitzungen konnte nicht geöffnet werden."));
+          return;
+        }
+        if (forwardSpec) {
+          escapeBuf += chunk;
+          if (escapeBuf.includes("ssh>")) {
+            const spec = forwardSpec;
+            forwardSpec = "";
+            arm(15000, "Die Weiterleitung für Sitzungen konnte nicht geöffnet werden.");
+            live.login?.write(spec);
+          }
+          return;
+        }
+        if (pinging || live.brokerLocal <= 0) return;
+        if (chunk.includes("Forwarding port.") || transcript.includes("Forwarding port.")) {
+          pinging = true;
+          void pingBroker(live.brokerLocal)
+            .then(() => {
+              if (my === hub().gen) finish();
+            })
+            .catch((err: Error) => finish(err));
+        }
       }
       const kind = classifySshTail(transcript);
       if (kind === "hostkey" && !hostkeySent) {
@@ -698,6 +732,23 @@ function runAuth(my: number, live: Live, pubkey: string): void {
         askForOtp();
       }
     });
+
+    function openForward(remotePort: number) {
+      if (forwardStarted || !live.login || my !== hub().gen) return;
+      forwardStarted = true;
+      void freePort()
+        .then((local) => {
+          if (my !== hub().gen || !live.login) return;
+          live.brokerLocal = local;
+          stage = "forward";
+          forwardSpec = `-L127.0.0.1:${local}:127.0.0.1:${remotePort}\n`;
+          escapeBuf = "";
+          arm(15000, "Die Weiterleitung für Sitzungen konnte nicht geöffnet werden.");
+          // Newline so ~ is at the start of a line. The -L spec follows `ssh>`.
+          live.login.write("\n~C");
+        })
+        .catch((err: Error) => finish(err));
+    }
 
     function askForPassword() {
       if (passwordHolding || passwordSent || stage !== "auth" || my !== hub().gen) return;
@@ -748,7 +799,7 @@ function runAuth(my: number, live: Live, pubkey: string): void {
     }
 
     live.login!.onExit(() => {
-      if (stage !== "key") finish(new Error("ssh wurde vor der Anmeldung beendet."));
+      if (!settled) finish(new Error("ssh wurde vor der Anmeldung beendet."));
       else pushView("\r\nssh beendet.\r\n");
     });
   });

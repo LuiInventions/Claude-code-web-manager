@@ -77,14 +77,14 @@ export function parseReviewResult(raw: string): ReviewResult {
 }
 
 const SPEECH_SYSTEM_PROMPT = [
-  "Du bist der Review-Assistent im Claude Code Control Center.",
+  "Du bist der Review-Assistent im Jarvis Control Center.",
   "Fasse den Stand ALLER Sessions in 1–4 natürlichen deutschen Sätzen zusammen.",
   "Keine Markdown-Zeichen, keine Aufzählungssymbole, keine Anführungszeichen.",
   "Gib NUR den gesprochenen Text zurück — sonst nichts.",
 ].join("\n");
 
 const MARKDOWN_SYSTEM_PROMPT = [
-  "Du bist der Review-Assistent im Claude Code Control Center.",
+  "Du bist der Review-Assistent im Jarvis Control Center.",
   "Erstelle einen übersichtlichen deutschen Markdown-Bericht über alle Sessions.",
   "Stütze dich NUR auf den gezeigten Output — erfinde nichts.",
   "",

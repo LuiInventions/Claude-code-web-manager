@@ -158,37 +158,52 @@ export default function RemoteSection() {
   return (
     <div className="flex h-full min-h-0">
       {status.connected && (
-        <aside className="flex w-56 shrink-0 flex-col gap-3 border-r border-line bg-elevated p-4">
-          <div className="min-w-0">
-            <div className="text-[10px] font-medium uppercase tracking-wide text-faint">Server</div>
-            <div className="truncate text-sm text-ink">
+        <aside className="flex w-64 shrink-0 flex-col border-r border-line bg-elevated">
+          <div className="border-b border-line px-5 py-5">
+            <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-faint">Remote</div>
+            <div className="mt-2 truncate text-[15px] font-medium text-ink">
               {status.user}@{status.host}
             </div>
+            <div className="mt-1 text-xs text-muted">Verbunden</div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-medium uppercase tracking-wide text-faint">Boxes</span>
-            <div className="flex overflow-hidden rounded-md border border-line">
-              {BOX_COUNTS.map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setBoxCount(n)}
-                  className={cn(
-                    "cursor-pointer px-2 py-1.5 text-xs font-medium transition-colors",
-                    boxCount === n ? "bg-selected text-ink" : "bg-raised text-muted hover:text-ink",
-                  )}
-                >
-                  ×{n}
-                </button>
-              ))}
+          <div className="flex flex-1 flex-col gap-5 px-5 py-5">
+            <div>
+              <div className="mb-2 text-xs text-muted">Sessions</div>
+              <div className="grid grid-cols-6 gap-1.5">
+                {BOX_COUNTS.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setBoxCount(n)}
+                    className={cn(
+                      "h-9 rounded-md text-sm font-medium transition-colors",
+                      boxCount === n
+                        ? "bg-ink text-canvas"
+                        : "bg-raised text-muted hover:text-ink",
+                    )}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
             </div>
+            <Button variant="primary" icon={Play} className="w-full" onClick={startEmpty}>
+              Start without prompt
+            </Button>
+            <p className="text-xs leading-5 text-faint">
+              Öffnet {boxCount} leere {cli === "claude" ? "Claude" : cli === "grok" ? "Grok" : "Codex"}-Sitzung
+              {boxCount > 1 ? "en" : ""} auf dem Server.
+            </p>
           </div>
-          <Button variant="primary" icon={Play} className="w-full" onClick={startEmpty}>
-            Start without prompt ({boxCount}×)
-          </Button>
-          <Button variant="danger" size="sm" className="mt-auto w-full" onClick={disconnect}>
-            Trennen
-          </Button>
+          <div className="border-t border-line p-5">
+            <button
+              type="button"
+              onClick={disconnect}
+              className="cursor-pointer text-sm text-muted transition-colors hover:text-danger"
+            >
+              Trennen
+            </button>
+          </div>
         </aside>
       )}
 
@@ -354,14 +369,16 @@ export default function RemoteSection() {
         )}
       </div>
 
-      <aside className="flex w-[38%] min-w-[18rem] max-w-[36rem] shrink-0 flex-col border-l border-line bg-surface">
-        <div className="border-b border-line px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-faint">
-          SSH
-        </div>
-        <div className="min-h-0 flex-1 p-1">
-          <SshLoginPane />
-        </div>
-      </aside>
+      {!status.connected && (
+        <aside className="flex w-[38%] min-w-[18rem] max-w-[36rem] shrink-0 flex-col border-l border-line bg-canvas">
+          <div className="border-b border-line px-4 py-3 text-[11px] font-medium uppercase tracking-[0.16em] text-faint">
+            SSH
+          </div>
+          <div className="min-h-0 flex-1 p-2">
+            <SshLoginPane />
+          </div>
+        </aside>
+      )}
     </div>
   );
 }

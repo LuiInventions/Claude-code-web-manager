@@ -95,4 +95,4 @@ npm run electron:build
   NSIS installer + portable exe. No env → unsigned.
 - **CI:** `.github/workflows/release.yml` builds on a Windows runner when a
   `v*` tag is pushed and forwards the same secrets to electron-builder, then
-  publishes the `cc-control-center-*` artifacts to the GitHub Release.
+  publishes the `jarvis-control-center-*` artifacts to the GitHub Release.

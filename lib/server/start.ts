@@ -70,7 +70,7 @@ export async function startServer(
       server.removeListener("error", onListenError);
       if (!opts.quiet) {
         console.log(
-          `\n  ▸ Claude Code Control Center  →  http://${host}:${port}   (loopback only)\n`,
+          `\n  ▸ Jarvis Control Center  →  http://${host}:${port}   (loopback only)\n`,
         );
       }
       startUsagePoller();

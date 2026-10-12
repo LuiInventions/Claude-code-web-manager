@@ -218,8 +218,8 @@ function Brand() {
         <circle cx="12" cy="12" r="3" fill="var(--accent)" />
       </svg>
       <div className="leading-tight">
-        <div className="text-sm font-semibold tracking-tight text-ink">CLAUDE&nbsp;CODE</div>
-        <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-faint">
+        <div className="text-sm font-semibold tracking-tight text-ink">JARVIS</div>
+        <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-faint">
           Control Center
         </div>
       </div>

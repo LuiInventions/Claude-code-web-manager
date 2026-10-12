@@ -1,46 +1,39 @@
 @import "tailwindcss";
 
-/* JARVIS chat — futuristic blue, glowing */
+/* Quiet label. No glow. */
 .jarvis-text {
-  color: #38bdf8;
-  text-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+  color: #f5f5f5;
 }
 
 /*
-  JARVIS Control Center — Design System (dark, developer "control center")
-  Base: deep graphite/slate. Accent: teal (interactive). Running/active: green.
-  Generated with the ui-ux-pro-max design intelligence; tuned for WCAG AA.
+  Jarvis Control Center — black, flat, quiet.
+  One neutral accent. No HUD glow.
 */
 
 :root {
   color-scheme: dark;
 
-  /* Surfaces (low -> high elevation) */
-  --canvas: #0a0e14; /* app background */
-  --elevated: #111720; /* sidebar / top bar */
-  --surface: #141b24; /* cards / panels */
-  --raised: #1a2230; /* inputs / hover */
-  --selected: #222d3b; /* active / selected row */
+  --canvas: #000000;
+  --elevated: #0a0a0a;
+  --surface: #111111;
+  --raised: #171717;
+  --selected: #222222;
 
-  /* Lines */
-  --line: #273140;
-  --line-strong: #3a4655;
+  --line: #262626;
+  --line-strong: #3a3a3a;
 
-  /* Text tiers */
-  --ink: #e6edf3; /* primary  (~15:1 on canvas) */
-  --muted: #9fb0c0; /* secondary (~7:1) */
-  --faint: #6b7b8c; /* tertiary / labels (~4:1) */
+  --ink: #f5f5f5;
+  --muted: #a3a3a3;
+  --faint: #737373;
 
-  /* Accent — interactive (blue / HUD) */
-  --accent: #38bdf8;
-  --accent-hover: #7dd3fc;
-  --accent-ink: #04141f; /* text on accent fills */
+  --accent: #f5f5f5;
+  --accent-hover: #ffffff;
+  --accent-ink: #0a0a0a;
 
-  /* HUD / glass (Jarvis futuristic surfaces) */
-  --hud-blue: #38bdf8;
-  --hud-glow: rgba(56, 189, 248, 0.55);
-  --glass-bg: rgba(20, 32, 48, 0.55);
-  --glass-border: rgba(56, 189, 248, 0.28);
+  --hud-blue: #f5f5f5;
+  --hud-glow: transparent;
+  --glass-bg: rgba(10, 10, 10, 0.92);
+  --glass-border: rgba(255, 255, 255, 0.08);
 
   /* Semantic */
   --running: #22c55e; /* live session / clean git / success */

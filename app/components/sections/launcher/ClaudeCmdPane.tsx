@@ -19,11 +19,11 @@ import { useEffect, useRef } from "react";
  */
 
 const XTERM_THEME = {
-  background: "#0a0f1a",
-  foreground: "#e6edf3",
-  cursor: "#3b82f6",
-  cursorAccent: "#0a0f1a",
-  selectionBackground: "rgba(59,130,246,0.30)",
+  background: "#000000",
+  foreground: "#f5f5f5",
+  cursor: "#f5f5f5",
+  cursorAccent: "#000000",
+  selectionBackground: "rgba(255,255,255,0.16)",
   black: "#0a0f1a",
   red: "#ef4444",
   green: "#22c55e",

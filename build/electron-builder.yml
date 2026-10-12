@@ -1,5 +1,5 @@
-appId: com.luis.claudecontrolcenter
-productName: Claude Code Control Center
+appId: com.luis.jarviscontrolcenter
+productName: Jarvis Control Center
 # Publisher identity written into the executable + installer version info. The
 # Windows "Unknown publisher" (SmartScreen / UAC) warning only disappears once
 # the build is signed with a certificate issued by a real Certificate Authority
@@ -89,6 +89,6 @@ nsis:
   installerIcon: build/resources/icon.ico
   uninstallerIcon: build/resources/icon.ico
   installerHeaderIcon: build/resources/icon.ico
-  shortcutName: Claude Code Control Center
-  # Downloadable installer file name: cc-control-center-Setup-<version>.exe
-  artifactName: cc-control-center-Setup-${version}.${ext}
+  shortcutName: Jarvis Control Center
+  # Downloadable installer file name: jarvis-control-center-Setup-<version>.exe
+  artifactName: jarvis-control-center-Setup-${version}.${ext}
