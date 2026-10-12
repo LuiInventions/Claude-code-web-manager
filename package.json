@@ -1,6 +1,6 @@
 {
   "name": "claude-code-control-center",
-  "version": "1.9.2",
+  "version": "1.9.3",
   "private": true,
   "description": "Local control center for your PC, projects, and code CLIs (Claude Code, Grok, ChatGPT Codex) — runs only on 127.0.0.1.",
   "author": {
@@ -10,7 +10,7 @@
   "main": "build/electron/main.js",
   "scripts": {
     "dev": "tsx watch server.ts",
-    "build": "next build --experimental-build-mode compile",
+    "build": "node --require ./build/scripts/ignore-unreadable-outside.cjs ./node_modules/next/dist/bin/next build --experimental-build-mode compile",
     "start": "set NODE_ENV=production&& tsx server.ts",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",

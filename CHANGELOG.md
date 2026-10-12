@@ -4,6 +4,15 @@ All notable changes to Claude Code Control Center are documented here. Versions
 follow `package.json`; each `v*` tag publishes a self-contained Windows installer
 (`cc-control-center-Setup-<version>.exe`) via GitHub Actions.
 
+## 1.9.3 — 2026-10-12
+
+### Startup — 1.9.2 crashed before the window opened
+
+The Windows build workaround lived in `next.config.mjs`. The packaged app
+inlines that file into `server.cjs`. `createRequire(import.meta.url)` then
+received `undefined` and the process exited. The workaround now runs only
+while `next build` produces the installer.
+
 ## 1.9.2 — 2026-10-12
 
 ### Remote server — launcher, Sessions, and VS Codium
