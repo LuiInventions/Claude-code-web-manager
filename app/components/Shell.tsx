@@ -34,12 +34,12 @@ interface SectionDef {
 }
 
 const MAIN_SECTIONS: SectionDef[] = [
-  { id: "launcher", label: "Local", desc: "Launch a code CLI in a local folder", icon: FolderOpen },
-  { id: "github-launch", label: "GitHub", desc: "Launch a code CLI in a connected repo", icon: FolderGit2 },
-  { id: "sessions", label: "Sessions", desc: "Live code-CLI sessions, visualized", icon: Gamepad2 },
   { id: "remote", label: "Remote", desc: "SSH to your server and start a code CLI", icon: Server },
-  { id: "codium", label: "VS Codium", desc: "Editor in the local project folder", icon: Monitor },
+  { id: "github-launch", label: "GitHub", desc: "Launch a code CLI in a connected repo", icon: FolderGit2 },
+  { id: "launcher", label: "Local", desc: "Launch a code CLI in a local folder", icon: FolderOpen },
   { id: "github", label: "Repos", desc: "Connect a GitHub token and clone repos", icon: Code },
+  { id: "codium", label: "VS Codium", desc: "Editor in the local project folder", icon: Monitor },
+  { id: "sessions", label: "Sessions", desc: "Live code-CLI sessions, visualized", icon: Gamepad2 },
 ];
 
 const SETTINGS_SECTION: SectionDef = {

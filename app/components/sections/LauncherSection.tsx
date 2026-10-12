@@ -7,8 +7,6 @@ import {
   FolderOpen,
   ListTree,
   Loader2,
-  PanelLeftClose,
-  PanelLeftOpen,
   Play,
   Plus,
   Rocket,
@@ -16,7 +14,6 @@ import {
   Split,
   Wand2,
   X,
-  XCircle,
   Zap,
 } from "lucide-react";
 import { Badge, Button, Textarea, cn } from "../ui";
@@ -24,6 +21,7 @@ import type { SectionCommand } from "../app-commands";
 import { MODEL_OPTIONS, EFFORT_OPTIONS } from "@/lib/launcher-config";
 import ClaudeCmdPane from "./launcher/ClaudeCmdPane";
 import LocalFiles from "./LocalFiles";
+import { SessionBar, SidebarToggle } from "./SessionBar";
 import UsageBar from "./launcher/UsageBar";
 import { useSpeak } from "../use-speak";
 import Markdown from "../Markdown";
@@ -647,7 +645,9 @@ export default function LauncherSection({
         {sidebarOpen && (
           <aside className="glass-pane flex w-72 shrink-0 flex-col border-r">
             <div className="flex flex-col gap-3 px-3 py-3">
-              <div className="grid grid-cols-6 gap-1.5">
+              <div>
+                <div className="mb-1.5 text-xs text-muted">Session count</div>
+                <div className="grid grid-cols-6 gap-1.5">
                 {BOX_COUNTS.map((n) => (
                   <button
                     key={n}
@@ -659,6 +659,7 @@ export default function LauncherSection({
                     {n}
                   </button>
                 ))}
+                </div>
               </div>
               <label className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted">Ordner</span>
@@ -695,21 +696,12 @@ export default function LauncherSection({
         <div className="relative flex min-w-0 flex-1 flex-col">
           {sessions.length > 0 ? (
             <>
-              <div className="flex shrink-0 items-center gap-2 border-b border-line bg-elevated px-3 py-2">
-                <SidebarToggle open={sidebarOpen} onToggle={() => setSidebarOpen((v) => !v)} />
-                <span className="text-xs text-faint">
-                  {visibleCount} {visibleCount === 1 ? "box" : "boxes"}
-                </span>
-                <button
-                  onClick={closeAllSessions}
-                  title="Stop every running session"
-                  aria-label="Close all sessions"
-                  className="ml-auto inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-xs font-medium text-faint transition-colors hover:border-danger/50 hover:text-danger"
-                >
-                  <XCircle className="size-3.5" />
-                  Close all sessions
-                </button>
-              </div>
+              <SessionBar
+                sidebarOpen={sidebarOpen}
+                onToggleSidebar={() => setSidebarOpen((v) => !v)}
+                count={visibleCount}
+                onCloseAll={closeAllSessions}
+              />
               <div
                 className="grid min-h-0 flex-1 gap-2 p-2"
                 style={{
@@ -865,21 +857,6 @@ function InstanceNumber({ n, active }: { n: number; active?: boolean }) {
     >
       {n}
     </span>
-  );
-}
-
-function SidebarToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
-  const Icon = open ? PanelLeftClose : PanelLeftOpen;
-  const label = open ? "Collapse sidebar" : "Expand sidebar";
-  return (
-    <button
-      onClick={onToggle}
-      title={label}
-      aria-label={label}
-      className="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-faint transition-colors hover:bg-raised hover:text-accent"
-    >
-      <Icon className="size-4" />
-    </button>
   );
 }
 

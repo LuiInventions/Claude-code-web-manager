@@ -5,6 +5,15 @@ follow `package.json`. From 1.9.6 each `v*` tag publishes
 `jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
 `cc-control-center-Setup-<version>.exe`.
 
+## 1.9.13 — 2026-10-12
+
+### Rails, tab order, and back
+
+- The 1–6 picker is labeled **Session count** on Remote, GitHub, and Local.
+- The nav order is Remote, GitHub, Local, Repos, VS Codium, then Sessions.
+- GitHub and Remote show the same bar above the CLI boxes as Local: collapse, the box count, and **Close all sessions**.
+- File lists use a **Zurück** button instead of a `..` row.
+
 ## 1.9.12 — 2026-10-12
 
 ### Window icon

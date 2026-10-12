@@ -5,6 +5,7 @@ import { Play, X } from "lucide-react";
 import { Button, Input } from "../ui";
 import ClaudeCmdPane from "./launcher/ClaudeCmdPane";
 import RemoteFiles from "./RemoteFiles";
+import { SessionBar, SidebarToggle } from "./SessionBar";
 import SshLoginPane from "./SshLoginPane";
 import type { RemotePublicStatus } from "@/lib/remote-ssh";
 
@@ -48,6 +49,7 @@ export default function RemoteSection() {
   const [boxes, setBoxes] = useState<Box[]>([]);
   const [cli, setCli] = useState("claude");
   const [cwd, setCwd] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const load = useCallback(() => {
     fetch("/api/remote")
@@ -162,12 +164,28 @@ export default function RemoteSection() {
     setBoxes((prev) => [...batch, ...prev]);
   };
 
+  const closeAll = () => {
+    if (boxes.length === 0) return;
+    const ok = window.confirm(
+      `Really stop all ${boxes.length} session${boxes.length === 1 ? "" : "s"}?`,
+    );
+    if (!ok) return;
+    for (const box of boxes) {
+      void fetch(`/api/launcher/live-sessions?id=${encodeURIComponent(box.id)}`, {
+        method: "DELETE",
+      });
+    }
+    setBoxes([]);
+  };
+
   return (
     <div className="flex h-full min-h-0">
-      {status.connected && (
+      {status.connected && sidebarOpen && (
         <aside className="glass-pane flex w-72 shrink-0 flex-col border-r">
           <div className="flex flex-col gap-3 px-3 py-3">
-            <div className="grid grid-cols-6 gap-1.5">
+            <div>
+              <div className="mb-1.5 text-xs text-muted">Session count</div>
+              <div className="grid grid-cols-6 gap-1.5">
               {BOX_COUNTS.map((n) => (
                 <button
                   key={n}
@@ -179,6 +197,7 @@ export default function RemoteSection() {
                   {n}
                 </button>
               ))}
+              </div>
             </div>
             <label className="flex flex-col gap-1.5">
               <span className="text-xs text-muted">Ordner</span>
@@ -211,7 +230,20 @@ export default function RemoteSection() {
         </aside>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        {status.connected && boxes.length > 0 && (
+          <SessionBar
+            sidebarOpen={sidebarOpen}
+            onToggleSidebar={() => setSidebarOpen((v) => !v)}
+            count={boxes.length}
+            onCloseAll={closeAll}
+          />
+        )}
+        {status.connected && boxes.length === 0 && (
+          <div className="absolute left-3 top-3 z-10">
+            <SidebarToggle open={sidebarOpen} onToggle={() => setSidebarOpen((v) => !v)} />
+          </div>
+        )}
         {status.connected ? (
           <div
             className="grid min-h-0 flex-1 gap-2 p-2"

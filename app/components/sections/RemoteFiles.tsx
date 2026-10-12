@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Folder, File, Search } from "lucide-react";
+import { Folder, File, Search, ChevronLeft } from "lucide-react";
 import { cn } from "../ui";
 import { copyText } from "../term-copy";
 
@@ -90,18 +90,20 @@ export default function RemoteFiles({
           className="h-9 w-full bg-transparent text-sm text-ink outline-none"
         />
       </label>
-      <div className="min-h-0 flex-1 overflow-auto py-1">
-        {listing.error && <p className="px-3 py-2 text-xs text-danger">{listing.error}</p>}
-        {up && (
+      {up && (
+        <div className="px-3 py-2">
           <button
             type="button"
             onClick={() => openDir(up)}
-            className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[13px] text-muted hover:bg-raised hover:text-ink"
+            className="inline-flex h-8 w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-raised/80 text-[13px] font-medium text-muted transition-colors hover:text-ink"
           >
-            <Folder className="size-3.5 shrink-0" />
-            <span>..</span>
+            <ChevronLeft className="size-4" />
+            Zurück
           </button>
-        )}
+        </div>
+      )}
+      <div className="min-h-0 flex-1 overflow-auto py-1">
+        {listing.error && <p className="px-3 py-2 text-xs text-danger">{listing.error}</p>}
         {entries.length === 0 && !listing.error && (
           <p className="px-3 py-2 text-xs text-faint">Keine Einträge.</p>
         )}
