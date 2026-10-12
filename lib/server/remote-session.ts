@@ -1,14 +1,12 @@
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
-import net from "node:net";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import * as pty from "node-pty";
+import type { WebSocket } from "ws";
 import { readSettings, writeSettings, type RemoteServerRecord } from "../settings";
 import { readSecrets, writeSecrets } from "../secrets";
 import {
-  buildCodiumRemoteScript,
   classifySshTail,
-  parseCodiumOutput,
   parseLoginTarget,
   remoteServerId,
   shellQuote,
@@ -17,7 +15,7 @@ import {
   type RemotePublicStatus,
   type RemoteServerPublic,
 } from "../remote-ssh";
-import { startCodiumProxy } from "./codium-proxy";
+import { resolveSshTools } from "./ssh-bin";
 
 /** Temp dir for the throwaway SSH key.
  *  Not os.tmpdir() / os.homedir(): Next evaluates those while tracing and then
@@ -34,16 +32,26 @@ function spawnHome(): string {
   return env.USERPROFILE || env.HOME || ".";
 }
 
+/** node-pty also reports "File not found" when cwd does not exist. */
+function existingCwd(): string {
+  const home = spawnHome();
+  if (home && home !== "." && fs.existsSync(home)) return home;
+  if (fs.existsSync(process.cwd())) return process.cwd();
+  const tmp = process.env.TMPDIR || process.env.TEMP || process.env.TMP || "";
+  if (tmp && fs.existsSync(tmp)) return tmp;
+  return process.cwd();
+}
+
 export type { RemotePublicStatus };
 
 /**
  * One SSH login for the whole app.
  *
  * Windows OpenSSH cannot share a connection with ControlMaster, and a 2FA code
- * only works once. So the first `ssh` is a real terminal: we type the password
- * and the 2FA code when ssh asks. After the shell answers, we install a
- * throwaway key and every later CLI / VS Codium process is `ssh -i` that key.
- * Disconnect deletes the key. The 2FA code is never stored.
+ * only works once. The first `ssh` is a real terminal. The password and the
+ * 2FA code are written only after that process prints the matching prompt.
+ * After the shell answers, a throwaway key is installed and every later CLI
+ * is `ssh -i` that key. Disconnect deletes the key. The 2FA code is never stored.
  */
 
 interface Live {
@@ -52,12 +60,14 @@ interface Live {
   host: string;
   keyPath: string;
   knownHosts: string;
+  sshBin: string;
   login: pty.IPty | null;
-  codium: pty.IPty | null;
-  tunnel: ChildProcess | null;
-  proxy: { port: number; close: () => void } | null;
-  codiumUrl: string;
-  codiumError: string;
+}
+
+interface PendingSave {
+  saveLogin: boolean;
+  password: string;
+  dir: string;
 }
 
 const g = globalThis as unknown as {
@@ -65,24 +75,55 @@ const g = globalThis as unknown as {
     gen: number;
     connecting: boolean;
     needsOtp: boolean;
+    needsPassword: boolean;
     error: string;
     detail: string;
     live: Live | null;
-    /** Resolves the in-flight login when the user types the 2FA code. Null cancels. */
+    /** Login still in progress. Not the remote working directory. */
+    pending: Live | null;
+    loginPty: pty.IPty | null;
     otpWait: ((code: string | null) => void) | null;
+    passwordWait: ((code: string | null) => void) | null;
+    pendingId: string;
+    pendingDir: string;
+    pendingSave: PendingSave | null;
+    secrets: string[];
+    view: string;
+    viewers: Set<(chunk: string) => void>;
   };
 };
 
 function hub() {
-  return (g.__cccRemote ??= {
+  const cur = (g.__cccRemote ??= {
     gen: 0,
     connecting: false,
     needsOtp: false,
+    needsPassword: false,
     error: "",
     detail: "",
     live: null,
+    pending: null,
+    loginPty: null,
     otpWait: null,
+    passwordWait: null,
+    pendingId: "",
+    pendingDir: "~",
+    pendingSave: null,
+    secrets: [],
+    view: "",
+    viewers: new Set<(chunk: string) => void>(),
   });
+  cur.needsPassword ??= false;
+  cur.pending ??= null;
+  cur.loginPty ??= null;
+  cur.passwordWait ??= null;
+  cur.pendingId ??= "";
+  cur.pendingDir ??= "~";
+  cur.pendingSave ??= null;
+  cur.secrets ??= [];
+  cur.view ??= "";
+  cur.viewers ??= new Set();
+  return cur;
 }
 
 function readServerList(): RemoteServerRecord[] {
@@ -143,13 +184,12 @@ function savedPassword(id: string): string {
 }
 
 function publicServers(): RemoteServerPublic[] {
-  const secrets = readSecrets();
   return readServerList().map((s) => ({
     id: s.id,
     host: s.host,
     user: s.user,
     dir: s.dir,
-    hasPassword: Boolean(secrets.remoteSshPasswords?.[s.id]?.trim() || savedPassword(s.id)),
+    hasPassword: Boolean(savedPassword(s.id)),
   }));
 }
 
@@ -158,25 +198,24 @@ export function remoteStatus(): RemotePublicStatus {
   const settings = readSettings();
   const state = hub();
   const live = state.live;
+  const active = live || state.pending;
   const servers = publicServers();
-  const serverId = live ? remoteServerId(live.user, live.host) : "";
+  const serverId = active ? remoteServerId(active.user, active.host) : "";
   const current = servers.find((s) => s.id === serverId);
   return {
     connected: Boolean(live),
     connecting: state.connecting,
-    host: live?.host || "",
-    user: live?.user || "",
-    dir: current?.dir || settings.remoteDir || "~",
+    host: active?.host || "",
+    user: active?.user || "",
+    dir: current?.dir || (state.connecting ? state.pendingDir : "") || settings.remoteDir || "~",
     serverId,
     servers,
     saveLogin: Boolean(current?.hasPassword),
     hasSavedPassword: servers.some((s) => s.hasPassword),
     error: state.error,
     detail: state.detail,
+    needsPassword: state.needsPassword,
     needsOtp: state.needsOtp,
-    codiumReady: Boolean(live?.codiumUrl),
-    codiumUrl: live?.codiumUrl || "",
-    codiumError: live?.codiumError || "",
   };
 }
 
@@ -200,7 +239,7 @@ export function remoteExecArgs(remoteCommand: string): { bin: string; args: stri
   const live = hub().live;
   if (!live) return null;
   return {
-    bin: "ssh",
+    bin: live.sshBin,
     args: [
       "-tt",
       ...sshBaseArgs({ knownHosts: live.knownHosts, identity: live.keyPath }),
@@ -218,6 +257,81 @@ function redact(text: string, secrets: string[]): string {
   return out.slice(-600);
 }
 
+function redactChunk(chunk: string): string {
+  let out = chunk;
+  for (const secret of hub().secrets) {
+    if (secret) out = out.split(secret).join("••••");
+  }
+  return out;
+}
+
+function addSecret(secret: string): void {
+  const trimmed = secret.trim();
+  if (!trimmed) return;
+  const state = hub();
+  state.secrets.push(trimmed);
+  if (state.view.includes(trimmed)) state.view = state.view.split(trimmed).join("••••");
+}
+
+function resetLoginView(): void {
+  const state = hub();
+  state.view = "";
+  state.secrets = [];
+  const clear = "\x1b[2J\x1b[H";
+  for (const fn of state.viewers) fn(clear);
+}
+
+function pushView(chunk: string): void {
+  const safe = redactChunk(chunk);
+  const state = hub();
+  state.view += safe;
+  if (state.view.length > 120000) state.view = state.view.slice(-80000);
+  for (const fn of state.viewers) fn(safe);
+}
+
+export function remoteLoginSnapshot(): string {
+  return hub().view;
+}
+
+export function subscribeRemoteLogin(fn: (chunk: string) => void): () => void {
+  const state = hub();
+  state.viewers.add(fn);
+  return () => state.viewers.delete(fn);
+}
+
+export function resizeRemoteLogin(cols: number, rows: number): void {
+  const term = hub().loginPty;
+  if (!term) return;
+  try {
+    term.resize(Math.max(2, Math.min(500, cols)), Math.max(1, Math.min(200, rows)));
+  } catch {
+    /* pty already closed */
+  }
+}
+
+/** Read-only view of the login PTY. Keystrokes are not forwarded. */
+export function handleRemoteLoginWs(ws: WebSocket): void {
+  const snap = remoteLoginSnapshot();
+  if (snap && ws.readyState === ws.OPEN) ws.send(snap);
+  const unsub = subscribeRemoteLogin((chunk) => {
+    if (ws.readyState === ws.OPEN) ws.send(chunk);
+  });
+  const stop = () => unsub();
+  ws.on("close", stop);
+  ws.on("error", stop);
+  ws.on("message", (data) => {
+    let msg: { t?: string; c?: number; r?: number };
+    try {
+      msg = JSON.parse(data.toString()) as { t?: string; c?: number; r?: number };
+    } catch {
+      return;
+    }
+    if (msg.t === "resize" && typeof msg.c === "number" && typeof msg.r === "number") {
+      resizeRemoteLogin(msg.c, msg.r);
+    }
+  });
+}
+
 function killPty(term: pty.IPty | null): void {
   if (!term) return;
   try {
@@ -229,29 +343,22 @@ function killPty(term: pty.IPty | null): void {
 
 async function cleanup(live: Live | null): Promise<void> {
   if (!live) return;
-  killPty(live.codium);
-  if (live.tunnel) {
-    try {
-      live.tunnel.kill();
-    } catch {
-      /* already gone */
-    }
-  }
-  live.proxy?.close();
   if (live.keyPath && fs.existsSync(live.keyPath)) {
     const remove = spawnSync(
-      "ssh",
+      live.sshBin,
       [
         "-T",
         ...sshBaseArgs({ knownHosts: live.knownHosts, identity: live.keyPath }),
         `${live.user}@${live.host}`,
         "touch ~/.ssh/authorized_keys; grep -v ccc-control-center ~/.ssh/authorized_keys > ~/.ssh/authorized_keys.ccc || true; mv ~/.ssh/authorized_keys.ccc ~/.ssh/authorized_keys",
       ],
-      { timeout: 8000 },
+      { timeout: 8000, cwd: existingCwd() },
     );
     void remove;
   }
+  if (hub().loginPty === live.login) hub().loginPty = null;
   killPty(live.login);
+  live.login = null;
   fs.rmSync(live.dir, { recursive: true, force: true });
 }
 
@@ -267,14 +374,24 @@ export async function disconnectRemote(): Promise<void> {
   state.gen += 1;
   state.connecting = false;
   state.needsOtp = false;
+  state.needsPassword = false;
   state.error = "";
   state.detail = "";
-  const wait = state.otpWait;
+  state.pendingSave = null;
+  const otp = state.otpWait;
+  const password = state.passwordWait;
   state.otpWait = null;
-  wait?.(null);
+  state.passwordWait = null;
+  otp?.(null);
+  password?.(null);
+  const pending = state.pending;
   const live = state.live;
+  state.pending = null;
   state.live = null;
+  state.loginPty = null;
+  pushView("\r\nVerbindung getrennt.\r\n");
   await stopRemoteClis();
+  if (pending && pending !== live) await cleanup(pending);
   await cleanup(live);
 }
 
@@ -298,23 +415,37 @@ export function submitRemoteOtp(code: string): RemotePublicStatus {
   return remoteStatus();
 }
 
-function waitForPort(port: number, timeoutMs: number): Promise<void> {
-  const start = Date.now();
-  return new Promise((resolve, reject) => {
-    const tick = () => {
-      const socket = net.connect(port, "127.0.0.1");
-      socket.once("connect", () => {
-        socket.end();
-        resolve();
-      });
-      socket.once("error", () => {
-        socket.destroy();
-        if (Date.now() - start > timeoutMs) reject(new Error("SSH-Tunnel steht nicht."));
-        else setTimeout(tick, 200);
-      });
-    };
-    tick();
-  });
+/**
+ * The ssh process asked for a password. Empty plus `useSaved` uses the stored
+ * password. The value is written to the PTY and is not returned to the client.
+ */
+export function submitRemotePassword(input: {
+  password: string;
+  saveLogin: boolean;
+  useSaved: boolean;
+}): RemotePublicStatus {
+  const state = hub();
+  if (!state.needsPassword || !state.passwordWait) {
+    state.error = "Es wird gerade kein Passwort verlangt.";
+    return remoteStatus();
+  }
+  let password = input.password;
+  if (!password && input.useSaved) password = savedPassword(state.pendingId);
+  if (!password) {
+    state.error = "Passwort fehlt.";
+    return remoteStatus();
+  }
+  state.pendingSave = {
+    saveLogin: input.saveLogin,
+    password,
+    dir: state.pendingDir || "~",
+  };
+  state.error = "";
+  state.needsPassword = false;
+  const wait = state.passwordWait;
+  state.passwordWait = null;
+  wait(password);
+  return remoteStatus();
 }
 
 function rememberLogin(input: {
@@ -341,51 +472,61 @@ function rememberLogin(input: {
   });
 }
 
-export async function connectRemote(input: {
+/**
+ * Start `ssh user@host` and return while it is still connecting.
+ * The password is not accepted here: it is submitted only after the PTY asks.
+ */
+export async function beginRemote(input: {
   host: string;
   user: string;
-  password: string;
-  otp: string;
-  saveLogin: boolean;
   dir: string;
 }): Promise<RemotePublicStatus> {
-  if (hub().connecting || hub().live) return remoteStatus();
+  const state = hub();
+  if (state.connecting || state.live) return remoteStatus();
   migrateLegacy();
   const target = parseLoginTarget(input.host, input.user);
   if ("error" in target) {
-    hub().error = target.error;
+    state.error = target.error;
     return remoteStatus();
   }
-  const password =
-    input.password.trim() ||
-    (input.saveLogin ? savedPassword(remoteServerId(target.user, target.host)) : "");
-  if (!password) {
-    hub().error = "Passwort fehlt.";
+  const tools = resolveSshTools();
+  if (!tools) {
+    state.error = "OpenSSH fehlt. ssh.exe wurde nicht gefunden.";
     return remoteStatus();
   }
-  let otp = input.otp.trim();
-  const typedSecrets = [password];
-  const state = hub();
+  if (!tools.keygen || !fs.existsSync(tools.keygen)) {
+    state.error = "ssh-keygen fehlt. OpenSSH muss installiert sein.";
+    return remoteStatus();
+  }
+
   const my = (state.gen += 1);
   state.connecting = true;
   state.needsOtp = false;
+  state.needsPassword = false;
   state.otpWait = null;
+  state.passwordWait = null;
   state.error = "";
   state.detail = "";
+  state.pendingId = remoteServerId(target.user, target.host);
+  state.pendingDir = input.dir.trim() || "~";
+  state.pendingSave = null;
   const previous = state.live;
   state.live = null;
   await cleanup(previous);
+  if (my !== hub().gen) return remoteStatus();
 
+  resetLoginView();
   const dir = fs.mkdtempSync(remoteKeyPrefix());
   const keyPath = path.join(dir, "id_ed25519");
   const knownHosts = path.join(dir, "known_hosts");
   const generated = spawnSync(
-    "ssh-keygen",
+    tools.keygen,
     ["-t", "ed25519", "-f", keyPath, "-N", "", "-q", "-C", "ccc-control-center"],
-    { timeout: 10000 },
+    { timeout: 10000, cwd: existingCwd() },
   );
-  if (generated.status !== 0) {
+  if (generated.error || generated.status !== 0) {
     fs.rmSync(dir, { recursive: true, force: true });
+    if (my !== hub().gen) return remoteStatus();
     state.connecting = false;
     state.error = "ssh-keygen fehlt. OpenSSH muss installiert sein.";
     return remoteStatus();
@@ -397,65 +538,100 @@ export async function connectRemote(input: {
     host: target.host,
     keyPath,
     knownHosts,
+    sshBin: tools.ssh,
     login: null,
-    codium: null,
-    tunnel: null,
-    proxy: null,
-    codiumUrl: "",
-    codiumError: "",
   };
-
-  let transcript = "";
-  let passwordSent = false;
-  let otpHolding = false;
-  let otpQuietUntil = 0;
-  let hostkeySent = false;
-  let stage: "auth" | "probe" | "key" = "auth";
-  let probes = 0;
-
-  const fail = (message: string) => {
-    state.connecting = false;
-    state.needsOtp = false;
-    state.otpWait = null;
-    state.error = message;
-    state.detail = redact(transcript, typedSecrets);
-    void cleanup(live);
-  };
-
-  const waitForOtp = (): Promise<string> =>
-    new Promise((resolve, reject) => {
-      state.needsOtp = true;
-      state.error = "";
-      const timer = setTimeout(() => {
-        state.needsOtp = false;
-        state.otpWait = null;
-        reject(new Error("Zeitüberschreitung bei der 2FA-Eingabe."));
-      }, 180000);
-      state.otpWait = (code) => {
-        clearTimeout(timer);
-        state.needsOtp = false;
-        state.otpWait = null;
-        if (!code || my !== hub().gen) reject(new Error("Anmeldung abgebrochen."));
-        else resolve(code);
-      };
-    });
 
   try {
     live.login = pty.spawn(
-      "ssh",
+      tools.ssh,
       ["-tt", ...sshBaseArgs({ knownHosts }), `${target.user}@${target.host}`],
       {
         name: "xterm-256color",
         cols: 80,
         rows: 24,
-        cwd: spawnHome(),
+        cwd: existingCwd(),
         env: process.env as Record<string, string>,
       },
     );
   } catch (err) {
-    fail(`ssh konnte nicht gestartet werden: ${(err as Error).message}`);
+    const message = (err as Error).message || "";
+    fs.rmSync(dir, { recursive: true, force: true });
+    if (my !== hub().gen) return remoteStatus();
+    state.connecting = false;
+    state.error = /file not found/i.test(message)
+      ? `OpenSSH fehlt oder ssh ist nicht startbar (${tools.ssh}).`
+      : `ssh konnte nicht gestartet werden: ${message}`;
     return remoteStatus();
   }
+
+  state.pending = live;
+  state.loginPty = live.login;
+  void runAuth(my, live, pubkey);
+  return remoteStatus();
+}
+
+function runAuth(my: number, live: Live, pubkey: string): void {
+  const state = hub();
+  let transcript = "";
+  let passwordSent = false;
+  let passwordQuietUntil = 0;
+  let passwordHolding = false;
+  let otpHolding = false;
+  let otpQuietUntil = 0;
+  let hostkeySent = false;
+  let stage: "auth" | "probe" | "key" = "auth";
+  let probes = 0;
+  let settled = false;
+
+  const fail = (message: string) => {
+    const current = hub();
+    if (my !== current.gen) return;
+    current.connecting = false;
+    current.needsOtp = false;
+    current.needsPassword = false;
+    current.otpWait = null;
+    current.passwordWait = null;
+    current.error = message;
+    current.detail = redact(transcript, current.secrets);
+    if (current.pending === live) current.pending = null;
+    if (current.loginPty === live.login) current.loginPty = null;
+    void cleanup(live);
+  };
+
+  const waitForSecret = (
+    kind: "password" | "otp",
+  ): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const current = hub();
+      if (kind === "password") current.needsPassword = true;
+      else current.needsOtp = true;
+      current.error = "";
+      const timer = setTimeout(() => {
+        if (kind === "password") current.needsPassword = false;
+        else current.needsOtp = false;
+        if (kind === "password") current.passwordWait = null;
+        else current.otpWait = null;
+        reject(
+          new Error(
+            kind === "password"
+              ? "Zeitüberschreitung bei der Passwort-Eingabe."
+              : "Zeitüberschreitung bei der 2FA-Eingabe.",
+          ),
+        );
+      }, 180000);
+      const accept = (code: string | null) => {
+        clearTimeout(timer);
+        if (kind === "password") current.needsPassword = false;
+        else current.needsOtp = false;
+        if (kind === "password") current.passwordWait = null;
+        else current.otpWait = null;
+        if (!code || my !== hub().gen) reject(new Error("Anmeldung abgebrochen."));
+        else resolve(code);
+      };
+      if (kind === "password") current.passwordWait = accept;
+      else current.otpWait = accept;
+    });
 
   const done = new Promise<void>((resolve, reject) => {
     let timer = setTimeout(() => reject(new Error("Zeitüberschreitung bei der Anmeldung.")), 45000);
@@ -464,10 +640,15 @@ export async function connectRemote(input: {
       timer = setTimeout(() => reject(new Error("Zeitüberschreitung bei der Anmeldung.")), ms);
     };
     const finish = (err?: Error) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       clearInterval(probeTimer);
-      state.needsOtp = false;
-      state.otpWait = null;
+      const current = hub();
+      current.needsOtp = false;
+      current.needsPassword = false;
+      current.otpWait = null;
+      current.passwordWait = null;
       if (err) reject(err);
       else resolve();
     };
@@ -484,8 +665,7 @@ export async function connectRemote(input: {
     live.login!.onData((chunk) => {
       transcript += chunk;
       if (transcript.length > 20000) transcript = transcript.slice(-20000);
-      // The typed command must not contain the success marker, or the echo
-      // of the keystrokes would look like the shell already answered.
+      pushView(chunk);
       if (stage === "probe" && transcript.includes("CCC_READY_ok")) {
         stage = "key";
         const install = `umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; chmod 700 ~/.ssh; grep -q ccc-control-center ~/.ssh/authorized_keys || printf '%s\\n' ${shellQuote(pubkey)} >> ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys; printf 'CCC_KEY_%s\\n' OK\n`;
@@ -508,38 +688,49 @@ export async function connectRemote(input: {
       }
       if (kind === "password" && stage === "auth") {
         if (passwordSent) {
-          finish(new Error("Passwort abgelehnt."));
+          if (Date.now() >= passwordQuietUntil) finish(new Error("Passwort abgelehnt."));
           return;
         }
-        passwordSent = true;
-        live.login?.write(`${password}\n`);
-        setTimeout(() => {
-          if (stage !== "auth" || otpHolding || state.needsOtp) return;
-          const now = classifySshTail(transcript);
-          if (now === "otp" || now === "password" || now === "hostkey") return;
-          stage = "probe";
-        }, 2200);
+        askForPassword();
         return;
       }
-      // Ask for the code only after ssh has printed a 2FA prompt. A code typed
-      // before that prompt would be sent into the password field.
       if (kind === "otp" && stage === "auth" && !otpHolding && Date.now() >= otpQuietUntil) {
         askForOtp();
       }
     });
 
+    function askForPassword() {
+      if (passwordHolding || passwordSent || stage !== "auth" || my !== hub().gen) return;
+      passwordHolding = true;
+      clearTimeout(timer);
+      waitForSecret("password")
+        .then((password) => {
+          passwordHolding = false;
+          if (my !== hub().gen || !live.login) return;
+          addSecret(password);
+          passwordSent = true;
+          passwordQuietUntil = Date.now() + 2200;
+          live.login.write(`${password}\n`);
+          arm(45000);
+          setTimeout(() => {
+            if (stage !== "auth" || otpHolding || hub().needsOtp || hub().needsPassword) return;
+            const now = classifySshTail(transcript);
+            if (now === "otp" || now === "password" || now === "hostkey") return;
+            stage = "probe";
+          }, 2200);
+        })
+        .catch((err: Error) => finish(err));
+    }
+
     function askForOtp() {
       if (otpHolding || stage !== "auth" || my !== hub().gen) return;
       otpHolding = true;
       clearTimeout(timer);
-      const provided = otp;
-      otp = "";
-      const pending = provided ? Promise.resolve(provided) : waitForOtp();
-      pending
+      waitForSecret("otp")
         .then((code) => {
           otpHolding = false;
           if (my !== hub().gen || !live.login) return;
-          typedSecrets.push(code);
+          addSecret(code);
           otpQuietUntil = Date.now() + 1500;
           live.login.write(`${code}\n`);
           arm(45000);
@@ -554,141 +745,48 @@ export async function connectRemote(input: {
           }, 1600);
         })
         .catch((err: Error) => finish(err));
-    };
+    }
+
     live.login!.onExit(() => {
       if (stage !== "key") finish(new Error("ssh wurde vor der Anmeldung beendet."));
+      else pushView("\r\nssh beendet.\r\n");
     });
   });
 
-  try {
-    await done;
-  } catch (err) {
-    if (my !== hub().gen) {
-      await cleanup(live);
-      return remoteStatus();
-    }
-    fail((err as Error).message);
-    return remoteStatus();
-  }
-  if (my !== hub().gen) {
-    await cleanup(live);
-    return remoteStatus();
-  }
-
-  state.live = live;
-  state.connecting = false;
-  state.needsOtp = false;
-  state.error = "";
-  rememberLogin({ ...input, password, user: target.user, host: target.host });
-  void startCodium(my).catch(() => {});
-  return remoteStatus();
-}
-
-async function startCodium(gen: number): Promise<void> {
-  const live = hub().live;
-  if (!live || gen !== hub().gen) return;
-  const remotePort = 43000 + Math.floor(Math.random() * 800);
-  const script = buildCodiumRemoteScript(remotePort);
-  let output = "";
-  // One remote argv. `bash -s` would wait for stdin EOF, which a PTY never sends.
-  const term = pty.spawn(
-    "ssh",
-    [
-      "-T",
-      ...sshBaseArgs({ knownHosts: live.knownHosts, identity: live.keyPath }),
-      `${live.user}@${live.host}`,
-      `bash -c ${shellQuote(script)}`,
-    ],
-    {
-      name: "xterm-256color",
-      cols: 80,
-      rows: 24,
-      cwd: spawnHome(),
-      env: process.env as Record<string, string>,
-    },
-  );
-  live.codium = term;
-  const found = await new Promise<{ port: number; path: string }>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("VS Codium hat nicht geantwortet.")), 30000);
-    term.onData((chunk) => {
-      output += chunk;
-      const parsed = parseCodiumOutput(output);
-      if (parsed.missing) {
-        clearTimeout(timer);
-        reject(new Error("Auf dem Server fehlt VS Codium (`codium` oder `code serve-web`)."));
+  done
+    .then(() => {
+      const current = hub();
+      if (my !== current.gen) {
+        if (current.pending === live) current.pending = null;
+        void cleanup(live);
         return;
       }
-      if (parsed.ready && parsed.port) {
-        clearTimeout(timer);
-        resolve({ port: parsed.port, path: parsed.path });
+      current.pending = null;
+      current.live = live;
+      current.connecting = false;
+      current.needsOtp = false;
+      current.needsPassword = false;
+      current.error = "";
+      const save = current.pendingSave;
+      if (save) {
+        rememberLogin({
+          user: live.user,
+          host: live.host,
+          password: save.password,
+          saveLogin: save.saveLogin,
+          dir: save.dir,
+        });
+      } else {
+        writeSettings({ remoteDir: current.pendingDir || "~" });
       }
+      current.pendingSave = null;
+    })
+    .catch((err: Error) => {
+      if (my !== hub().gen) {
+        if (hub().pending === live) hub().pending = null;
+        void cleanup(live);
+        return;
+      }
+      fail(err.message);
     });
-    term.onExit(() => {
-      clearTimeout(timer);
-      reject(new Error("VS Codium auf dem Server wurde beendet."));
-    });
-  }).catch((err: Error) => {
-    if (hub().live === live) live.codiumError = err.message;
-    return null;
-  });
-  if (!found || hub().live !== live || gen !== hub().gen) return;
-
-  const localTunnel = await freePort();
-  const tunnel = spawn(
-    "ssh",
-    [
-      "-N",
-      "-L",
-      `127.0.0.1:${localTunnel}:127.0.0.1:${found.port}`,
-      ...sshBaseArgs({ knownHosts: live.knownHosts, identity: live.keyPath }),
-      `${live.user}@${live.host}`,
-    ],
-    { stdio: "ignore" },
-  );
-  live.tunnel = tunnel;
-  try {
-    await waitForPort(localTunnel, 10000);
-    live.proxy = await startCodiumProxy(localTunnel);
-    const pathPart = found.path.startsWith("/") ? found.path : `/${found.path}`;
-    live.codiumUrl = `http://127.0.0.1:${live.proxy.port}${pathPart}`;
-    live.codiumError = "";
-  } catch (err) {
-    live.codiumError = (err as Error).message;
-  }
-}
-
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const addr = server.address();
-      const port = typeof addr === "object" && addr ? addr.port : 0;
-      server.close(() => resolve(port));
-    });
-  });
-}
-
-export async function retryCodium(): Promise<RemotePublicStatus> {
-  const state = hub();
-  if (!state.live) {
-    state.error = "Nicht mit dem Server verbunden.";
-    return remoteStatus();
-  }
-  killPty(state.live.codium);
-  state.live.codium = null;
-  if (state.live.tunnel) {
-    try {
-      state.live.tunnel.kill();
-    } catch {
-      /* already gone */
-    }
-    state.live.tunnel = null;
-  }
-  state.live.proxy?.close();
-  state.live.proxy = null;
-  state.live.codiumUrl = "";
-  state.live.codiumError = "";
-  void startCodium(state.gen).catch(() => {});
-  return remoteStatus();
 }

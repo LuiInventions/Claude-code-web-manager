@@ -34,11 +34,10 @@ export interface RemotePublicStatus {
   hasSavedPassword: boolean;
   error: string;
   detail: string;
+  /** True while the ssh process is waiting because it asked for the password. */
+  needsPassword: boolean;
   /** True while ssh is waiting because the server asked for a 2FA code. */
   needsOtp: boolean;
-  codiumReady: boolean;
-  codiumUrl: string;
-  codiumError: string;
 }
 
 /** Stable id for a saved server. Host and user are already validated. */
@@ -166,6 +165,17 @@ export function parseCodiumOutput(raw: string): {
   if (!url) return { missing: false, ready: false, port: null, path: "/" };
   const path = url[2] && url[2].startsWith("/") ? url[2] : "/";
   return { missing: false, ready: true, port: Number(url[1]), path };
+}
+
+/** Flags for `codium`/`code serve-web` on loopback. Only adds options the help text lists. */
+export function codiumServeArgs(help: string, port: number): string[] {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error("bad codium port");
+  }
+  const args = ["serve-web", "--host", "127.0.0.1", "--port", String(port)];
+  if (help.includes("without-connection-token")) args.push("--without-connection-token");
+  if (help.includes("accept-server-license-terms")) args.push("--accept-server-license-terms");
+  return args;
 }
 
 export function nullDevice(): string {

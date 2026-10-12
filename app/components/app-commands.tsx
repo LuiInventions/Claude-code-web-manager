@@ -6,6 +6,7 @@ export type SectionId =
   | "dashboard"
   | "launcher"
   | "sessions"
+  | "remote"
   | "codium"
   | "github"
   | "settings";

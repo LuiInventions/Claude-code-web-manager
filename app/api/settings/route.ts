@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
     openaiModel?: string;
     cartesiaVoice?: string;
     codeCli?: string;
+    launcherLocalPath?: string;
     /** Sent by the setup screen on "Loslegen" — stamps this app version. */
     setupComplete?: boolean;
   };
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest) {
     cartesiaVoice?: string;
     codeCli?: CodeCliId;
     setupVersion?: string;
+    launcherLocalPath?: string;
   } = {};
 
   if (typeof body.projectsDir === "string") {
@@ -50,6 +52,13 @@ export async function POST(req: NextRequest) {
   if (typeof body.aiModel === "string") patch.aiModel = body.aiModel.trim();
   if (typeof body.openaiModel === "string") patch.openaiModel = body.openaiModel.trim();
   if (typeof body.cartesiaVoice === "string") patch.cartesiaVoice = body.cartesiaVoice.trim();
+  if (typeof body.launcherLocalPath === "string") {
+    const dir = body.launcherLocalPath.trim();
+    if (dir && !existsSync(dir)) {
+      return Response.json({ error: `Ordner existiert nicht: ${dir}` }, { status: 400 });
+    }
+    patch.launcherLocalPath = dir;
+  }
   if (typeof body.codeCli === "string" && body.codeCli.trim()) {
     const id = body.codeCli.trim();
     if (!isCodeCliId(id)) {

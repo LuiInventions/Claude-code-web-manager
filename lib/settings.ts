@@ -55,6 +55,11 @@ export interface Settings {
   remoteDir?: string;
   /** Whether the last connect asked to keep host, user, and password. */
   remoteSaveLogin?: boolean;
+  /**
+   * Last folder chosen under Local in the launcher. VS Codium opens here.
+   * Not a remote path.
+   */
+  launcherLocalPath?: string;
 }
 
 const DATA_DIR = path.join(process.cwd(), ".data");

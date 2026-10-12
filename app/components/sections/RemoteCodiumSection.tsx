@@ -3,111 +3,78 @@
 import { useCallback, useEffect, useState } from "react";
 import { Monitor } from "lucide-react";
 import { Button } from "../ui";
-import { useAppCommands } from "../app-commands";
-import type { RemotePublicStatus } from "@/lib/remote-ssh";
 
-const EMPTY: RemotePublicStatus = {
-  connected: false,
-  connecting: false,
-  host: "",
-  user: "",
-  dir: "~",
-  serverId: "",
-  servers: [],
-  saveLogin: false,
-  hasSavedPassword: false,
+interface LocalCodiumStatus {
+  starting: boolean;
+  ready: boolean;
+  url: string;
+  error: string;
+  dir: string;
+}
+
+const EMPTY: LocalCodiumStatus = {
+  starting: false,
+  ready: false,
+  url: "",
   error: "",
-  detail: "",
-  codiumReady: false,
-  codiumUrl: "",
-  needsOtp: false,
-  codiumError: "",
+  dir: "",
 };
 
 /**
- * VS Codium on the user's own server. Login lives in the launcher under
- * Remote. This tab only embeds the editor once that ssh session is up.
+ * VS Codium on this PC, in the folder the launcher uses for Local.
+ * The remote SSH tab does not start or log into this editor.
  */
 export default function RemoteCodiumSection() {
-  const { navigate } = useAppCommands();
-  const [status, setStatus] = useState<RemotePublicStatus>(EMPTY);
+  const [status, setStatus] = useState<LocalCodiumStatus>(EMPTY);
   const [reload, setReload] = useState(0);
 
   const load = useCallback(() => {
-    fetch("/api/remote")
+    fetch("/api/codium")
       .then((r) => r.json())
-      .then((d: RemotePublicStatus) => setStatus(d))
+      .then((d: LocalCodiumStatus) => setStatus({ ...EMPTY, ...d }))
       .catch(() => {});
   }, []);
 
   useEffect(() => {
-    load();
+    void fetch("/api/codium", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "start" }),
+    }).then(() => load());
     const t = setInterval(load, 2000);
     return () => clearInterval(t);
   }, [load]);
 
   const retry = () => {
-    void fetch("/api/remote", {
+    void fetch("/api/codium", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "codium" }),
+      body: JSON.stringify({ action: "start" }),
     }).then(() => load());
   };
-
-  const disconnect = () => {
-    void fetch("/api/remote", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "disconnect" }),
-    }).then(() => load());
-  };
-
-  if (!status.connected) {
-    return (
-      <div className="grid h-full place-items-center px-6">
-        <div className="max-w-md space-y-3 text-center">
-          <Monitor className="mx-auto size-8 text-faint" />
-          <h2 className="text-sm font-semibold text-ink">VS Codium</h2>
-          <p className="text-sm text-muted">
-            Nicht mit dem Server verbunden. Die Anmeldung mit user@IP und Passwort
-            liegt im Launcher unter Remote.
-          </p>
-          <Button variant="primary" onClick={() => navigate("launcher")}>
-            Zum Launcher
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex items-center gap-3 border-b border-line px-5 py-2">
+        <Monitor className="size-4 shrink-0 text-faint" />
         <div className="mr-auto min-w-0">
           <h2 className="text-sm font-semibold text-ink">VS Codium</h2>
-          <p className="truncate text-[11px] text-faint">
-            {status.user}@{status.host}
-          </p>
+          <p className="truncate text-[11px] text-faint">{status.dir || "Lokaler Projektordner"}</p>
         </div>
-        {status.codiumUrl && (
+        {status.url && (
           <Button size="sm" onClick={() => setReload((n) => n + 1)}>
             Neu laden
           </Button>
         )}
-        {!status.codiumReady && (
-          <Button size="sm" onClick={retry}>
-            Erneut versuchen
-          </Button>
-        )}
-        <Button size="sm" variant="danger" onClick={disconnect}>
-          Trennen
+        <Button size="sm" onClick={retry}>
+          Erneut versuchen
         </Button>
       </header>
-      {status.codiumUrl ? (
+      {status.url ? (
         <iframe
-          key={`${status.codiumUrl}:${reload}`}
+          key={`${status.url}:${reload}`}
           title="VS Codium"
-          src={status.codiumUrl}
+          src={status.url}
           className="min-h-0 w-full flex-1 border-0 bg-surface"
           referrerPolicy="no-referrer"
           allow="clipboard-read; clipboard-write"
@@ -116,10 +83,10 @@ export default function RemoteCodiumSection() {
         <div className="grid flex-1 place-items-center px-6 text-center">
           <div className="max-w-md space-y-2">
             <p className="text-sm text-muted">
-              {status.codiumError || "VS Codium startet auf dem Server…"}
+              {status.error || (status.starting ? "VS Codium startet lokal…" : "VS Codium startet lokal…")}
             </p>
             <p className="text-xs text-faint">
-              Auf dem Server werden `codium` oder `code serve-web` erwartet.
+              Der Editor öffnet denselben lokalen Ordner wie der Launcher unter Local.
             </p>
           </div>
         </div>

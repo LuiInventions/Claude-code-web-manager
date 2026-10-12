@@ -3,6 +3,7 @@ import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { handleClaude } from "./claude-runner";
 import { handleClaudePty } from "./claude-pty";
+import { handleRemoteLoginWs } from "./remote-session";
 
 /**
  * Single WebSocketServer in noServer mode. server.ts forwards loopback HTTP
@@ -15,6 +16,7 @@ const KNOWN_ROUTES = new Set([
   "/ws/echo",
   "/ws/claude",
   "/ws/claude-pty",
+  "/ws/remote-login",
 ]);
 
 export function handleWsUpgrade(
@@ -37,6 +39,9 @@ function dispatch(route: string, ws: WebSocket, url: URL): void {
       break;
     case "/ws/claude-pty":
       handleClaudePty(ws, url);
+      break;
+    case "/ws/remote-login":
+      handleRemoteLoginWs(ws);
       break;
     case "/ws/echo":
       ws.send("echo-ready");

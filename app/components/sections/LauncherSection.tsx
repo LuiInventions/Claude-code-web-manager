@@ -23,7 +23,6 @@ import { Badge, Button, Textarea, cn } from "../ui";
 import type { SectionCommand } from "../app-commands";
 import { MODEL_OPTIONS, EFFORT_OPTIONS } from "@/lib/launcher-config";
 import ClaudeCmdPane from "./launcher/ClaudeCmdPane";
-import RemotePicker, { type RemoteTarget } from "./launcher/RemotePicker";
 import UsageBar from "./launcher/UsageBar";
 import { useSpeak } from "../use-speak";
 import Markdown from "../Markdown";
@@ -97,9 +96,9 @@ export default function LauncherSection({
 }) {
   const [projects, setProjects] = useState<ProjectOpt[]>([]);
   const [githubProjects, setGithubProjects] = useState<ProjectOpt[]>([]);
-  const [source, setSource] = useState<"local" | "github" | "remote">("local");
-  const [remoteTarget, setRemoteTarget] = useState<RemoteTarget | null>(null);
+  const [source, setSource] = useState<"local" | "github">("local");
   const [projectPath, setProjectPath] = useState("");
+  const localPathRef = useRef("");
   const [pathMode, setPathMode] = useState<"list" | "manual">("list");
   const [raw, setRaw] = useState("");
   const [improved, setImproved] = useState("");
@@ -136,24 +135,8 @@ export default function LauncherSection({
   const blocked =
     (codeCli?.id ?? "claude") === "claude" &&
     !!(usage?.blockedUntil && usage.blockedUntil > nowTs);
-  const remoteMode = source === "remote";
-  const canStart = remoteMode ? Boolean(remoteTarget?.ready) : Boolean(projectPath);
-  const startBlocked = remoteMode ? false : blocked;
-  const onRemoteTarget = useCallback((target: RemoteTarget | null) => {
-    setRemoteTarget((prev) => {
-      if (!target && !prev) return prev;
-      if (
-        target &&
-        prev &&
-        target.ready === prev.ready &&
-        target.dir === prev.dir &&
-        target.label === prev.label
-      ) {
-        return prev;
-      }
-      return target;
-    });
-  }, []);
+  const canStart = Boolean(projectPath);
+  const startBlocked = blocked;
 
   // Drop a model/effort that belongs to the previously selected CLI.
   useEffect(() => {
@@ -194,9 +177,14 @@ export default function LauncherSection({
             hasAiKey?: boolean;
             codeCli?: string;
             codeClis?: CodeCliOpt[];
+            launcherLocalPath?: string;
           }) => {
             if (cancelled) return;
             setHasAiKey(Boolean(c.hasAiKey));
+            if (c.launcherLocalPath) {
+              localPathRef.current = c.launcherLocalPath;
+              setProjectPath((prev) => prev || (source === "local" ? c.launcherLocalPath || "" : ""));
+            }
             const list = c.codeClis ?? [];
             const next = list.find((x) => x.id === c.codeCli) ?? list[0] ?? null;
             setCodeCli((prev) => (prev?.id === next?.id ? prev : next));
@@ -209,7 +197,21 @@ export default function LauncherSection({
       cancelled = true;
       clearInterval(id);
     };
-  }, []);
+  }, [source]);
+
+  // VS Codium opens this same local folder. Remember it when Local is selected.
+  useEffect(() => {
+    if (source !== "local" || !projectPath) return;
+    localPathRef.current = projectPath;
+    const t = setTimeout(() => {
+      void fetch("/api/settings", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launcherLocalPath: projectPath }),
+      });
+    }, 400);
+    return () => clearTimeout(t);
+  }, [source, projectPath]);
 
   // Also offer the connected GitHub repos (cloned ones) in the same dropdown.
   // Poll instead of fetching once: on first app start the repos are still
@@ -338,12 +340,9 @@ export default function LauncherSection({
   // symmetric grid. Each box is an independent interactive session. Empty
   // prompts are allowed (interactive REPL with no initial task).
   const startBatch = (prompts: string[]) => {
-    if (prompts.length === 0) return;
-    if (remoteMode) {
-      if (!remoteTarget?.ready) return;
-    } else if (!projectPath || blocked) return;
-    const cwd = remoteMode ? remoteTarget!.dir : projectPath;
-    const pn = remoteMode ? remoteTarget!.label : nameForPath(projectPath);
+    if (prompts.length === 0 || !projectPath || blocked) return;
+    const cwd = projectPath;
+    const pn = nameForPath(projectPath);
     const po = pendingOriginRef.current;
     const stamp = Date.now().toString(36);
     const batchId = `b_${stamp}${Math.random().toString(36).slice(2, 5)}`;
@@ -361,10 +360,8 @@ export default function LauncherSection({
         prompt: pr,
         model,
         effort,
-        origin: remoteMode ? undefined : po?.origin,
-        repoFullName: remoteMode ? undefined : po?.repoFullName,
-        where: remoteMode ? "remote" : undefined,
-        cli: remoteMode ? codeCli?.id : undefined,
+        origin: po?.origin,
+        repoFullName: po?.repoFullName,
       },
     }));
     setSessions((prev) => [...batch, ...prev]);
@@ -635,20 +632,18 @@ export default function LauncherSection({
               <select
                 value={source}
                 onChange={(e) => {
-                  setSource(e.target.value as "local" | "github" | "remote");
-                  setProjectPath("");
+                  const next = e.target.value as "local" | "github";
+                  if (source === "local") localPathRef.current = projectPath;
+                  setSource(next);
+                  setProjectPath(next === "local" ? localPathRef.current : "");
                 }}
                 aria-label="Projektquelle"
                 className="h-9 w-full cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
               >
                 <option value="local">Local</option>
                 <option value="github">GitHub</option>
-                <option value="remote">Remote</option>
               </select>
-              {source === "remote" ? (
-                <RemotePicker onTarget={onRemoteTarget} />
-              ) : (
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
                   {pathMode === "list" ? (
                     <select
                       value={projectPath}
@@ -688,7 +683,6 @@ export default function LauncherSection({
                     )}
                   </button>
                 </div>
-              )}
             </div>
 
             <div className="flex items-center gap-2">

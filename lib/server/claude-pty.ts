@@ -1,5 +1,6 @@
 import { WebSocket } from "ws";
 import * as pty from "node-pty";
+import fs from "node:fs";
 import os from "node:os";
 import { resolveClaudeBin } from "./claude-runner";
 import { getConfig } from "../config";
@@ -289,7 +290,8 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
     }
     bin = remote.bin;
     spawnArgs = remote.args;
-    spawnCwd = os.homedir();
+    const home = process.env.USERPROFILE || process.env.HOME || "";
+    spawnCwd = home && fs.existsSync(home) ? home : process.cwd();
     env = process.env as Record<string, string>;
   } else {
     bin = cli === "claude" ? resolveClaudeBin() : resolveCliBin(spec.bin) ?? spec.bin;

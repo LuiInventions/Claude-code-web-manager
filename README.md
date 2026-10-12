@@ -20,9 +20,9 @@
 </p>
 
 > [!TIP]
-> **v1.9.4** launches **Claude Code**, **Grok**, or **ChatGPT Codex** locally or
-> on your own server. In the launcher, choose **Local**, **GitHub**, or **Remote**.
-> Saved servers sit under Remote, and **Neu** adds one. **VS Codium** is its own tab.
+> **v1.9.5** launches **Claude Code**, **Grok**, or **ChatGPT Codex** locally or,
+> from the **Remote** tab, on your own server. The launcher is **Local** or **GitHub**.
+> **VS Codium** is a local editor in that same Local folder.
 > The Windows Setup installs from one app archive. v1.8.0 was withdrawn.
 > [**Changelog**](CHANGELOG.md)
 

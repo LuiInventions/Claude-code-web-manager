@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCodiumRemoteScript,
   buildRemoteCliCommand,
+  codiumServeArgs,
   classifySshTail,
   parseCodiumOutput,
   parseLoginTarget,
@@ -18,6 +19,26 @@ describe("remote ssh login", () => {
   it("accepts an IP and a user@host paste", () => {
     expect(parseLoginTarget("10.0.0.8", "luis")).toEqual({ user: "luis", host: "10.0.0.8" });
     expect(parseLoginTarget("luis@10.0.0.8", "")).toEqual({ user: "luis", host: "10.0.0.8" });
+  });
+
+  it("builds serve-web flags only when the help text lists them", () => {
+    expect(codiumServeArgs("serve-web --host --port", 43100)).toEqual([
+      "serve-web",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "43100",
+    ]);
+    expect(codiumServeArgs("without-connection-token accept-server-license-terms", 1)).toEqual([
+      "serve-web",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "1",
+      "--without-connection-token",
+      "--accept-server-license-terms",
+    ]);
+    expect(() => codiumServeArgs("serve-web", 0)).toThrow();
   });
 
   it("rejects option injection and a missing user", () => {

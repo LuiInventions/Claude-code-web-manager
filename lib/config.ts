@@ -158,6 +158,8 @@ export interface PublicConfig {
   port: number;
   /** Active coding CLI. */
   codeCli: CodeCliId;
+  /** Last Local folder chosen in the launcher. Empty until one is picked. */
+  launcherLocalPath: string;
   /** Every coding CLI, with its model/effort dropdowns and whether the binary is on PATH. */
   codeClis: {
     id: CodeCliId;
@@ -201,6 +203,7 @@ export function getPublicConfig(): PublicConfig {
     host: c.host,
     port: c.port,
     codeCli: c.codeCli,
+    launcherLocalPath: settings.launcherLocalPath?.trim() || "",
     codeClis: CODE_CLIS.map((cli) => ({
       id: cli.id,
       label: cli.label,

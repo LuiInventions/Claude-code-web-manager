@@ -1,11 +1,11 @@
 import type { NextRequest } from "next/server";
 import {
-  connectRemote,
+  beginRemote,
   disconnectRemote,
   remoteStatus,
-  retryCodium,
   setRemoteDir,
   submitRemoteOtp,
+  submitRemotePassword,
 } from "@/lib/server/remote-session";
 
 export const dynamic = "force-dynamic";
@@ -29,9 +29,6 @@ export async function POST(req: NextRequest) {
     await disconnectRemote();
     return Response.json(remoteStatus());
   }
-  if (action === "codium") {
-    return Response.json(await retryCodium());
-  }
   if (action === "dir") {
     const dir = typeof body.dir === "string" && body.dir.trim() ? body.dir.trim() : "~";
     setRemoteDir(dir);
@@ -42,7 +39,16 @@ export async function POST(req: NextRequest) {
     if (status.error && !status.needsOtp) return Response.json(status, { status: 400 });
     return Response.json(status);
   }
-  if (action !== "connect") {
+  if (action === "password") {
+    const status = submitRemotePassword({
+      password: typeof body.password === "string" ? body.password : "",
+      saveLogin: body.saveLogin === true,
+      useSaved: body.useSaved === true,
+    });
+    if (status.error && !status.needsPassword) return Response.json(status, { status: 400 });
+    return Response.json(status);
+  }
+  if (action !== "begin") {
     return Response.json({ error: "Unbekannte Aktion." }, { status: 400 });
   }
 
@@ -50,14 +56,11 @@ export async function POST(req: NextRequest) {
   if (now.connecting || now.connected) {
     return Response.json(now, { status: 409 });
   }
-  const status = await connectRemote({
+  const status = await beginRemote({
     host: typeof body.host === "string" ? body.host : "",
     user: typeof body.user === "string" ? body.user : "",
-    password: typeof body.password === "string" ? body.password : "",
-    otp: typeof body.otp === "string" ? body.otp : "",
-    saveLogin: body.saveLogin === true,
     dir: typeof body.dir === "string" ? body.dir : "",
   });
-  if (!status.connected) return Response.json(status, { status: 400 });
+  if (status.error && !status.connecting) return Response.json(status, { status: 400 });
   return Response.json(status);
 }

@@ -9,6 +9,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Rocket,
+  Server,
   Settings as SettingsIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -26,6 +27,7 @@ import SessionsSection from "./sections/SessionsSection";
 import SettingsSection from "./sections/SettingsSection";
 import GithubSection from "./sections/GithubSection";
 import RemoteCodiumSection from "./sections/RemoteCodiumSection";
+import RemoteSection from "./sections/RemoteSection";
 
 interface SectionDef {
   id: SectionId;
@@ -37,7 +39,8 @@ interface SectionDef {
 const MAIN_SECTIONS: SectionDef[] = [
   { id: "launcher", label: "Launcher", desc: "Improve a prompt & launch a code CLI", icon: Rocket },
   { id: "sessions", label: "Sessions", desc: "Live code-CLI sessions, visualized", icon: Gamepad2 },
-  { id: "codium", label: "VS Codium", desc: "Editor auf dem eigenen Server", icon: Monitor },
+  { id: "remote", label: "Remote", desc: "SSH to your server and start a code CLI", icon: Server },
+  { id: "codium", label: "VS Codium", desc: "Editor in the local project folder", icon: Monitor },
   { id: "dashboard", label: "Local Projects", desc: "All your local projects at a glance", icon: LayoutDashboard },
   { id: "github", label: "GitHub", desc: "Connect repos & edit with your code CLI", icon: Code },
 ];
@@ -157,6 +160,8 @@ function renderSection(id: SectionId, command: SectionCommand | null) {
       return <LauncherSection command={command} />;
     case "sessions":
       return <SessionsSection />;
+    case "remote":
+      return <RemoteSection />;
     case "codium":
       return <RemoteCodiumSection />;
     case "github":

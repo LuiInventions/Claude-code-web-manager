@@ -4,6 +4,16 @@ All notable changes to Claude Code Control Center are documented here. Versions
 follow `package.json`; each `v*` tag publishes a self-contained Windows installer
 (`cc-control-center-Setup-<version>.exe`) via GitHub Actions.
 
+## 1.9.5 — 2026-10-12
+
+### Remote tab, and VS Codium stays local
+
+- **Remote** is its own tab. The launcher is Local and GitHub only.
+- The center asks for `user@IP` first. SSH starts in the background. The password field appears only after that ssh process asks for a password, and the 2FA field only after the server asks for a code.
+- The ssh session is visible on the right from the moment it starts. Once connected, the left side can start the chosen code CLI with **Start without prompt** and ×1–×6.
+- **VS Codium** no longer uses the server login. It opens `codium` or `code serve-web` in the same local folder the launcher uses for Local.
+- SSH is started from the real `ssh.exe` path. A missing OpenSSH install no longer shows up as `File not found`.
+
 ## 1.9.4 — 2026-10-12
 
 ### Remote login — two fields, then the code if the server asks
