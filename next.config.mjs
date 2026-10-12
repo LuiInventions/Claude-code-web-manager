@@ -1,33 +1,31 @@
 import { createRequire } from "node:module";
 
 // Next's file tracer globs absolute paths. On Windows that walk enters the
-// user profile and scandir throws EPERM on legacy junctions (Application
-// Data, Cookies, …). Treat those as empty so the build can finish. The
-// junctions are not app files.
+// user profile and scandir throws EPERM on every legacy junction it meets
+// (Application Data, Cookies, Documents\My Music, …). Directories outside
+// this repo that cannot be read are not app files; treat them as empty.
 const require = createRequire(import.meta.url);
 const fs = require("node:fs");
-const JUNCTION =
-  /(?:^|[\\/])(Application Data|Cookies|Local Settings|My Documents|NetHood|PrintHood|Recent|SendTo|Start Menu|Templates)$/i;
+const path = require("node:path");
+const projectRoot = process.cwd();
 
-function isProfileJunction(value) {
-  return typeof value === "string" && JUNCTION.test(value);
+function outsideProject(value) {
+  if (typeof value !== "string" || value.length === 0) return false;
+  const rel = path.relative(projectRoot, path.resolve(value));
+  return rel.startsWith("..") || path.isAbsolute(rel);
 }
 
-function isDeniedJunction(err, target) {
-  return (
-    err &&
-    (err.code === "EPERM" || err.code === "EACCES") &&
-    (isProfileJunction(String(err.path || "")) || isProfileJunction(target))
-  );
+function isDeniedOutside(err, target) {
+  if (!err || (err.code !== "EPERM" && err.code !== "EACCES")) return false;
+  return outsideProject(String(err.path || "")) || outsideProject(target);
 }
 
 const readdirSync = fs.readdirSync;
 fs.readdirSync = function (target, options) {
-  if (isProfileJunction(target)) return [];
   try {
     return readdirSync.call(this, target, options);
   } catch (err) {
-    if (isDeniedJunction(err, target)) return [];
+    if (isDeniedOutside(err, target)) return [];
     throw err;
   }
 };
@@ -42,12 +40,8 @@ fs.readdir = function (target, options, callback) {
     opts = undefined;
   }
   if (typeof cb !== "function") return readdir.call(this, target, options, callback);
-  if (isProfileJunction(target)) {
-    cb(null, []);
-    return;
-  }
   const done = (err, entries) => {
-    if (isDeniedJunction(err, target)) cb(null, []);
+    if (isDeniedOutside(err, target)) cb(null, []);
     else cb(err, entries);
   };
   if (opts === undefined) return readdir.call(this, target, done);
@@ -56,11 +50,10 @@ fs.readdir = function (target, options, callback) {
 
 const readdirPromise = fs.promises.readdir;
 fs.promises.readdir = async function (target, options) {
-  if (isProfileJunction(target)) return [];
   try {
     return await readdirPromise.call(this, target, options);
   } catch (err) {
-    if (isDeniedJunction(err, target)) return [];
+    if (isDeniedOutside(err, target)) return [];
     throw err;
   }
 };
