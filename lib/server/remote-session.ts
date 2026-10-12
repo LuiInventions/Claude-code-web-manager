@@ -20,6 +20,17 @@ import {
 } from "../remote-ssh";
 import { startCodiumProxy } from "./codium-proxy";
 
+/** Temp dir for the throwaway SSH key.
+ *  Do not call os.tmpdir() or path.join() here. Next's file tracer evaluates
+ *  those and on Windows scans the user profile, which fails on the
+ *  "Application Data" junction. Environment values stay unknown to the tracer.
+ */
+function remoteKeyPrefix(): string {
+  const env = process.env;
+  const root = env.TMPDIR || env.TEMP || env.TMP || "/tmp";
+  return root + path.sep + "ccc-remote-";
+}
+
 export type { RemotePublicStatus };
 
 /**
@@ -329,7 +340,7 @@ export async function connectRemote(input: {
   state.live = null;
   await cleanup(previous);
 
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccc-remote-"));
+  const dir = fs.mkdtempSync(remoteKeyPrefix());
   const keyPath = path.join(dir, "id_ed25519");
   const knownHosts = path.join(dir, "known_hosts");
   const generated = spawnSync(
