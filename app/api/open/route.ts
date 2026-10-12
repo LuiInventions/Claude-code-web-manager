@@ -1,5 +1,8 @@
 import type { NextRequest } from "next/server";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { openInExplorer } from "@/lib/fs-explorer";
+import { getConfig } from "@/lib/config";
 
 // Reveal a path in Windows Explorer.
 export async function POST(req: NextRequest) {
@@ -11,7 +14,14 @@ export async function POST(req: NextRequest) {
   }
   if (!body.path) return Response.json({ error: "missing path" }, { status: 400 });
   try {
-    await openInExplorer(body.path);
+    const abs = path.resolve(body.path);
+    const { projectsDir, githubDir } = getConfig();
+    // The Local and GitHub rails open these two folders. Create them if the
+    // user has not cloned or saved anything into them yet.
+    if (abs === path.resolve(projectsDir) || abs === path.resolve(githubDir)) {
+      await fs.mkdir(abs, { recursive: true });
+    }
+    await openInExplorer(abs);
     return Response.json({ ok: true });
   } catch (err) {
     return Response.json({ error: (err as Error).message }, { status: 400 });

@@ -5,6 +5,16 @@ follow `package.json`. From 1.9.6 each `v*` tag publishes
 `jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
 `cc-control-center-Setup-<version>.exe`.
 
+## 1.9.14 — 2026-10-12
+
+### GitHub repos, the Local folder, and Dusk
+
+- The GitHub tab starts from a dropdown of cloned repos. Without a connected GitHub account it shows a warning and no folder field.
+- Files a CLI changes inside a cloned repo still show up on the Repos tab and push from there.
+- Dusk is the theme when none is saved.
+- The Local tab fills in the Local Projects folder from Settings.
+- **Ordner öffnen** on GitHub opens the folder that holds the clones. On Local it opens the Settings projects folder.
+
 ## 1.9.13 — 2026-10-12
 
 ### Rails, tab order, and back

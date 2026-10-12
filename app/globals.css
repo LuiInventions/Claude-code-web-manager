@@ -6,65 +6,65 @@
 }
 
 /*
-  Jarvis Control Center — black, flat, quiet.
-  One neutral accent. No HUD glow.
+  Jarvis Control Center — flat, quiet surfaces.
+  Dusk is the default palette. A saved theme overrides it.
 */
 
 :root,
-[data-theme="ink"] {
-  color-scheme: dark;
-
-  --canvas: #050505;
-  --elevated: #0c0c0c;
-  --surface: #121212;
-  --raised: #181818;
-  --selected: #222222;
-
-  --line: #1c1c1c;
-  --line-strong: #2a2a2a;
-
-  --ink: #f4f4f5;
-  --muted: #a1a1aa;
-  --faint: #71717a;
-
-  --accent: #d4d4d8;
-  --accent-hover: #e4e4e7;
-  --accent-ink: #111111;
-
-  --hud-blue: #d4d4d8;
-  --hud-glow: transparent;
-  --glass-bg: rgba(12, 12, 12, 0.72);
-  --glass-border: rgba(255, 255, 255, 0.06);
-
-  /* Semantic */
-  --running: #22c55e; /* live session / clean git / success */
-  --running-dim: #14331f;
-  --warn: #f59e0b;
-  --danger: #ef4444;
-  --danger-hover: #f87171;
-  --info: #38bdf8;
-}
-
 [data-theme="dusk"] {
   color-scheme: dark;
+
   --canvas: #0b0912;
   --elevated: #12101c;
   --surface: #181528;
   --raised: #211c33;
   --selected: #2a2440;
+
   --line: #2a2440;
   --line-strong: #3a3358;
+
   --ink: #f4f1fb;
   --muted: #b7adc9;
   --faint: #887fa0;
+
   --accent: #c4b5fd;
   --accent-hover: #ddd6fe;
   --accent-ink: #1a1428;
+
   --hud-blue: #c4b5fd;
+  --hud-glow: transparent;
   --glass-bg: rgba(18, 16, 28, 0.72);
   --glass-border: rgba(196, 181, 253, 0.14);
-  --running: #86efac;
+
+  /* Semantic */
+  --running: #86efac; /* live session / clean git / success */
+  --running-dim: #14331f;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+  --danger-hover: #f87171;
   --info: #a5b4fc;
+}
+
+[data-theme="ink"] {
+  color-scheme: dark;
+  --canvas: #050505;
+  --elevated: #0c0c0c;
+  --surface: #121212;
+  --raised: #181818;
+  --selected: #222222;
+  --line: #1c1c1c;
+  --line-strong: #2a2a2a;
+  --ink: #f4f4f5;
+  --muted: #a1a1aa;
+  --faint: #71717a;
+  --accent: #d4d4d8;
+  --accent-hover: #e4e4e7;
+  --accent-ink: #111111;
+  --hud-blue: #d4d4d8;
+  --glass-bg: rgba(12, 12, 12, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --running: #22c55e;
+  --info: #38bdf8;
 }
 
 [data-theme="moss"] {

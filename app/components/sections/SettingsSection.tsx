@@ -205,7 +205,7 @@ export default function SettingsSection() {
           />
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {THEMES.map((theme) => {
-              const on = (cfg.theme || "ink") === theme.id;
+              const on = (cfg.theme || "dusk") === theme.id;
               return (
                 <button
                   key={theme.id}
@@ -274,7 +274,7 @@ export default function SettingsSection() {
           <Label
             icon={FolderOpen}
             title="Local Projects folder"
-            hint="Used by the project index. Open a folder from Local or GitHub to start there."
+            hint="The Local tab fills this folder in automatically. Ordner öffnen opens it."
           />
           <div className="flex gap-2">
             <Input

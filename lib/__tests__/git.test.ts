@@ -1,3 +1,8 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { describe, it, expect } from "vitest";
 import {
   parseGitLog,
@@ -5,7 +10,12 @@ import {
   buildAuthHeaderArg,
   parsePorcelainStatus,
   parseDiffNameStatus,
+  gitPushPreview,
+  gitCommitAll,
 } from "../git";
+import { findRepoPath, type StoredRepo } from "../github-store";
+
+const pexec = promisify(execFile);
 
 const US = "\x1f"; // field separator used in the git pretty-format
 
@@ -87,5 +97,34 @@ describe("buildAuthHeaderArg", () => {
     const args = buildAuthHeaderArg("ghp_secret");
     const expected = Buffer.from("x-access-token:ghp_secret").toString("base64");
     expect(args).toEqual(["-c", `http.extraheader=AUTHORIZATION: basic ${expected}`]);
+  });
+});
+
+describe("clone folder updates", () => {
+  it("lists a file written in the clone the Repos tab would push", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccc-clone-"));
+    const run = (args: string[]) => pexec("git", ["-C", dir, ...args], { windowsHide: true });
+    try {
+      await run(["init", "-b", "main"]);
+      await run(["config", "user.email", "test@example.com"]);
+      await run(["config", "user.name", "Test"]);
+      fs.writeFileSync(path.join(dir, "readme.txt"), "a\n");
+      await run(["add", "readme.txt"]);
+      await run(["commit", "-m", "init"]);
+      fs.writeFileSync(path.join(dir, "from-cli.txt"), "edited by cli\n");
+
+      const localPath = findRepoPath(
+        [{ fullName: "luis/demo", localPath: dir } as StoredRepo],
+        "luis/demo",
+      );
+      expect(localPath).toBe(dir);
+      const preview = await gitPushPreview(localPath!);
+      expect(preview.files.map((f) => f.path)).toContain("from-cli.txt");
+      expect(await gitCommitAll(localPath!, "Update via Control Center")).toBe(true);
+      const after = await gitPushPreview(localPath!);
+      expect(after.files.find((f) => f.path === "from-cli.txt")).toBeUndefined();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

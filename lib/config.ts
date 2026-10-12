@@ -161,7 +161,9 @@ export interface PublicConfig {
   codeCli: CodeCliId;
   /** Last Local folder chosen in the launcher. Empty until one is picked. */
   launcherLocalPath: string;
-  /** Active palette. */
+  /** Folder that holds cloned GitHub repos. */
+  githubDir: string;
+  /** Active palette. Dusk when the user has not chosen one. */
   theme: ThemeId;
   /** Every coding CLI, with its model/effort dropdowns and whether the binary is on PATH. */
   codeClis: {
@@ -207,7 +209,8 @@ export function getPublicConfig(): PublicConfig {
     port: c.port,
     codeCli: c.codeCli,
     launcherLocalPath: settings.launcherLocalPath?.trim() || "",
-    theme: settings.theme && isThemeId(settings.theme) ? settings.theme : "ink",
+    githubDir: c.githubDir,
+    theme: settings.theme && isThemeId(settings.theme) ? settings.theme : "dusk",
     codeClis: CODE_CLIS.map((cli) => ({
       id: cli.id,
       label: cli.label,

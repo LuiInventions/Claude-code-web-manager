@@ -31,6 +31,19 @@ import { numberInstances, type WindowInstance } from "@/lib/window-instances";
 interface ProjectOpt {
   name: string;
   path: string;
+  fullName?: string;
+}
+
+function normPath(p: string): string {
+  return p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+/** True when `child` is `root` or a folder inside it. */
+function sameOrInside(child: string, root: string): boolean {
+  if (!child || !root) return false;
+  const c = normPath(child);
+  const r = normPath(root);
+  return c === r || c.startsWith(`${r}/`);
 }
 type Status = "running" | "done" | "error" | "stopped";
 
@@ -98,6 +111,7 @@ export default function LauncherSection({
   const source = sourceLock;
   const [projects, setProjects] = useState<ProjectOpt[]>([]);
   const [githubProjects, setGithubProjects] = useState<ProjectOpt[]>([]);
+  const [githubConnected, setGithubConnected] = useState(false);
   const [projectPath, setProjectPath] = useState("");
   const localPathRef = useRef("");
   const [pathMode, setPathMode] = useState<"list" | "manual">("list");
@@ -179,12 +193,16 @@ export default function LauncherSection({
             codeCli?: string;
             codeClis?: CodeCliOpt[];
             launcherLocalPath?: string;
+            projectsDir?: string;
           }) => {
             if (cancelled) return;
             setHasAiKey(Boolean(c.hasAiKey));
-            if (c.launcherLocalPath) {
-              localPathRef.current = c.launcherLocalPath;
-              setProjectPath((prev) => prev || (source === "local" ? c.launcherLocalPath || "" : ""));
+            if (c.launcherLocalPath) localPathRef.current = c.launcherLocalPath;
+            // Local starts in the projects folder from Settings. A folder the
+            // user already picked in this visit stays put.
+            const folder = (c.projectsDir || "").trim();
+            if (source === "local" && folder) {
+              setProjectPath((prev) => prev || folder);
             }
             const list = c.codeClis ?? [];
             const next = list.find((x) => x.id === c.codeCli) ?? list[0] ?? null;
@@ -201,10 +219,16 @@ export default function LauncherSection({
   }, [source]);
 
   useEffect(() => {
-    if (source !== "github" || projectPath) return;
-    const first = githubProjects[0]?.path;
-    if (first) setProjectPath(first);
-  }, [source, projectPath, githubProjects]);
+    if (source !== "github") return;
+    if (!githubConnected) {
+      setProjectPath("");
+      return;
+    }
+    setProjectPath((prev) => {
+      if (githubProjects.some((p) => sameOrInside(prev, p.path))) return prev;
+      return githubProjects[0]?.path ?? "";
+    });
+  }, [source, githubConnected, githubProjects]);
 
   // VS Codium opens this same local folder. Remember it when Local is selected.
   useEffect(() => {
@@ -232,15 +256,21 @@ export default function LauncherSection({
         .then((r) => r.json())
         .then((d) => {
           if (cancelled) return;
+          setGithubConnected(Boolean(d?.connected));
           const repos = (d?.repos ?? []) as Array<{
             name: string;
+            fullName?: string;
             localPath: string;
             cloneStatus: string;
           }>;
           setGithubProjects(
             repos
               .filter((r) => r.cloneStatus === "cloned" && r.localPath)
-              .map((r) => ({ name: r.name, path: r.localPath })),
+              .map((r) => ({
+                name: r.name,
+                path: r.localPath,
+                fullName: r.fullName || r.name,
+              })),
           );
         })
         .catch(() => {});
@@ -356,6 +386,10 @@ export default function LauncherSection({
     const cwd = projectPath;
     const pn = nameForPath(projectPath);
     const po = pendingOriginRef.current;
+    const repo =
+      source === "github"
+        ? githubProjects.find((p) => sameOrInside(cwd, p.path))
+        : undefined;
     const stamp = Date.now().toString(36);
     const batchId = `b_${stamp}${Math.random().toString(36).slice(2, 5)}`;
     const startedAt = Date.now();
@@ -373,7 +407,7 @@ export default function LauncherSection({
         model,
         effort,
         origin: source === "github" ? "github" : po?.origin,
-        repoFullName: po?.repoFullName,
+        repoFullName: source === "github" ? repo?.fullName ?? po?.repoFullName : po?.repoFullName,
       },
     }));
     setSessions((prev) => [...batch, ...prev]);
@@ -631,9 +665,26 @@ export default function LauncherSection({
   };
 
   const openFolder = async () => {
-    const picked = await window.cccDesktop?.pickFolder();
-    if (picked) setProjectPath(picked);
+    let target = "";
+    try {
+      const r = await fetch("/api/settings");
+      const c = (await r.json()) as { projectsDir?: string; githubDir?: string };
+      target = (source === "github" ? c.githubDir : c.projectsDir) || "";
+    } catch {
+      return;
+    }
+    if (!target) return;
+    await fetch("/api/open", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: target }),
+    }).catch(() => {});
   };
+
+  const selectedGithub =
+    source === "github"
+      ? githubProjects.find((p) => sameOrInside(projectPath, p.path))
+      : undefined;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -661,17 +712,46 @@ export default function LauncherSection({
                 ))}
                 </div>
               </div>
-              <label className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted">Ordner</span>
-                <input
-                  value={projectPath}
-                  onChange={(e) => setProjectPath(e.target.value)}
-                  placeholder={source === "github" ? "Repo-Ordner" : "Lokaler Ordner"}
-                  spellCheck={false}
-                  aria-label="Startordner"
-                  className="h-9 w-full rounded-lg border border-transparent bg-raised/80 px-2.5 font-mono text-[12.5px] text-ink outline-none"
-                />
-              </label>
+              {source === "github" ? (
+                githubConnected ? (
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-xs text-muted">Repo</span>
+                    <select
+                      value={selectedGithub?.path ?? ""}
+                      onChange={(e) => setProjectPath(e.target.value)}
+                      aria-label="Geklontes Repo"
+                      disabled={githubProjects.length === 0}
+                      className="h-9 w-full cursor-pointer rounded-lg border border-transparent bg-raised/80 px-2.5 text-[12.5px] text-ink outline-none disabled:cursor-default disabled:text-faint"
+                    >
+                      {githubProjects.length === 0 ? (
+                        <option value="">Keine geklonten Repos</option>
+                      ) : (
+                        githubProjects.map((p) => (
+                          <option key={p.path} value={p.path}>
+                            {p.name}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </label>
+                ) : (
+                  <p className="rounded-lg bg-raised/80 px-2.5 py-2 text-xs leading-snug text-warn">
+                    Dieser Tab geht nur mit einem verbundenen Repo. Verbinde GitHub im Tab Repos.
+                  </p>
+                )
+              ) : (
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-xs text-muted">Ordner</span>
+                  <input
+                    value={projectPath}
+                    onChange={(e) => setProjectPath(e.target.value)}
+                    placeholder="Lokaler Ordner"
+                    spellCheck={false}
+                    aria-label="Startordner"
+                    className="h-9 w-full rounded-lg border border-transparent bg-raised/80 px-2.5 font-mono text-[12.5px] text-ink outline-none"
+                  />
+                </label>
+              )}
               <Button
                 variant="primary"
                 icon={Play}
@@ -682,7 +762,16 @@ export default function LauncherSection({
                 Starten
               </Button>
             </div>
-            <LocalFiles path={projectPath} onPathChange={setProjectPath} />
+            {(source !== "github" || githubConnected) && (
+              <LocalFiles
+                path={projectPath}
+                floor={selectedGithub?.path}
+                onPathChange={(next) => {
+                  if (source === "github" && selectedGithub && !sameOrInside(next, selectedGithub.path)) return;
+                  setProjectPath(next);
+                }}
+              />
+            )}
             <div className="border-t border-glass-border px-3 py-3">
               <Button variant="secondary" icon={FolderOpen} className="w-full" onClick={() => void openFolder()}>
                 Ordner öffnen

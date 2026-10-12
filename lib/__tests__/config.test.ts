@@ -88,4 +88,14 @@ describe("config (multi-provider)", () => {
     process.env.CCC_APP_VERSION = "9.9.10";
     expect(getPublicConfig().ready).toBe(false);
   });
+
+  it("uses dusk until a theme is saved and publishes the clone folder", () => {
+    const pub = getPublicConfig();
+    expect(pub.theme).toBe("dusk");
+    expect(pub.githubDir.endsWith(`${path.sep}github`)).toBe(true);
+    writeSettings({ theme: "ink" });
+    expect(getPublicConfig().theme).toBe("ink");
+    writeSettings({ theme: "not-a-theme" as "ink" });
+    expect(getPublicConfig().theme).toBe("dusk");
+  });
 });

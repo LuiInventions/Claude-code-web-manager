@@ -9,7 +9,8 @@ export default function ThemeBoot() {
     fetch("/api/settings")
       .then((r) => r.json())
       .then((c: { theme?: string }) => {
-        if (c.theme && isThemeId(c.theme)) document.documentElement.dataset.theme = c.theme;
+        document.documentElement.dataset.theme =
+          c.theme && isThemeId(c.theme) ? c.theme : "dusk";
       })
       .catch(() => {});
   }, []);

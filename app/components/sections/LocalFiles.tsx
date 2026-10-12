@@ -17,6 +17,16 @@ interface Listing {
   error?: string;
 }
 
+function normPath(p: string): string {
+  return p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+function insideOrEqual(child: string, root: string): boolean {
+  const c = normPath(child);
+  const r = normPath(root);
+  return c === r || c.startsWith(`${r}/`);
+}
+
 function parentDir(path: string): string {
   const cut = path.replace(/[\\/]+$/, "");
   const i = Math.max(cut.lastIndexOf("/"), cut.lastIndexOf("\\"));
@@ -34,9 +44,12 @@ function parentDir(path: string): string {
 export default function LocalFiles({
   path,
   onPathChange,
+  floor,
 }: {
   path: string;
   onPathChange: (path: string) => void;
+  /** Hide Zurück once the parent would leave this folder. */
+  floor?: string;
 }) {
   const [query, setQuery] = useState("");
   const [listing, setListing] = useState<Listing>({ entries: [] });
@@ -77,7 +90,7 @@ export default function LocalFiles({
   const entries = (listing.entries ?? []).filter((entry) => !q || entry.name.toLowerCase().includes(q));
   const shown = listing.path || path;
   const up = shown.trim() ? parentDir(shown) : "";
-  const canUp = Boolean(up && up !== shown);
+  const canUp = Boolean(up && up !== shown && (!floor || insideOrEqual(up, floor)));
 
   const openDir = (next: string) => {
     setQuery("");
