@@ -14,6 +14,11 @@ export interface StoredRepo extends GithubRepo {
    * or unpushed commits. Computed on the fly by `GET /api/github`.
    */
   pendingPush?: boolean;
+  /**
+   * Transient. Uncommitted files in the clone (modified, deleted, and new).
+   * Empty when the only pending work is commits already ahead of origin.
+   */
+  pendingFiles?: { path: string; status: string }[];
 }
 
 export interface GithubState {

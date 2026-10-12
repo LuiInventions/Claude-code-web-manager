@@ -110,6 +110,26 @@ function resolveIcon(): string | undefined {
   return fs.existsSync(ico) ? ico : undefined;
 }
 
+function resolveWritableGithubDir(programDir: string, userData: string): string {
+  const preferred = path.join(programDir, "github_repos");
+  if (canWriteDir(preferred)) return preferred;
+  const fallback = path.join(userData, "github_repos");
+  fs.mkdirSync(fallback, { recursive: true });
+  return fallback;
+}
+
+function canWriteDir(dir: string): boolean {
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const probe = path.join(dir, ".write-test");
+    fs.writeFileSync(probe, "ok");
+    fs.unlinkSync(probe);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 let mainWindow: BrowserWindow | null = null;
 
 async function boot(): Promise<void> {
@@ -133,6 +153,15 @@ async function boot(): Promise<void> {
   // Sessions-tab office sprites under public/pixel-agents-assets) resolve paths
   // from CCC_APP_ROOT instead of cwd.
   process.env.CCC_APP_ROOT = ROOT;
+
+  // Clones live in github_repos next to the program, not under Documents.
+  // app.asar is not writable. The install directory (per-user NSIS) is.
+  // If that directory rejects the write, fall back to userData so clones
+  // are not lost inside a read-only Program Files install.
+  const programDir = app.isPackaged ? path.dirname(app.getPath("exe")) : ROOT;
+  process.env.CCC_PROGRAM_DIR = programDir;
+  process.env.CCC_GITHUB_DIR = resolveWritableGithubDir(programDir, app.getPath("userData"));
+  log("githubDir=" + process.env.CCC_GITHUB_DIR);
 
   ensureDepsFromSource();
   installBridge();

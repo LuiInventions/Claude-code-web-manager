@@ -127,4 +127,23 @@ describe("clone folder updates", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("offers a new file even when git config hides untracked files", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccc-untracked-"));
+    const run = (args: string[]) => pexec("git", ["-C", dir, ...args], { windowsHide: true });
+    try {
+      await run(["init", "-b", "main"]);
+      await run(["config", "user.email", "test@example.com"]);
+      await run(["config", "user.name", "Test"]);
+      await run(["config", "status.showUntrackedFiles", "no"]);
+      fs.writeFileSync(path.join(dir, "readme.txt"), "a\n");
+      await run(["add", "readme.txt"]);
+      await run(["commit", "-m", "init"]);
+      fs.writeFileSync(path.join(dir, "notes.txt"), "local edit\n");
+      const preview = await gitPushPreview(dir);
+      expect(preview.files.map((f) => f.path)).toContain("notes.txt");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

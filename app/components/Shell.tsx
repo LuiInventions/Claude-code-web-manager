@@ -135,7 +135,7 @@ export default function Shell() {
                   active === s.id ? "flex flex-col" : "hidden",
                 )}
               >
-                {renderSection(s.id, cmdFor(s.id))}
+                {renderSection(s.id, cmdFor(s.id), active === s.id)}
               </div>
             ))}
           </main>
@@ -145,14 +145,14 @@ export default function Shell() {
   );
 }
 
-function renderSection(id: SectionId, command: SectionCommand | null) {
+function renderSection(id: SectionId, command: SectionCommand | null, active: boolean) {
   switch (id) {
     case "launcher":
       return <LauncherSection command={command} sourceLock="local" />;
     case "github-launch":
       return <LauncherSection command={command} sourceLock="github" />;
     case "sessions":
-      return <SessionsSection />;
+      return <SessionsSection active={active} />;
     case "remote":
       return <RemoteSection />;
     case "codium":

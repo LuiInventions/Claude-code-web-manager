@@ -15,7 +15,7 @@ const OfficeView = dynamic(() => import("../sessions/OfficeView"), { ssr: false 
  * via the Launcher. Each session is an animated pixel character. Server login
  * stays on the Launcher.
  */
-export default function SessionsSection() {
+export default function SessionsSection({ active = true }: { active?: boolean }) {
   const [sessions, setSessions] = useState<VisualSession[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -30,10 +30,14 @@ export default function SessionsSection() {
   }, []);
 
   useEffect(() => {
+    // The tab stays mounted after the first visit. The office canvas is a
+    // requestAnimationFrame loop, and display:none does not stop it. Run it
+    // only while this tab is the one on screen.
+    if (!active) return;
     load();
     const t = setInterval(load, 1000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, active]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -54,7 +58,7 @@ export default function SessionsSection() {
       </header>
 
       <div className="min-h-0 flex-1 overflow-auto">
-        {loaded && sessions.length === 0 ? (
+        {active && loaded && sessions.length === 0 ? (
           <div className="grid h-full place-items-center">
             <EmptyState
               icon={Boxes}
@@ -62,9 +66,9 @@ export default function SessionsSection() {
               description="Start a session from the Launcher — it appears here instantly as a character in the office."
             />
           </div>
-        ) : (
+        ) : active ? (
           <OfficeView sessions={sessions} />
-        )}
+        ) : null}
       </div>
 
       <footer className="border-t border-line px-5 py-2 text-[11px] text-faint">

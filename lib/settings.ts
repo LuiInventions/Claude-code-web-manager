@@ -20,7 +20,10 @@ export interface RemoteServerRecord {
 export interface Settings {
   /** Absolute path to the folder whose subfolders are treated as projects. */
   projectsDir?: string;
-  /** Absolute path where GitHub repos are cloned (default <projectsDir>/github). */
+  /**
+   * Ignored. Clones live in `<program folder>/github_repos` (see
+   * defaultGithubReposDir). Left on the type so an older settings.json still loads.
+   */
   githubDir?: string;
   /** Active AI provider id (e.g. "openai", "groq"). */
   aiProvider?: string;

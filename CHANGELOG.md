@@ -5,6 +5,14 @@ follow `package.json`. From 1.9.6 each `v*` tag publishes
 `jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
 `cc-control-center-Setup-<version>.exe`.
 
+## 1.9.16 — 2026-10-13
+
+### Clone folder, local changes, and a smoother session
+
+- Cloned repos are stored in `github_repos` next to the program, not under the projects folder. Existing clones move there when no session is using them. The Repos tab pushes whatever changed in that clone, including files edited by hand or by the CLI.
+- The Repos card lists those uncommitted files. Update still commits and pushes them.
+- Local and GitHub no longer run `git status` for every repo every few seconds while a session is open. Terminal output is batched, and the Sessions office stops animating while that tab is hidden.
+
 ## 1.9.15 — 2026-10-13
 
 ### File view, the clone folder, and Settings

@@ -8,8 +8,11 @@ import {
   readGithubState,
   type StoredRepo,
 } from "@/lib/github-store";
+import { existsSync } from "node:fs";
 import { gitClone, gitPull } from "@/lib/git";
 import { getConfig } from "@/lib/config";
+import { placeClones, withCloneLock } from "@/lib/github-place";
+import { listPtySessions } from "@/lib/server/claude-pty";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -40,15 +43,26 @@ export async function POST() {
   const githubDir = getConfig().githubDir;
   await fs.mkdir(githubDir, { recursive: true });
 
-  // Merge with what we already have so clone status / local paths survive.
+  // Move clones into github_repos first, then keep a folder a live session is
+  // still using. New repos clone straight into github_repos.
   const prev = readGithubState();
-  const byName = new Map(prev.repos.map((r) => [r.fullName, r]));
+  const busy = listPtySessions()
+    .map((s) => s.cwd)
+    .filter((cwd): cwd is string => Boolean(cwd));
+  const placed = await withCloneLock(() => placeClones(prev.repos, githubDir, busy));
+  const byName = new Map(placed.repos.map((r) => [r.fullName, r]));
   const merged: StoredRepo[] = repos.map((r) => {
     const existing = byName.get(r.fullName);
+    const dest = path.join(githubDir, r.name);
+    const kept =
+      existing && existsSync(path.join(existing.localPath, ".git"))
+        ? existing.localPath
+        : dest;
+    const hasGit = existsSync(path.join(kept, ".git"));
     return {
       ...r,
-      cloneStatus: existing?.cloneStatus ?? "pending",
-      localPath: existing?.localPath ?? path.join(githubDir, r.name),
+      cloneStatus: hasGit ? "cloned" : "pending",
+      localPath: kept,
     };
   });
 

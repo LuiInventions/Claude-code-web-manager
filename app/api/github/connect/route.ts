@@ -9,8 +9,11 @@ import {
   readGithubState,
   type StoredRepo,
 } from "@/lib/github-store";
+import { existsSync } from "node:fs";
 import { gitClone } from "@/lib/git";
 import { getConfig } from "@/lib/config";
+import { placeClones, withCloneLock } from "@/lib/github-place";
+import { listPtySessions } from "@/lib/server/claude-pty";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -39,11 +42,23 @@ export async function POST(req: NextRequest) {
   const githubDir = getConfig().githubDir;
   await fs.mkdir(githubDir, { recursive: true });
 
-  const stored: StoredRepo[] = repos.map((r) => ({
-    ...r,
-    cloneStatus: "pending",
-    localPath: path.join(githubDir, r.name),
-  }));
+  const prev = readGithubState();
+  const busy = listPtySessions()
+    .map((s) => s.cwd)
+    .filter((cwd): cwd is string => Boolean(cwd));
+  const placed = await withCloneLock(() => placeClones(prev.repos, githubDir, busy));
+  const byName = new Map(placed.repos.map((r) => [r.fullName, r]));
+  const stored: StoredRepo[] = repos.map((r) => {
+    const old = byName.get(r.fullName);
+    const dest = path.join(githubDir, r.name);
+    const kept = old && existsSync(path.join(old.localPath, ".git")) ? old.localPath : dest;
+    const hasGit = existsSync(path.join(kept, ".git"));
+    return {
+      ...r,
+      cloneStatus: hasGit ? "cloned" : "pending",
+      localPath: kept,
+    };
+  });
 
   writeGithubToken(token);
   setConnection(user, stored);

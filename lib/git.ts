@@ -31,13 +31,24 @@ async function git(dir: string, args: string[]): Promise<string | null> {
   }
 }
 
+/**
+ * Working-tree changes, including new files. `--untracked-files=normal`
+ * overrides a global `status.showUntrackedFiles=no`, which would otherwise
+ * hide files the user or the CLI created and the Repos tab would not offer them.
+ */
+const PORCELAIN_ARGS = ["status", "--porcelain", "--untracked-files=normal"] as const;
+
+async function gitPorcelain(dir: string): Promise<string | null> {
+  return git(dir, [...PORCELAIN_ARGS]);
+}
+
 export async function gitStatus(dir: string): Promise<GitStatus> {
   const inside = await git(dir, ["rev-parse", "--is-inside-work-tree"]);
   if (!inside || inside.trim() !== "true") {
     return { isRepo: false, branch: null, dirty: false, ahead: 0, behind: 0, commits: [] };
   }
   const branch = (await git(dir, ["rev-parse", "--abbrev-ref", "HEAD"]))?.trim() || null;
-  const porcelain = await git(dir, ["status", "--porcelain"]);
+  const porcelain = await gitPorcelain(dir);
   const dirty = !!porcelain && porcelain.trim().length > 0;
   const log = await git(dir, [
     "log",
@@ -108,7 +119,7 @@ export async function gitPull(
   dir: string,
   token: string,
 ): Promise<{ ok: boolean; message: string }> {
-  const porcelain = await git(dir, ["status", "--porcelain"]);
+  const porcelain = await gitPorcelain(dir);
   if (porcelain && porcelain.trim().length > 0)
     return { ok: false, message: "lokale Änderungen — Pull übersprungen" };
   const out = await git(dir, [...buildAuthHeaderArg(token), "pull", "--ff-only"]);
@@ -130,7 +141,7 @@ export async function gitLastCommitTime(dir: string): Promise<number | null> {
 }
 
 export async function gitChangedFiles(dir: string): Promise<string[]> {
-  const porcelain = await git(dir, ["status", "--porcelain"]);
+  const porcelain = await gitPorcelain(dir);
   if (!porcelain) return [];
   return porcelain
     .split("\n")
@@ -194,7 +205,7 @@ export async function gitPushPreview(
   dir: string,
 ): Promise<{ branch: string | null; files: ChangedFile[] }> {
   const branch = await gitCurrentBranch(dir);
-  const porcelain = (await git(dir, ["status", "--porcelain"])) ?? "";
+  const porcelain = (await gitPorcelain(dir)) ?? "";
   const working = parsePorcelainStatus(porcelain);
 
   let committed: ChangedFile[] = [];
@@ -221,13 +232,24 @@ export async function gitPushPreview(
  * commits ahead of the upstream. No network access. Returns early on a dirty
  * tree so the common case costs a single git call.
  */
-export async function gitHasPendingPush(dir: string): Promise<boolean> {
-  const porcelain = await git(dir, ["status", "--porcelain"]);
-  if (porcelain && porcelain.trim().length > 0) return true;
+/**
+ * What the Repos tab offers for one clone: every uncommitted path, plus
+ * whether commits are already ahead of `origin/<branch>`. One status call.
+ */
+export async function gitLocalSummary(
+  dir: string,
+): Promise<{ pending: boolean; files: ChangedFile[] }> {
+  const files = parsePorcelainStatus((await gitPorcelain(dir)) ?? "");
+  if (files.length > 0) return { pending: true, files };
   const branch = await gitCurrentBranch(dir);
-  if (!branch) return false;
+  if (!branch) return { pending: false, files: [] };
   const aheadRaw = await git(dir, ["rev-list", "--count", `origin/${branch}..HEAD`]);
-  return (Number.parseInt((aheadRaw ?? "0").trim(), 10) || 0) > 0;
+  const ahead = Number.parseInt((aheadRaw ?? "0").trim(), 10) || 0;
+  return { pending: ahead > 0, files: [] };
+}
+
+export async function gitHasPendingPush(dir: string): Promise<boolean> {
+  return (await gitLocalSummary(dir)).pending;
 }
 
 export async function gitCommitAll(dir: string, message: string): Promise<boolean> {
@@ -321,7 +343,7 @@ export async function gitSyncAndPush(
   if (!branch) return { ok: false, message: "Kein Branch gefunden." };
 
   // 1. Commit local changes if the working tree is dirty.
-  const porcelain = await git(dir, ["status", "--porcelain"]);
+  const porcelain = await gitPorcelain(dir);
   const dirty = !!porcelain && porcelain.trim().length > 0;
   let committed = false;
   if (dirty) {

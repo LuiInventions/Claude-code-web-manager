@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { getConfig, getPublicConfig } from "../config";
 import { writeSettings } from "../settings";
@@ -12,6 +13,8 @@ function clear() {
   delete process.env.OPENAI_API_KEY;
   delete process.env.GROQ_API_KEY;
   delete process.env.CCC_APP_VERSION;
+  delete process.env.CCC_GITHUB_DIR;
+  delete process.env.CCC_PROGRAM_DIR;
   // The dev stores are shared on disk; remove any stray file from a parallel
   // test so "no key" / setup-gate assertions are deterministic.
   for (const f of [DEV_FILE, SETTINGS_FILE]) {
@@ -92,7 +95,10 @@ describe("config (multi-provider)", () => {
   it("uses dusk until a theme is saved and publishes the clone folder", () => {
     const pub = getPublicConfig();
     expect(pub.theme).toBe("dusk");
-    expect(pub.githubDir.endsWith(`${path.sep}github`)).toBe(true);
+    expect(pub.githubDir.endsWith(`${path.sep}github_repos`)).toBe(true);
+    const pinned = path.join(os.tmpdir(), "ccc-github-repos");
+    process.env.CCC_GITHUB_DIR = pinned;
+    expect(getConfig().githubDir).toBe(path.resolve(pinned));
     writeSettings({ theme: "ink" });
     expect(getPublicConfig().theme).toBe("ink");
     writeSettings({ theme: "not-a-theme" as "ink" });

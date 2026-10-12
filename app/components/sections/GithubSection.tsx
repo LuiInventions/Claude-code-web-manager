@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Code,
   FolderOpen,
@@ -37,10 +37,31 @@ export default function GithubSection() {
   const [creating, setCreating] = useState(false);
   const [visRepo, setVisRepo] = useState<StoredRepo | null>(null);
 
+  const cloningRef = useRef(false);
+  const sigRef = useRef("");
+
   const load = useCallback(async (silent = false) => {
     try {
       const r = await fetch("/api/github");
-      const d = (await r.json()) as GithubState;
+      const d = (await r.json()) as GithubState & {
+        repos?: Array<StoredRepo & { pendingFiles?: { path: string }[] }>;
+      };
+      cloningRef.current = (d.repos ?? []).some(
+        (repo) => repo.cloneStatus === "pending" || repo.cloneStatus === "cloning",
+      );
+      const sig = JSON.stringify(
+        (d.repos ?? []).map((repo) => [
+          repo.fullName,
+          repo.cloneStatus,
+          repo.localPath,
+          repo.pendingPush ?? false,
+          (repo.pendingFiles ?? []).map((f) => f.path).join("\n"),
+        ]),
+      );
+      // Same payload: skip the render. The poll used to redraw the whole
+      // Repos page every few seconds while sessions were running.
+      if (silent && sig === sigRef.current) return;
+      sigRef.current = sig;
       setState(d);
       if (!silent) setError(null);
     } catch (e) {
@@ -49,11 +70,22 @@ export default function GithubSection() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch on mount
-    load();
-    // While clones are in flight, poll so statuses update live.
-    const id = setInterval(() => load(true), 3000);
-    return () => clearInterval(id);
+    let alive = true;
+    let timer = 0;
+    let first = true;
+    const loop = async () => {
+      await load(!first);
+      first = false;
+      if (!alive) return;
+      // Fast only while a clone is still running. Afterwards a slow poll is
+      // enough for the "pushbar" hint; Update loads the file list itself.
+      timer = window.setTimeout(loop, cloningRef.current ? 3000 : 15000);
+    };
+    void loop();
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
   }, [load]);
 
   const connect = async () => {
@@ -69,7 +101,9 @@ export default function GithubSection() {
       const d = await r.json();
       if (d.error) throw new Error(d.error);
       setToken("");
+      sigRef.current = "";
       setState(d);
+      await load(true);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -85,7 +119,9 @@ export default function GithubSection() {
       const r = await fetch("/api/github/refresh", { method: "POST" });
       const d = await r.json();
       if (d.error) throw new Error(d.error);
+      sigRef.current = "";
       setState(d as GithubState);
+      await load(true);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -537,6 +573,20 @@ function RepoCard({
       {repo.description && (
         <p className="line-clamp-2 text-xs text-muted">{repo.description}</p>
       )}
+      {repo.pendingFiles && repo.pendingFiles.length > 0 ? (
+        <ul className="max-h-24 overflow-auto rounded-md border border-line bg-raised px-2 py-1 font-mono text-[11px] text-ink">
+          {repo.pendingFiles.slice(0, 8).map((f) => (
+            <li key={f.path} className="truncate" title={f.path}>
+              {f.path}
+            </li>
+          ))}
+          {repo.pendingFiles.length > 8 && (
+            <li className="text-faint">+{repo.pendingFiles.length - 8} weitere</li>
+          )}
+        </ul>
+      ) : repo.pendingPush ? (
+        <p className="text-[11px] text-warn">Commits sind noch nicht auf GitHub.</p>
+      ) : null}
       <div className="mt-auto flex gap-2">
         <Button
           size="sm"

@@ -342,15 +342,35 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
   };
   SESSIONS.set(id, session);
 
+  // Grok and Claude redraw in small chunks. Forwarding each one as its own
+  // websocket message makes xterm repaint dozens of times a second and the
+  // window hitches. One flush per frame keeps the session live.
+  let pendingOut = "";
+  let flushTimer: ReturnType<typeof setTimeout> | null = null;
+  const flushOut = () => {
+    if (flushTimer) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+    if (!pendingOut) return;
+    const chunk = pendingOut;
+    pendingOut = "";
+    broadcast(session, { t: "out", d: chunk });
+  };
   term.onData((d) => {
     session.buffer += d;
     if (session.buffer.length > BUFFER_CAP)
       session.buffer = session.buffer.slice(-BUFFER_CAP);
     session.lastDataAt = Date.now();
-    broadcast(session, { t: "out", d });
+    pendingOut += d;
+    if (!flushTimer) {
+      flushTimer = setTimeout(flushOut, 20);
+      flushTimer.unref?.();
+    }
   });
 
   term.onExit(({ exitCode }) => {
+    flushOut();
     session.status = exitCode === 0 ? "done" : "error";
     session.exitCode = exitCode;
     broadcast(session, { t: "exit", code: exitCode });

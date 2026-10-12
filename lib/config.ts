@@ -22,10 +22,11 @@ import { isThemeId, type ThemeId } from "./themes";
  * API keys come ONLY from the environment and are never sent to the browser.
  * Voice (STT + TTS) is powered by Cartesia.
  *
- * Paths default to folders INSIDE the app directory (not the user's home), so a
- * fresh checkout is self-contained: Dashboard projects live under `./projects`
- * and GitHub clones under `./projects/github`. Override either via the Settings
- * UI or the PROJECTS_DIR / GITHUB_DIR environment variables.
+ * Project folders follow Settings, then PROJECTS_DIR, then `./projects`.
+ * GitHub clones always live in `<program folder>/github_repos`. The packaged
+ * app sets CCC_GITHUB_DIR to that folder (next to the exe). A dev run uses
+ * `<cwd>/github_repos`. settings.githubDir is not read: older builds stored
+ * clones under the projects folder, and that path is what the CLI abbreviated.
  */
 
 export interface AppConfig {
@@ -59,6 +60,23 @@ export interface AppConfig {
   dataDir: string;
 }
 
+/**
+ * Folder that holds cloned repos. Packaged Electron sets CCC_GITHUB_DIR to a
+ * writable `<install dir>/github_repos` before the server starts. Otherwise the
+ * program dir is CCC_PROGRAM_DIR, a non-asar CCC_APP_ROOT, or the cwd.
+ */
+export function defaultGithubReposDir(): string {
+  const pinned = process.env.CCC_GITHUB_DIR?.trim();
+  if (pinned) return path.resolve(pinned);
+  const program = process.env.CCC_PROGRAM_DIR?.trim();
+  if (program) return path.join(path.resolve(program), "github_repos");
+  const root = process.env.CCC_APP_ROOT?.trim();
+  if (root && !root.includes(`${path.sep}app.asar`) && !root.endsWith(".asar")) {
+    return path.join(path.resolve(root), "github_repos");
+  }
+  return path.join(process.cwd(), "github_repos");
+}
+
 /** Verified available on this account (gpt-5.4 family). */
 export const DEFAULT_OPENAI_MODEL = "gpt-5.4-mini";
 /** Cartesia "Sebastian – Orator" — German, masculine, eloquent. */
@@ -76,10 +94,7 @@ export function getConfig(): AppConfig {
     process.env.PROJECTS_DIR?.trim() ||
     path.join(process.cwd(), "projects");
 
-  const githubDir =
-    settings.githubDir?.trim() ||
-    process.env.GITHUB_DIR?.trim() ||
-    path.join(path.resolve(projectsDir), "github");
+  const githubDir = defaultGithubReposDir();
 
   const aiProvider = settings.aiProvider?.trim() || DEFAULT_PROVIDER_ID;
   const provider = getProvider(aiProvider);

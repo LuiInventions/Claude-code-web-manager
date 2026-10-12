@@ -255,7 +255,7 @@ export default function LauncherSection({
   useEffect(() => {
     let cancelled = false;
     const loadGithub = () =>
-      fetch("/api/github")
+      fetch("/api/github?lite=1")
         .then((r) => r.json())
         .then((d) => {
           if (cancelled) return;
@@ -266,14 +266,25 @@ export default function LauncherSection({
             localPath: string;
             cloneStatus: string;
           }>;
-          setGithubProjects(
-            repos
-              .filter((r) => r.cloneStatus === "cloned" && r.localPath)
-              .map((r) => ({
-                name: r.name,
-                path: r.localPath,
-                fullName: r.fullName || r.name,
-              })),
+          const next = repos
+            .filter((r) => r.cloneStatus === "cloned" && r.localPath)
+            .map((r) => ({
+              name: r.name,
+              path: r.localPath,
+              fullName: r.fullName || r.name,
+            }));
+          // A new array every poll re-rendered the terminals. Keep the old
+          // one when the clone list did not change.
+          setGithubProjects((prev) =>
+            prev.length === next.length &&
+            prev.every(
+              (p, i) =>
+                p.path === next[i].path &&
+                p.name === next[i].name &&
+                p.fullName === next[i].fullName,
+            )
+              ? prev
+              : next,
           );
         })
         .catch(() => {});

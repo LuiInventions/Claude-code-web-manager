@@ -92,6 +92,9 @@ export default function ClaudeCmdPane({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const termRef = useRef<any>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  // Skip a PTY resize when fit() did not change the grid. A ResizeObserver
+  // loop otherwise makes the CLI redraw the whole screen on every pixel.
+  const fittedRef = useRef({ c: 0, r: 0 });
 
   // Fit to the (current) container size and tell the PTY the new dimensions.
   const refit = () => {
@@ -104,8 +107,12 @@ export default function ClaudeCmdPane({
     } catch {
       /* container not measurable yet */
     }
+    const cols = term.cols;
+    const rows = term.rows;
+    if (cols === fittedRef.current.c && rows === fittedRef.current.r) return;
+    fittedRef.current = { c: cols, r: rows };
     if (ws && ws.readyState === WebSocket.OPEN)
-      ws.send(JSON.stringify({ t: "resize", c: term.cols, r: term.rows }));
+      ws.send(JSON.stringify({ t: "resize", c: cols, r: rows }));
   };
   const refitRef = useRef(refit);
   refitRef.current = refit;
@@ -119,6 +126,7 @@ export default function ClaudeCmdPane({
     let disposed = false;
     let ws: WebSocket | null = null;
     let resizeObs: ResizeObserver | null = null;
+    let fitFrame = 0;
     const timers: number[] = [];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let term: any = null;
@@ -193,7 +201,7 @@ export default function ClaudeCmdPane({
         theme: XTERM_THEME,
         cursorBlink: true,
         cursorStyle: "block",
-        scrollback: 10000,
+        scrollback: 2000,
       });
       const fit = new FitAddon();
       term.loadAddon(fit);
@@ -214,7 +222,10 @@ export default function ClaudeCmdPane({
           ws.send(JSON.stringify({ t: "in", d }));
       });
 
-      resizeObs = new ResizeObserver(() => refitRef.current());
+      resizeObs = new ResizeObserver(() => {
+        cancelAnimationFrame(fitFrame);
+        fitFrame = requestAnimationFrame(() => refitRef.current());
+      });
       resizeObs.observe(el);
 
       // Catch the sidebar slide / late layout without relying on a single frame.
@@ -227,6 +238,7 @@ export default function ClaudeCmdPane({
     return () => {
       disposed = true;
       timers.forEach((t) => clearTimeout(t));
+      cancelAnimationFrame(fitFrame);
       resizeObs?.disconnect();
       try {
         ws?.close();

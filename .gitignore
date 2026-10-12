@@ -40,8 +40,9 @@ yarn-error.log*
 # local data store (project index, chat history, settings, launcher logs)
 /.data/
 
-# local projects + GitHub clones (default PROJECTS_DIR / GITHUB_DIR live here)
+# local projects + GitHub clones (dev default is ./github_repos)
 /projects/
+/github_repos/
 
 # vercel
 .vercel
