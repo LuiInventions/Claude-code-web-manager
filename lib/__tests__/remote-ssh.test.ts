@@ -75,7 +75,8 @@ describe("remote ssh login", () => {
       args: ["--dangerously-skip-permissions"],
       cli: "claude",
     });
-    expect(cmd.startsWith("DISABLE_AUTOUPDATER=1 ")).toBe(true);
+    expect(cmd.startsWith("export LANG=C.UTF-8 ")).toBe(true);
+    expect(cmd).toContain("DISABLE_AUTOUPDATER=1 ");
     expect(cmd).not.toContain("cd ");
   });
 

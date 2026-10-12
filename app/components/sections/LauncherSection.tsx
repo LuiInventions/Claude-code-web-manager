@@ -91,12 +91,14 @@ function gridShape(n: number): { cols: number; rows: number } {
 
 export default function LauncherSection({
   command,
+  sourceLock,
 }: {
   command?: SectionCommand | null;
+  sourceLock: "local" | "github";
 }) {
+  const source = sourceLock;
   const [projects, setProjects] = useState<ProjectOpt[]>([]);
   const [githubProjects, setGithubProjects] = useState<ProjectOpt[]>([]);
-  const [source, setSource] = useState<"local" | "github">("local");
   const [projectPath, setProjectPath] = useState("");
   const localPathRef = useRef("");
   const [pathMode, setPathMode] = useState<"list" | "manual">("list");
@@ -261,13 +263,18 @@ export default function LauncherSection({
           effort: string;
           origin?: "github";
           repoFullName?: string;
+          where?: "remote";
           status: "running" | "done" | "error";
         }>;
-        if (!live.length) return;
+        const mine = live.filter((s) => {
+          if (s.where === "remote") return false;
+          return sourceLock === "github" ? s.origin === "github" : s.origin !== "github";
+        });
+        if (!mine.length) return;
         // Server lists newest-first; assign descending creation keys so the
         // oldest restored session still becomes #1 under stable numbering.
         const restoreBase = Date.now();
-        const rebuilt: LiveSession[] = live.map((s, i) => ({
+        const rebuilt: LiveSession[] = mine.map((s, i) => ({
           id: s.id,
           batchId: s.batchId || s.id,
           createdAt: restoreBase - i,
@@ -289,7 +296,7 @@ export default function LauncherSection({
         setSidebarOpen(false);
       })
       .catch(() => {});
-  }, []);
+  }, [sourceLock]);
 
   // Usage snapshot (no live stream in PTY mode; refresh on start/exit).
   const refreshUsage = useCallback(() => {
@@ -360,7 +367,7 @@ export default function LauncherSection({
         prompt: pr,
         model,
         effort,
-        origin: po?.origin,
+        origin: source === "github" ? "github" : po?.origin,
         repoFullName: po?.repoFullName,
       },
     }));
@@ -629,20 +636,6 @@ export default function LauncherSection({
         <div className="flex w-[26rem] shrink-0 flex-col border-r border-line bg-elevated">
           <div className="space-y-3 border-b border-line p-4">
             <div className="space-y-2">
-              <select
-                value={source}
-                onChange={(e) => {
-                  const next = e.target.value as "local" | "github";
-                  if (source === "local") localPathRef.current = projectPath;
-                  setSource(next);
-                  setProjectPath(next === "local" ? localPathRef.current : "");
-                }}
-                aria-label="Projektquelle"
-                className="h-9 w-full cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
-              >
-                <option value="local">Local</option>
-                <option value="github">GitHub</option>
-              </select>
               <div className="flex items-center gap-2">
                   {pathMode === "list" ? (
                     <select
@@ -683,6 +676,11 @@ export default function LauncherSection({
                     )}
                   </button>
                 </div>
+              {source === "github" && githubProjects.length === 0 && (
+                <p className="text-[11px] leading-5 text-faint">
+                  No cloned repos yet. Connect a token under Repos.
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-2">

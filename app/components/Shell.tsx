@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Code,
+  FolderGit2,
+  FolderOpen,
   Gamepad2,
   LayoutDashboard,
   Monitor,
   PanelLeftClose,
   PanelLeftOpen,
-  Rocket,
   Server,
   Settings as SettingsIcon,
   type LucideIcon,
@@ -37,12 +38,13 @@ interface SectionDef {
 }
 
 const MAIN_SECTIONS: SectionDef[] = [
-  { id: "launcher", label: "Launcher", desc: "Improve a prompt & launch a code CLI", icon: Rocket },
+  { id: "launcher", label: "Local", desc: "Launch a code CLI in a local folder", icon: FolderOpen },
+  { id: "github-launch", label: "GitHub", desc: "Launch a code CLI in a connected repo", icon: FolderGit2 },
   { id: "sessions", label: "Sessions", desc: "Live code-CLI sessions, visualized", icon: Gamepad2 },
   { id: "remote", label: "Remote", desc: "SSH to your server and start a code CLI", icon: Server },
   { id: "codium", label: "VS Codium", desc: "Editor in the local project folder", icon: Monitor },
   { id: "dashboard", label: "Local Projects", desc: "All your local projects at a glance", icon: LayoutDashboard },
-  { id: "github", label: "GitHub", desc: "Connect repos & edit with your code CLI", icon: Code },
+  { id: "github", label: "Repos", desc: "Connect a GitHub token and clone repos", icon: Code },
 ];
 
 const SETTINGS_SECTION: SectionDef = {
@@ -102,7 +104,7 @@ export default function Shell() {
       launchClaude: (projectPath, projectName, prompt) =>
         dispatch("launcher", { projectPath, projectName, prompt }),
       launchClaudeInRepo: (projectPath, projectName, prompt) =>
-        dispatch("launcher", { projectPath, projectName, prompt, origin: "github" }),
+        dispatch("github-launch", { projectPath, projectName, prompt, origin: "github" }),
     }),
     [go, dispatch],
   );
@@ -157,7 +159,9 @@ function renderSection(id: SectionId, command: SectionCommand | null) {
     case "dashboard":
       return <DashboardSection />;
     case "launcher":
-      return <LauncherSection command={command} />;
+      return <LauncherSection command={command} sourceLock="local" />;
+    case "github-launch":
+      return <LauncherSection command={command} sourceLock="github" />;
     case "sessions":
       return <SessionsSection />;
     case "remote":

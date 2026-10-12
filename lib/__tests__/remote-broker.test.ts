@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import net from "node:net";
 import { describe, expect, it } from "vitest";
-import { brokerLaunchCommand, brokerSource } from "../server/remote-broker";
+import { brokerLaunchCommand, brokerSource, openRemoteCli, remoteList } from "../server/remote-broker";
 
 describe("remote session broker", () => {
   it("does not echo the result markers in the launch command", () => {
@@ -62,6 +62,47 @@ describe("remote session broker", () => {
       expect(body).toContain("hello-broker");
     } finally {
       sock.destroy();
+      proc.kill();
+    }
+  });
+
+  it.skipIf(process.platform === "win32")("keeps UTF-8 from the remote CLI", async () => {
+    const proc = spawn("python3", ["-c", brokerSource()], { stdio: ["ignore", "pipe", "pipe"] });
+    const port = await new Promise<number>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("no broker port")), 4000);
+      let buf = "";
+      proc.stdout?.on("data", (chunk) => {
+        buf += chunk.toString("utf8");
+        const match = buf.match(/CCC_BROKER (\d+)/);
+        if (match) {
+          clearTimeout(timer);
+          resolve(Number(match[1]));
+        }
+      });
+      proc.on("exit", () => {
+        clearTimeout(timer);
+        reject(new Error("broker exited"));
+      });
+    });
+    const handle = openRemoteCli({ port, command: "printf 'größe\\n'", cols: 80, rows: 24 });
+    try {
+      const text = await new Promise<string>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("no utf-8 output")), 4000);
+        let buf = "";
+        handle.onData((chunk) => {
+          buf += chunk;
+          if (buf.includes("größe")) {
+            clearTimeout(timer);
+            resolve(buf);
+          }
+        });
+      });
+      expect(text).toContain("größe");
+      const listing = await remoteList(port, "/tmp");
+      expect(listing.path).toBe("/tmp");
+      expect(Array.isArray(listing.entries)).toBe(true);
+    } finally {
+      handle.kill();
       proc.kill();
     }
   });

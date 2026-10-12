@@ -52,9 +52,11 @@ export default function SshLoginPane() {
       const { FitAddon } = await import("@xterm/addon-fit");
       if (disposed || !el) return;
       const created = new Terminal({
-        fontFamily: '"Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace',
-        fontSize: 13,
-        lineHeight: 1.2,
+        fontFamily: '"Cascadia Mono", Consolas, "Courier New", monospace',
+        fontSize: 14,
+        lineHeight: 1,
+        letterSpacing: 0,
+        customGlyphs: true,
         theme: THEME,
         cursorBlink: false,
         disableStdin: true,

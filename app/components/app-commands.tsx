@@ -5,6 +5,7 @@ import { createContext, useContext } from "react";
 export type SectionId =
   | "dashboard"
   | "launcher"
+  | "github-launch"
   | "sessions"
   | "remote"
   | "codium"

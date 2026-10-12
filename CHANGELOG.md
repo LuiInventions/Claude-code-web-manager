@@ -5,6 +5,14 @@ follow `package.json`. From 1.9.6 each `v*` tag publishes
 `jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
 `cc-control-center-Setup-<version>.exe`.
 
+## 1.9.9 — 2026-10-12
+
+### Remote terminal, server files, and two launchers
+
+- A remote code CLI is shown as the real terminal: UTF-8 comes through unchanged, the cell grid matches a command line, and the session starts in the folder you type.
+- The Remote tab lists the server's files, with search. Right-click copies a path or uses that folder as the start folder.
+- Launcher is two tabs. **Local** is a local folder. **GitHub** is the connected repos. Prompt, model, effort, and the session grid stay as they were. Token setup stays under **Repos**.
+
 ## 1.9.8 — 2026-10-12
 
 ### Remote sessions, and copying text

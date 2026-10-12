@@ -138,14 +138,19 @@ export default function ClaudeCmdPane({
     };
 
     const proto = location.protocol === "https:" ? "wss" : "ws";
+    const box = containerRef.current;
+    const guessCols =
+      box && box.clientWidth > 40 ? Math.max(20, Math.floor(box.clientWidth / 8.4)) : 80;
+    const guessRows =
+      box && box.clientHeight > 40 ? Math.max(8, Math.floor(box.clientHeight / 17)) : 24;
     const qs = new URLSearchParams({
       id,
       cwd,
       prompt,
       model,
       effort,
-      cols: "80",
-      rows: "24",
+      cols: String(guessCols),
+      rows: String(guessRows),
     });
     if (projectName) qs.set("projectName", projectName);
     if (batchId) qs.set("batchId", batchId);
@@ -180,13 +185,15 @@ export default function ClaudeCmdPane({
       if (disposed || !el) return;
 
       term = new Terminal({
-        fontFamily:
-          '"Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace',
-        fontSize: 13,
-        lineHeight: 1.2,
+        fontFamily: '"Cascadia Mono", Consolas, "Courier New", monospace',
+        fontSize: 14,
+        lineHeight: 1,
+        letterSpacing: 0,
+        customGlyphs: true,
         theme: XTERM_THEME,
         cursorBlink: true,
-        scrollback: 8000,
+        cursorStyle: "block",
+        scrollback: 10000,
       });
       const fit = new FitAddon();
       term.loadAddon(fit);

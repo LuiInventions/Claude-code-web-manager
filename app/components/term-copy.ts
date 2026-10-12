@@ -1,6 +1,6 @@
 import type { Terminal } from "@xterm/xterm";
 
-async function copyText(text: string): Promise<void> {
+export async function copyText(text: string): Promise<void> {
   const desktop = window.cccDesktop;
   if (desktop?.copyText) {
     await desktop.copyText(text);

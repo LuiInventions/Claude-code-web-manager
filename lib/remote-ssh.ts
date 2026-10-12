@@ -126,7 +126,8 @@ export function buildRemoteCliCommand(opts: {
       ? "DISABLE_AUTOUPDATER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 "
       : "";
   const argv = [opts.bin, ...opts.args].map(shellQuote).join(" ");
-  return `${cdPrefix(opts.cwd)}${env}exec ${argv}`;
+  const locale = "export LANG=C.UTF-8 LC_ALL=C.UTF-8 TERM=xterm-256color COLORTERM=truecolor; ";
+  return `${locale}${cdPrefix(opts.cwd)}${env}exec ${argv}`;
 }
 
 /** Remote script that starts VS Codium's web UI on loopback only. */

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Play, X } from "lucide-react";
 import { Button, Input, cn } from "../ui";
 import ClaudeCmdPane from "./launcher/ClaudeCmdPane";
+import RemoteFiles from "./RemoteFiles";
 import SshLoginPane from "./SshLoginPane";
 import type { RemotePublicStatus } from "@/lib/remote-ssh";
 
@@ -46,6 +47,7 @@ export default function RemoteSection() {
   const [boxCount, setBoxCount] = useState(1);
   const [boxes, setBoxes] = useState<Box[]>([]);
   const [cli, setCli] = useState("claude");
+  const [cwd, setCwd] = useState("");
 
   const load = useCallback(() => {
     fetch("/api/remote")
@@ -64,8 +66,13 @@ export default function RemoteSection() {
   }, [load, status.connecting, status.needsPassword, status.needsOtp]);
 
   useEffect(() => {
-    if (!status.connected) setBoxes([]);
-  }, [status.connected]);
+    if (!status.connected) {
+      setBoxes([]);
+      setCwd("");
+      return;
+    }
+    setCwd((prev) => prev || status.dir || "~");
+  }, [status.connected, status.dir]);
 
   useEffect(() => {
     if (status.needsPassword) setSaveLogin(status.saveLogin);
@@ -187,12 +194,23 @@ export default function RemoteSection() {
                 ))}
               </div>
             </div>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs text-muted">Ordner</span>
+              <input
+                value={cwd}
+                onChange={(e) => setCwd(e.target.value)}
+                placeholder="~"
+                spellCheck={false}
+                aria-label="Startordner auf dem Server"
+                className="h-9 w-full rounded-md border border-line bg-raised px-2.5 font-mono text-[12.5px] text-ink outline-none focus:border-line-strong"
+              />
+            </label>
             <Button variant="primary" icon={Play} className="w-full" onClick={startEmpty}>
               Start without prompt
             </Button>
             <p className="text-xs leading-5 text-faint">
               Öffnet {boxCount} leere {cli === "claude" ? "Claude" : cli === "grok" ? "Grok" : "Codex"}-Sitzung
-              {boxCount > 1 ? "en" : ""} auf dem Server.
+              {boxCount > 1 ? "en" : ""} in diesem Ordner. Einen Pfad aus der Dateiliste kopierst du mit Rechtsklick.
             </p>
           </div>
           <div className="border-t border-line p-5">
@@ -206,6 +224,8 @@ export default function RemoteSection() {
           </div>
         </aside>
       )}
+
+      {status.connected && <RemoteFiles onUsePath={setCwd} />}
 
       <div className="flex min-w-0 flex-1 flex-col">
         {status.connected ? (
@@ -237,7 +257,7 @@ export default function RemoteSection() {
                 </button>
                 <ClaudeCmdPane
                   id={box.id}
-                  cwd={status.dir || "~"}
+                  cwd={cwd.trim() || "~"}
                   prompt=""
                   model=""
                   effort=""

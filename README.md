@@ -20,10 +20,10 @@
 </p>
 
 > [!TIP]
-> **v1.9.8** is **Jarvis Control Center**. It launches **Claude Code**, **Grok**, or **ChatGPT Codex** locally or,
+> **v1.9.9** is **Jarvis Control Center**. It launches **Claude Code**, **Grok**, or **ChatGPT Codex** locally or,
 > from the **Remote** tab, on your own server. The launcher is **Local** or **GitHub**.
 > **VS Codium** is a local editor in that same Local folder.
-> The installer file is `jarvis-control-center-Setup-1.9.8.exe`. v1.8.0 was withdrawn. v1.9.6 has no installer.
+> The installer file is `jarvis-control-center-Setup-1.9.9.exe`. v1.8.0 was withdrawn. v1.9.6 has no installer.
 > [**Changelog**](CHANGELOG.md)
 
 <img width="1920" height="1080" alt="Desktop Screenshot 2026 06 28 - 19 27 23 07" src="https://github.com/user-attachments/assets/961f27e3-c90e-4594-bbbc-ce2fa462e56b" />
