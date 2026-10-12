@@ -64,6 +64,28 @@ describe("secrets layer (multi-provider)", () => {
     expect(readSecrets().providerKeys?.groq).toBe("gsk-bridge");
   });
 
+  it("stores the remote ssh password without putting it in the status", () => {
+    writeSecrets({ remoteSshPassword: "s3cret-ssh" });
+    expect(readSecrets().remoteSshPassword).toBe("s3cret-ssh");
+    expect(secretsStatus().hasRemotePassword).toBe(true);
+    expect(JSON.stringify(secretsStatus())).not.toContain("s3cret-ssh");
+    writeSecrets({ providerKeys: { groq: "gsk-dev" } });
+    expect(readSecrets().remoteSshPassword).toBe("s3cret-ssh");
+    writeSecrets({ remoteSshPassword: "" });
+    expect(readSecrets().remoteSshPassword).toBeUndefined();
+    expect(secretsStatus().hasRemotePassword).toBe(false);
+  });
+
+  it("keeps several remote passwords and never puts them in the status", () => {
+    writeSecrets({ remoteSshPasswords: { "luis@10.0.0.8": "pw-one", "ada@10.0.0.9": "pw-two" } });
+    expect(readSecrets().remoteSshPasswords?.["luis@10.0.0.8"]).toBe("pw-one");
+    expect(secretsStatus().hasRemotePassword).toBe(true);
+    expect(JSON.stringify(secretsStatus())).not.toContain("pw-one");
+    writeSecrets({ remoteSshPasswords: { "luis@10.0.0.8": "" } });
+    expect(readSecrets().remoteSshPasswords?.["ada@10.0.0.9"]).toBe("pw-two");
+    expect(readSecrets().remoteSshPasswords?.["luis@10.0.0.8"]).toBeUndefined();
+  });
+
   it("writeSecrets routes through the bridge when present", () => {
     let captured: { providerKeys?: Record<string, string> } = {};
     (globalThis as Record<string, unknown>).__ccc_secrets = {

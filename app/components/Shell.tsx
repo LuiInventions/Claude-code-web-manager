@@ -5,6 +5,7 @@ import {
   Code,
   Gamepad2,
   LayoutDashboard,
+  Monitor,
   PanelLeftClose,
   PanelLeftOpen,
   Rocket,
@@ -24,6 +25,7 @@ import LauncherSection from "./sections/LauncherSection";
 import SessionsSection from "./sections/SessionsSection";
 import SettingsSection from "./sections/SettingsSection";
 import GithubSection from "./sections/GithubSection";
+import RemoteCodiumSection from "./sections/RemoteCodiumSection";
 
 interface SectionDef {
   id: SectionId;
@@ -35,6 +37,7 @@ interface SectionDef {
 const MAIN_SECTIONS: SectionDef[] = [
   { id: "launcher", label: "Launcher", desc: "Improve a prompt & launch a code CLI", icon: Rocket },
   { id: "sessions", label: "Sessions", desc: "Live code-CLI sessions, visualized", icon: Gamepad2 },
+  { id: "codium", label: "VS Codium", desc: "Editor auf dem eigenen Server", icon: Monitor },
   { id: "dashboard", label: "Local Projects", desc: "All your local projects at a glance", icon: LayoutDashboard },
   { id: "github", label: "GitHub", desc: "Connect repos & edit with your code CLI", icon: Code },
 ];
@@ -51,7 +54,7 @@ const ALL_SECTIONS = [...MAIN_SECTIONS, SETTINGS_SECTION];
 export default function Shell() {
   const [active, setActive] = useState<SectionId>("launcher");
   const [opened, setOpened] = useState<Set<SectionId>>(
-    () => new Set<SectionId>(["launcher"]),
+    () => new Set<SectionId>(["launcher", "codium"]),
   );
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [host, setHost] = useState("127.0.0.1:3000");
@@ -154,6 +157,8 @@ function renderSection(id: SectionId, command: SectionCommand | null) {
       return <LauncherSection command={command} />;
     case "sessions":
       return <SessionsSection />;
+    case "codium":
+      return <RemoteCodiumSection />;
     case "github":
       return <GithubSection />;
     case "settings":

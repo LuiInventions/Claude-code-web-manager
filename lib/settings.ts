@@ -2,6 +2,14 @@ import fs from "node:fs";
 import path from "node:path";
 import type { CodeCliId } from "./code-clis";
 
+/** A server saved from the launcher or the Sessions tab. No password here. */
+export interface RemoteServerRecord {
+  id: string;
+  host: string;
+  user: string;
+  dir: string;
+}
+
 /**
  * Runtime-editable settings, persisted to .data/settings.json.
  * These OVERRIDE .env values so the Settings UI is authoritative at runtime.
@@ -32,6 +40,21 @@ export interface Settings {
    * The GitHub token (separate `.data/github-secret.json`) is never touched.
    */
   setupVersion?: string;
+  /**
+   * Servers the user asked to keep. Passwords live in the secret store, keyed
+   * by `RemoteServerRecord.id`. The 2FA code is never stored.
+   */
+  remoteServers?: RemoteServerRecord[];
+  /**
+   * Saved remote login. Host and user are written only when the user checks
+   * "IP und Passwort speichern". The password itself lives in the secret store.
+   */
+  remoteHost?: string;
+  remoteUser?: string;
+  /** Directory on the server. `~` means the remote home. Always remembered. */
+  remoteDir?: string;
+  /** Whether the last connect asked to keep host, user, and password. */
+  remoteSaveLogin?: boolean;
 }
 
 const DATA_DIR = path.join(process.cwd(), ".data");

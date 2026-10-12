@@ -50,6 +50,8 @@ export default function ClaudeCmdPane({
   effort,
   origin,
   repoFullName,
+  where,
+  cli,
   projectName,
   batchId,
   createdAt,
@@ -63,6 +65,10 @@ export default function ClaudeCmdPane({
   effort: string;
   origin?: "github";
   repoFullName?: string;
+  /** `remote` starts the CLI over the shared ssh login instead of locally. */
+  where?: "remote";
+  /** Remote sessions name the CLI. Local sessions keep the Settings choice. */
+  cli?: string;
   projectName?: string;
   batchId?: string;
   /** Client creation key — sent to the PTY as `startedAt` so the Sessions office
@@ -145,6 +151,8 @@ export default function ClaudeCmdPane({
     if (createdAt) qs.set("startedAt", String(createdAt));
     if (origin) qs.set("origin", origin);
     if (repoFullName) qs.set("repoFullName", repoFullName);
+    if (where === "remote") qs.set("where", "remote");
+    if (cli) qs.set("cli", cli);
     ws = new WebSocket(`${proto}://${location.host}/ws/claude-pty?${qs}`);
     wsRef.current = ws;
     ws.onopen = () => {

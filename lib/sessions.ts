@@ -28,6 +28,10 @@ export interface VisualSession {
   effort?: string;
   /** Coding CLI that owns the PTY: claude, grok, or codex. */
   cli?: string;
+  /** Set when the PTY is an ssh session on the user's server. */
+  where?: "remote";
+  /** Local folder, or the remote directory when `where` is remote. */
+  cwd?: string;
   origin?: "github";
   repoFullName?: string;
   startedAt: number;

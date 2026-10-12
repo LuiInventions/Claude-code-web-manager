@@ -9,6 +9,10 @@ type Secrets = {
   picovoiceAccessKey?: string;
   /** Legacy single-key field — migrated into providerKeys.openai. */
   openaiApiKey?: string;
+  /** SSH password. Empty string in a patch clears it. Never mirrored to env. */
+  remoteSshPassword?: string;
+  /** SSH passwords keyed by server id. Empty string clears that id. */
+  remoteSshPasswords?: Record<string, string>;
 };
 
 const STORE = () => path.join(app.getPath("userData"), "secrets.enc");
@@ -39,6 +43,8 @@ function normalize(s: Secrets): Secrets {
     providerKeys,
     cartesiaApiKey: s.cartesiaApiKey,
     picovoiceAccessKey: s.picovoiceAccessKey,
+    remoteSshPassword: typeof s.remoteSshPassword === "string" ? s.remoteSshPassword : undefined,
+    remoteSshPasswords: { ...(s.remoteSshPasswords ?? {}) },
   };
 }
 
@@ -69,6 +75,8 @@ export function saveSecretStore(patch: Secrets): Secrets {
     providerKeys: { ...(cache.providerKeys ?? {}) },
     cartesiaApiKey: cache.cartesiaApiKey,
     picovoiceAccessKey: cache.picovoiceAccessKey,
+    remoteSshPassword: cache.remoteSshPassword,
+    remoteSshPasswords: { ...(cache.remoteSshPasswords ?? {}) },
   };
 
   // legacy single field -> providerKeys.openai
@@ -84,11 +92,19 @@ export function saveSecretStore(patch: Secrets): Secrets {
       else delete next.providerKeys![id];
     }
   }
-  for (const key of ["cartesiaApiKey", "picovoiceAccessKey"] as const) {
+  for (const key of ["cartesiaApiKey", "picovoiceAccessKey", "remoteSshPassword"] as const) {
     if (key in patch) {
       const v = (patch[key] ?? "").trim();
       if (v) next[key] = v;
       else delete next[key];
+    }
+  }
+  if (patch.remoteSshPasswords && typeof patch.remoteSshPasswords === "object") {
+    next.remoteSshPasswords = next.remoteSshPasswords ?? {};
+    for (const [id, val] of Object.entries(patch.remoteSshPasswords)) {
+      const v = (val ?? "").trim();
+      if (v) next.remoteSshPasswords[id] = v;
+      else delete next.remoteSshPasswords[id];
     }
   }
 

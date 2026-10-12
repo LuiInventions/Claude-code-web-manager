@@ -1,6 +1,6 @@
 {
   "name": "claude-code-control-center",
-  "version": "1.9.1",
+  "version": "1.9.2",
   "private": true,
   "description": "Local control center for your PC, projects, and code CLIs (Claude Code, Grok, ChatGPT Codex) — runs only on 127.0.0.1.",
   "author": {

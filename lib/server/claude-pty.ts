@@ -6,11 +6,14 @@ import { getConfig } from "../config";
 import {
   buildInteractiveArgs,
   getCodeCli,
+  isCodeCliId,
   normalizeCliOption,
   spawnEnv,
   type CodeCliId,
 } from "../code-clis";
 import { resolveCliBin } from "./cli-bin";
+import { buildRemoteCliCommand } from "../remote-ssh";
+import { remoteExecArgs } from "./remote-session";
 import { getUsage, isBlocked } from "../usage-store";
 import {
   tailText,
@@ -50,6 +53,8 @@ export interface PtyMeta {
   effort: string;
   /** Coding CLI that owns this PTY. */
   cli: CodeCliId;
+  /** Set when the CLI runs over ssh on the user's server. */
+  where?: "remote";
   origin?: "github";
   repoFullName?: string;
   projectName: string;
@@ -218,11 +223,15 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
     return;
   }
 
-  const cwd = url.searchParams.get("cwd")?.trim() || os.homedir();
+  const where = url.searchParams.get("where") === "remote" ? "remote" : "local";
+  const cwd = url.searchParams.get("cwd")?.trim() || (where === "remote" ? "~" : os.homedir());
   const prompt = url.searchParams.get("prompt") ?? "";
-  // The Settings choice is the source of truth, so a launcher tab that has not
-  // refreshed yet still starts the CLI the user just picked.
-  const cli = getConfig().codeCli;
+  // Locally the Settings choice is the source of truth. A remote session names
+  // the CLI in the URL, because the Sessions tab starts Claude, Grok, or Codex
+  // on the server independently of that setting.
+  const requested = url.searchParams.get("cli");
+  const cli =
+    where === "remote" && isCodeCliId(requested) ? requested : getConfig().codeCli;
   const model = normalizeCliOption(cli, "model", url.searchParams.get("model"));
   const effort = normalizeCliOption(cli, "effort", url.searchParams.get("effort"));
   const cols = Number(url.searchParams.get("cols")) || 80;
@@ -243,9 +252,9 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
   };
 
-  // The usage bar is Claude-only. Grok and Codex must still start when Claude
-  // is rate-limited.
-  if (cli === "claude") {
+  // The local usage limit is Claude-only. A Claude process on the user's server
+  // has its own login, and Grok and Codex are never blocked by it.
+  if (cli === "claude" && where !== "remote") {
     const block = isBlocked(getUsage(), Date.now());
     if (block.blocked) {
       const until = block.until ? new Date(block.until).toLocaleString("de-DE") : "?";
@@ -261,24 +270,45 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
 
   const args = buildInteractiveArgs(cli, { prompt, model, effort });
   const spec = getCodeCli(cli);
-  const bin =
-    cli === "claude"
-      ? resolveClaudeBin()
-      : resolveCliBin(spec.bin) ?? spec.bin;
+  let bin: string;
+  let spawnArgs: string[];
+  let spawnCwd = cwd;
+  let env = spawnEnv(cli) as Record<string, string>;
+  if (where === "remote") {
+    const remote = remoteExecArgs(
+      buildRemoteCliCommand({ cwd, bin: spec.bin, args, cli }),
+    );
+    if (!remote) {
+      send({
+        t: "out",
+        d: "\r\n\x1b[31m[Nicht mit dem Server verbunden.]\x1b[0m\r\n",
+      });
+      send({ t: "exit", code: 1 });
+      ws.close();
+      return;
+    }
+    bin = remote.bin;
+    spawnArgs = remote.args;
+    spawnCwd = os.homedir();
+    env = process.env as Record<string, string>;
+  } else {
+    bin = cli === "claude" ? resolveClaudeBin() : resolveCliBin(spec.bin) ?? spec.bin;
+    spawnArgs = args;
+  }
 
   let term: pty.IPty;
   try {
-    term = pty.spawn(bin, args, {
+    term = pty.spawn(bin, spawnArgs, {
       name: "xterm-256color",
       cols,
       rows,
-      cwd,
-      env: spawnEnv(cli) as Record<string, string>,
+      cwd: spawnCwd,
+      env,
     });
   } catch (err) {
     send({
       t: "out",
-      d: `\r\n\x1b[31m[failed to start ${spec.bin}: ${(err as Error).message}]\x1b[0m\r\n`,
+      d: `\r\n\x1b[31m[failed to start ${where === "remote" ? "ssh" : spec.bin}: ${(err as Error).message}]\x1b[0m\r\n`,
     });
     ws.close();
     return;
@@ -296,6 +326,7 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
       model: model ?? "",
       effort: effort ?? "",
       cli,
+      ...(where === "remote" ? { where: "remote" as const } : {}),
       origin,
       repoFullName,
       projectName,

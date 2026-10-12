@@ -4,6 +4,15 @@ All notable changes to Claude Code Control Center are documented here. Versions
 follow `package.json`; each `v*` tag publishes a self-contained Windows installer
 (`cc-control-center-Setup-<version>.exe`) via GitHub Actions.
 
+## 1.9.2 — 2026-10-12
+
+### Remote server — launcher, Sessions, and VS Codium
+
+- The launcher source list is **Local**, **GitHub**, or **Remote**. Under Remote, saved servers are selectable, and **Neu** adds another server.
+- Login is the `ssh` command line: IP, user, password, and a 2FA code when the server asks. The code is not stored. **IP und Passwort speichern** keeps the host, user, and password.
+- Once connected, the launcher starts the chosen code CLI on that server. The Sessions tab can also start Claude, Grok, or Codex there.
+- **VS Codium** is its own tab. It shows `codium` or `code serve-web` from the connected server.
+
 ## 1.9.1 — 2026-10-11
 
 ### Installer — Setup no longer unpacks tens of thousands of files

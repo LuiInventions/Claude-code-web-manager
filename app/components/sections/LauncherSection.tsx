@@ -23,6 +23,7 @@ import { Badge, Button, Textarea, cn } from "../ui";
 import type { SectionCommand } from "../app-commands";
 import { MODEL_OPTIONS, EFFORT_OPTIONS } from "@/lib/launcher-config";
 import ClaudeCmdPane from "./launcher/ClaudeCmdPane";
+import RemotePicker, { type RemoteTarget } from "./launcher/RemotePicker";
 import UsageBar from "./launcher/UsageBar";
 import { useSpeak } from "../use-speak";
 import Markdown from "../Markdown";
@@ -42,6 +43,8 @@ interface CmdInfo {
   effort: string;
   origin?: "github";
   repoFullName?: string;
+  where?: "remote";
+  cli?: string;
 }
 interface LiveSession {
   id: string;
@@ -94,6 +97,8 @@ export default function LauncherSection({
 }) {
   const [projects, setProjects] = useState<ProjectOpt[]>([]);
   const [githubProjects, setGithubProjects] = useState<ProjectOpt[]>([]);
+  const [source, setSource] = useState<"local" | "github" | "remote">("local");
+  const [remoteTarget, setRemoteTarget] = useState<RemoteTarget | null>(null);
   const [projectPath, setProjectPath] = useState("");
   const [pathMode, setPathMode] = useState<"list" | "manual">("list");
   const [raw, setRaw] = useState("");
@@ -131,6 +136,24 @@ export default function LauncherSection({
   const blocked =
     (codeCli?.id ?? "claude") === "claude" &&
     !!(usage?.blockedUntil && usage.blockedUntil > nowTs);
+  const remoteMode = source === "remote";
+  const canStart = remoteMode ? Boolean(remoteTarget?.ready) : Boolean(projectPath);
+  const startBlocked = remoteMode ? false : blocked;
+  const onRemoteTarget = useCallback((target: RemoteTarget | null) => {
+    setRemoteTarget((prev) => {
+      if (!target && !prev) return prev;
+      if (
+        target &&
+        prev &&
+        target.ready === prev.ready &&
+        target.dir === prev.dir &&
+        target.label === prev.label
+      ) {
+        return prev;
+      }
+      return target;
+    });
+  }, []);
 
   // Drop a model/effort that belongs to the previously selected CLI.
   useEffect(() => {
@@ -315,8 +338,12 @@ export default function LauncherSection({
   // symmetric grid. Each box is an independent interactive session. Empty
   // prompts are allowed (interactive REPL with no initial task).
   const startBatch = (prompts: string[]) => {
-    if (!projectPath || blocked || prompts.length === 0) return;
-    const pn = nameForPath(projectPath);
+    if (prompts.length === 0) return;
+    if (remoteMode) {
+      if (!remoteTarget?.ready) return;
+    } else if (!projectPath || blocked) return;
+    const cwd = remoteMode ? remoteTarget!.dir : projectPath;
+    const pn = remoteMode ? remoteTarget!.label : nameForPath(projectPath);
     const po = pendingOriginRef.current;
     const stamp = Date.now().toString(36);
     const batchId = `b_${stamp}${Math.random().toString(36).slice(2, 5)}`;
@@ -326,16 +353,18 @@ export default function LauncherSection({
       batchId,
       createdAt: startedAt + i,
       projectName: pn,
-      projectPath,
+      projectPath: cwd,
       prompt: pr,
       status: "running" as Status,
       cmd: {
-        cwd: projectPath,
+        cwd,
         prompt: pr,
         model,
         effort,
-        origin: po?.origin,
-        repoFullName: po?.repoFullName,
+        origin: remoteMode ? undefined : po?.origin,
+        repoFullName: remoteMode ? undefined : po?.repoFullName,
+        where: remoteMode ? "remote" : undefined,
+        cli: remoteMode ? codeCli?.id : undefined,
       },
     }));
     setSessions((prev) => [...batch, ...prev]);
@@ -602,58 +631,64 @@ export default function LauncherSection({
         {sidebarOpen && (
         <div className="flex w-[26rem] shrink-0 flex-col border-r border-line bg-elevated">
           <div className="space-y-3 border-b border-line p-4">
-            <div className="flex items-center gap-2">
-              {pathMode === "list" ? (
-                <select
-                  value={projectPath}
-                  onChange={(e) => setProjectPath(e.target.value)}
-                  className="h-9 min-w-0 flex-1 cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
-                >
-                  <option value="">Select project…</option>
-                  {projects.length > 0 && (
-                    <optgroup label="Local Projects">
-                      {projects.map((p) => (
-                        <option key={p.path} value={p.path}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {githubProjects.length > 0 && (
-                    <optgroup label="GitHub">
-                      {githubProjects.map((p) => (
-                        <option key={p.path} value={p.path}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
-              ) : (
-                <input
-                  value={projectPath}
-                  onChange={(e) => setProjectPath(e.target.value)}
-                  placeholder="Absolute path … e.g. C:\\Users\\…\\project"
-                  spellCheck={false}
-                  className="h-9 min-w-0 flex-1 rounded-md border border-line bg-raised px-2.5 font-mono text-[12.5px] text-ink outline-none focus:border-accent"
-                />
-              )}
-              <button
-                type="button"
-                onClick={() => setPathMode((m) => (m === "list" ? "manual" : "list"))}
-                title={pathMode === "list" ? "Enter custom path" : "Select from project list"}
-                className="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-line bg-raised px-2.5 text-xs text-muted transition-colors hover:text-ink"
+            <div className="space-y-2">
+              <select
+                value={source}
+                onChange={(e) => {
+                  setSource(e.target.value as "local" | "github" | "remote");
+                  setProjectPath("");
+                }}
+                aria-label="Projektquelle"
+                className="h-9 w-full cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
               >
-                {pathMode === "list" ? (
-                  <>
-                    <FolderOpen className="size-3.5" /> Enter path
-                  </>
-                ) : (
-                  <>
-                    <ListTree className="size-3.5" /> List
-                  </>
-                )}
-              </button>
+                <option value="local">Local</option>
+                <option value="github">GitHub</option>
+                <option value="remote">Remote</option>
+              </select>
+              {source === "remote" ? (
+                <RemotePicker onTarget={onRemoteTarget} />
+              ) : (
+                <div className="flex items-center gap-2">
+                  {pathMode === "list" ? (
+                    <select
+                      value={projectPath}
+                      onChange={(e) => setProjectPath(e.target.value)}
+                      className="h-9 min-w-0 flex-1 cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
+                    >
+                      <option value="">Select project…</option>
+                      {(source === "local" ? projects : githubProjects).map((p) => (
+                        <option key={p.path} value={p.path}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={projectPath}
+                      onChange={(e) => setProjectPath(e.target.value)}
+                      placeholder="Absolute path … e.g. C:\\Users\\…\\project"
+                      spellCheck={false}
+                      className="h-9 min-w-0 flex-1 rounded-md border border-line bg-raised px-2.5 font-mono text-[12.5px] text-ink outline-none focus:border-accent"
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setPathMode((m) => (m === "list" ? "manual" : "list"))}
+                    title={pathMode === "list" ? "Enter custom path" : "Select from project list"}
+                    className="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-line bg-raised px-2.5 text-xs text-muted transition-colors hover:text-ink"
+                  >
+                    {pathMode === "list" ? (
+                      <>
+                        <FolderOpen className="size-3.5" /> Enter path
+                      </>
+                    ) : (
+                      <>
+                        <ListTree className="size-3.5" /> List
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -754,7 +789,7 @@ export default function LauncherSection({
                   icon={Zap}
                   className="w-full"
                   onClick={startRaw}
-                  disabled={!projectPath || !raw.trim() || blocked}
+                  disabled={!canStart || !raw.trim() || startBlocked}
                 >
                   Start without improving ({boxCount}×)
                 </Button>
@@ -773,7 +808,7 @@ export default function LauncherSection({
                   icon={Split}
                   className="w-full"
                   onClick={openManual}
-                  disabled={!projectPath}
+                  disabled={!canStart}
                 >
                   Split without AI
                 </Button>
@@ -782,7 +817,7 @@ export default function LauncherSection({
                   icon={Play}
                   className="w-full"
                   onClick={startEmpty}
-                  disabled={!projectPath || blocked}
+                  disabled={!canStart || startBlocked}
                 >
                   Start without prompt ({boxCount}×)
                 </Button>
@@ -809,9 +844,9 @@ export default function LauncherSection({
                     icon={Play}
                     className="flex-1"
                     onClick={start}
-                    disabled={!improved.trim() || blocked}
+                    disabled={!canStart || !improved.trim() || startBlocked}
                   >
-                    {blocked ? "Limit reached" : `Start ${cliName}`}
+                    {startBlocked ? "Limit reached" : `Start ${cliName}`}
                   </Button>
                 </div>
               </>
@@ -868,10 +903,10 @@ export default function LauncherSection({
                     className="flex-1"
                     onClick={startSplit}
                     disabled={
-                      blocked || splitSessions.every((s) => !s.prompt.trim())
+                      !canStart || startBlocked || splitSessions.every((s) => !s.prompt.trim())
                     }
                   >
-                    {blocked
+                    {startBlocked
                       ? "Limit reached"
                       : `Continue · start ${splitSessions.filter((s) => s.prompt.trim()).length}`}
                   </Button>
@@ -946,10 +981,10 @@ export default function LauncherSection({
                     className="flex-1"
                     onClick={startManual}
                     disabled={
-                      blocked || manualSessions.every((s) => !s.prompt.trim())
+                      !canStart || startBlocked || manualSessions.every((s) => !s.prompt.trim())
                     }
                   >
-                    {blocked
+                    {startBlocked
                       ? "Limit reached"
                       : `Start ${manualSessions.filter((s) => s.prompt.trim()).length}`}
                   </Button>
@@ -1084,6 +1119,8 @@ export default function LauncherSection({
                       effort={s.cmd.effort}
                       origin={s.cmd.origin}
                       repoFullName={s.cmd.repoFullName}
+                      where={s.cmd.where}
+                      cli={s.cmd.cli}
                       projectName={s.projectName}
                       batchId={s.batchId}
                       createdAt={s.createdAt}

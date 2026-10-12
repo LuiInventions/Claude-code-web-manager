@@ -16,6 +16,13 @@ export interface Secrets {
   picovoiceAccessKey?: string;
   /** Legacy single-key field; migrated into providerKeys.openai on read/write. */
   openaiApiKey?: string;
+  /**
+   * SSH password for the user's own server. Written only when the Sessions
+   * checkbox is checked. Never returned by secretsStatus().
+   */
+  remoteSshPassword?: string;
+  /** SSH passwords keyed by server id (`user@host`). Empty string clears one id. */
+  remoteSshPasswords?: Record<string, string | undefined>;
 }
 
 export interface SecretsStatus {
@@ -23,6 +30,8 @@ export interface SecretsStatus {
   providers: Record<string, boolean>;
   hasCartesia: boolean;
   hasPicovoice: boolean;
+  /** True when an SSH password is stored. The password itself is not included. */
+  hasRemotePassword: boolean;
 }
 
 /** Installed by the Electron main process (safeStorage-backed). Absent in dev/tests. */
@@ -65,6 +74,8 @@ function normalize(s: Secrets): Secrets {
     providerKeys,
     cartesiaApiKey: s.cartesiaApiKey,
     picovoiceAccessKey: s.picovoiceAccessKey,
+    remoteSshPassword: typeof s.remoteSshPassword === "string" ? s.remoteSshPassword : undefined,
+    remoteSshPasswords: { ...(s.remoteSshPasswords ?? {}) },
   };
 }
 
@@ -93,8 +104,25 @@ export function readSecrets(): Secrets {
     fromDev.picovoiceAccessKey?.trim() ||
     process.env.PICOVOICE_ACCESS_KEY?.trim() ||
     undefined;
+  const remoteSshPassword =
+    fromBridge.remoteSshPassword?.trim() || fromDev.remoteSshPassword?.trim() || undefined;
+  const remoteSshPasswords: Record<string, string> = {};
+  const passwordSources = [fromBridge.remoteSshPasswords, fromDev.remoteSshPasswords];
+  for (const source of passwordSources) {
+    for (const [id, val] of Object.entries(source ?? {})) {
+      const v = typeof val === "string" ? val.trim() : "";
+      if (v && !remoteSshPasswords[id]) remoteSshPasswords[id] = v;
+    }
+  }
 
-  return { providerKeys, cartesiaApiKey, picovoiceAccessKey, openaiApiKey: providerKeys.openai };
+  return {
+    providerKeys,
+    cartesiaApiKey,
+    picovoiceAccessKey,
+    openaiApiKey: providerKeys.openai,
+    remoteSshPassword,
+    remoteSshPasswords,
+  };
 }
 
 /** Apply a write patch in place. Empty string clears a key; absent keys untouched. */
@@ -106,11 +134,19 @@ function applyPatch(target: Secrets, patch: Secrets): void {
     if (v) target.providerKeys[id] = v;
     else delete target.providerKeys[id];
   }
-  for (const key of ["cartesiaApiKey", "picovoiceAccessKey"] as const) {
+  for (const key of ["cartesiaApiKey", "picovoiceAccessKey", "remoteSshPassword"] as const) {
     if (key in patch) {
       const v = (patch[key] ?? "").trim();
       if (v) target[key] = v;
       else delete target[key];
+    }
+  }
+  if (patch.remoteSshPasswords && typeof patch.remoteSshPasswords === "object") {
+    target.remoteSshPasswords = target.remoteSshPasswords ?? {};
+    for (const [id, val] of Object.entries(patch.remoteSshPasswords)) {
+      const v = (val ?? "").trim();
+      if (v) target.remoteSshPasswords[id] = v;
+      else delete target.remoteSshPasswords[id];
     }
   }
 }
@@ -137,5 +173,8 @@ export function secretsStatus(): SecretsStatus {
     providers,
     hasCartesia: Boolean(s.cartesiaApiKey),
     hasPicovoice: Boolean(s.picovoiceAccessKey),
+    hasRemotePassword:
+      Boolean(s.remoteSshPassword) ||
+      Object.values(s.remoteSshPasswords ?? {}).some((v) => Boolean(v)),
   };
 }

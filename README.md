@@ -20,10 +20,10 @@
 </p>
 
 > [!TIP]
-> **v1.9.1** launches **Claude Code**, **Grok**, or **ChatGPT Codex**. Pick the
-> CLI on the first-run screen or later in Settings. The Windows Setup installs
-> from one app archive instead of tens of thousands of loose files. v1.8.0 was
-> withdrawn.
+> **v1.9.2** launches **Claude Code**, **Grok**, or **ChatGPT Codex** locally or
+> on your own server. In the launcher, choose **Local**, **GitHub**, or **Remote**.
+> Saved servers sit under Remote, and **Neu** adds one. **VS Codium** is its own tab.
+> The Windows Setup installs from one app archive. v1.8.0 was withdrawn.
 > [**Changelog**](CHANGELOG.md)
 
 <img width="1920" height="1080" alt="Desktop Screenshot 2026 06 28 - 19 27 23 07" src="https://github.com/user-attachments/assets/961f27e3-c90e-4594-bbbc-ce2fa462e56b" />
