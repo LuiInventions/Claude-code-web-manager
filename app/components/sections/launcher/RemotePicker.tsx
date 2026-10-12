@@ -22,14 +22,16 @@ const EMPTY: RemotePublicStatus = {
   hasSavedPassword: false,
   error: "",
   detail: "",
+  needsOtp: false,
   codiumReady: false,
   codiumUrl: "",
   codiumError: "",
 };
 
 /**
- * Saved servers under the launcher's Remote source, plus a form for a new one.
- * The password is sent only to the connect request and is not kept in the status.
+ * Saved servers under the launcher's Remote source.
+ * Login is two fields: user@IP and password. The 2FA field appears only after
+ * ssh has accepted the password and the server asks for a code.
  */
 export default function RemotePicker({
   onTarget,
@@ -39,8 +41,7 @@ export default function RemotePicker({
   const [status, setStatus] = useState<RemotePublicStatus>(EMPTY);
   const [serverId, setServerId] = useState("");
   const [adding, setAdding] = useState(false);
-  const [host, setHost] = useState("");
-  const [user, setUser] = useState("");
+  const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [dir, setDir] = useState("~");
@@ -56,9 +57,9 @@ export default function RemotePicker({
 
   useEffect(() => {
     load();
-    const t = setInterval(load, status.connecting ? 1000 : 3000);
+    const t = setInterval(load, status.connecting || status.needsOtp ? 1000 : 3000);
     return () => clearInterval(t);
-  }, [load, status.connecting]);
+  }, [load, status.connecting, status.needsOtp]);
 
   const selected = status.servers.find((s) => s.id === serverId);
   const connectedHere = status.connected && !adding && status.serverId === serverId && serverId !== "";
@@ -82,14 +83,12 @@ export default function RemotePicker({
     setOtp("");
     const server = status.servers.find((s) => s.id === id);
     if (!server) {
-      setHost("");
-      setUser("");
+      setLogin("");
       setDir("~");
       setSaveLogin(false);
       return;
     }
-    setHost(server.host);
-    setUser(server.user);
+    setLogin(`${server.user}@${server.host}`);
     setDir(server.dir || "~");
     setSaveLogin(server.hasPassword);
   };
@@ -97,8 +96,7 @@ export default function RemotePicker({
   const startNew = () => {
     setAdding(true);
     setServerId("");
-    setHost("");
-    setUser("");
+    setLogin("");
     setPassword("");
     setOtp("");
     setDir("~");
@@ -111,13 +109,21 @@ export default function RemotePicker({
       const res = await fetch("/api/remote", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "connect", host, user, password, otp, saveLogin, dir }),
+        body: JSON.stringify({
+          action: "connect",
+          host: login,
+          user: "",
+          password,
+          otp: "",
+          saveLogin,
+          dir,
+        }),
       });
       const data = (await res.json()) as RemotePublicStatus;
       setStatus({ ...EMPTY, ...data, servers: data.servers ?? [] });
-      setOtp("");
       if (res.ok) {
         setPassword("");
+        setOtp("");
         setAdding(false);
         if (data.serverId) setServerId(data.serverId);
         if (data.dir) setDir(data.dir);
@@ -125,6 +131,19 @@ export default function RemotePicker({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const sendOtp = async () => {
+    const code = otp.trim();
+    if (!code) return;
+    setOtp("");
+    const res = await fetch("/api/remote", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "otp", otp: code }),
+    });
+    const data = (await res.json()) as RemotePublicStatus;
+    setStatus({ ...EMPTY, ...data, servers: data.servers ?? [] });
   };
 
   const disconnect = async () => {
@@ -146,11 +165,12 @@ export default function RemotePicker({
   };
 
   const passwordReady = password.trim().length > 0 || (saveLogin && Boolean(selected?.hasPassword));
-  const hostReady = host.trim().length > 0 && (user.trim().length > 0 || host.includes("@"));
+  const loginReady = login.includes("@") && login.split("@").every((part) => part.trim().length > 0);
   const showForm = adding || (!connectedHere && (serverId !== "" || status.servers.length === 0));
 
   return (
     <div className="space-y-2">
+      {!status.needsOtp && (
       <div className="flex items-center gap-2">
         <select
           value={adding ? "" : serverId}
@@ -173,6 +193,7 @@ export default function RemotePicker({
           Neu
         </button>
       </div>
+      )}
 
       {connectedHere && (
         <div className="flex items-center gap-2">
@@ -193,40 +214,15 @@ export default function RemotePicker({
         </div>
       )}
 
-      {showForm && (
+      {status.needsOtp && (
         <form
           className="space-y-2"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!submitting && !status.connecting && hostReady && passwordReady && !status.connected)
-              void connect();
+            if (otp.trim()) void sendOtp();
           }}
         >
-          <Input
-            value={host}
-            onChange={(e) => setHost(e.target.value)}
-            placeholder="IP oder user@IP"
-            aria-label="Server-IP"
-            autoComplete="off"
-            spellCheck={false}
-            className="font-mono text-[13px]"
-          />
-          <Input
-            value={user}
-            onChange={(e) => setUser(e.target.value)}
-            placeholder="Benutzer"
-            aria-label="Benutzer"
-            autoComplete="username"
-            spellCheck={false}
-          />
-          <Input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={saveLogin && selected?.hasPassword ? "gespeichert" : "Passwort"}
-            aria-label="Passwort"
-            autoComplete="current-password"
-          />
+          <p className="text-[12px] text-muted">Der Server verlangt einen 2FA-Code.</p>
           <Input
             value={otp}
             onChange={(e) => setOtp(e.target.value)}
@@ -235,14 +231,39 @@ export default function RemotePicker({
             autoComplete="one-time-code"
             inputMode="numeric"
             spellCheck={false}
+            autoFocus
           />
+          <Button type="submit" size="sm" variant="primary" disabled={!otp.trim()}>
+            Senden
+          </Button>
+        </form>
+      )}
+
+      {showForm && !status.needsOtp && (
+        <form
+          className="space-y-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!submitting && !status.connecting && loginReady && passwordReady && !status.connected)
+              void connect();
+          }}
+        >
           <Input
-            value={dir}
-            onChange={(e) => setDir(e.target.value)}
-            placeholder="Ordner auf dem Server, z. B. ~"
-            aria-label="Ordner auf dem Server"
+            value={login}
+            onChange={(e) => setLogin(e.target.value)}
+            placeholder="user@IP"
+            aria-label="user@IP"
+            autoComplete="off"
             spellCheck={false}
             className="font-mono text-[13px]"
+          />
+          <Input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={saveLogin && selected?.hasPassword ? "gespeichert" : "Passwort"}
+            aria-label="Passwort"
+            autoComplete="current-password"
           />
           <label className="flex items-center gap-2 text-[12px] text-muted">
             <input
@@ -253,9 +274,7 @@ export default function RemotePicker({
             />
             IP und Passwort speichern
           </label>
-          <p className="text-[11px] text-faint">
-            Anmeldung über ssh. Der 2FA-Code wird nicht gespeichert.
-          </p>
+          <p className="text-[11px] text-faint">Anmeldung über ssh. Ein 2FA-Code wird erst abgefragt, wenn der Server ihn verlangt.</p>
           {status.connected && (
             <p className="text-[12px] text-muted">Zuerst die bestehende Verbindung trennen.</p>
           )}
@@ -265,7 +284,7 @@ export default function RemotePicker({
               size="sm"
               variant="primary"
               loading={submitting || status.connecting}
-              disabled={!hostReady || !passwordReady || status.connected}
+              disabled={!loginReady || !passwordReady || status.connected}
             >
               Verbinden
             </Button>

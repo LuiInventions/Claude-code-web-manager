@@ -34,6 +34,8 @@ export interface RemotePublicStatus {
   hasSavedPassword: boolean;
   error: string;
   detail: string;
+  /** True while ssh is waiting because the server asked for a 2FA code. */
+  needsOtp: boolean;
   codiumReady: boolean;
   codiumUrl: string;
   codiumError: string;

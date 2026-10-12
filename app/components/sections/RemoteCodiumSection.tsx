@@ -20,12 +20,13 @@ const EMPTY: RemotePublicStatus = {
   detail: "",
   codiumReady: false,
   codiumUrl: "",
+  needsOtp: false,
   codiumError: "",
 };
 
 /**
- * VS Codium on the user's own server. Login itself lives on the Sessions tab;
- * this tab only embeds the editor once that ssh session is up.
+ * VS Codium on the user's own server. Login lives in the launcher under
+ * Remote. This tab only embeds the editor once that ssh session is up.
  */
 export default function RemoteCodiumSection() {
   const { navigate } = useAppCommands();
@@ -68,11 +69,11 @@ export default function RemoteCodiumSection() {
           <Monitor className="mx-auto size-8 text-faint" />
           <h2 className="text-sm font-semibold text-ink">VS Codium</h2>
           <p className="text-sm text-muted">
-            Nicht mit dem Server verbunden. Die Anmeldung mit IP, Passwort und 2FA
-            liegt im Tab Sessions.
+            Nicht mit dem Server verbunden. Die Anmeldung mit user@IP und Passwort
+            liegt im Launcher unter Remote.
           </p>
-          <Button variant="primary" onClick={() => navigate("sessions")}>
-            Zum Sessions-Tab
+          <Button variant="primary" onClick={() => navigate("launcher")}>
+            Zum Launcher
           </Button>
         </div>
       </div>

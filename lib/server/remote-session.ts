@@ -64,9 +64,12 @@ const g = globalThis as unknown as {
   __cccRemote?: {
     gen: number;
     connecting: boolean;
+    needsOtp: boolean;
     error: string;
     detail: string;
     live: Live | null;
+    /** Resolves the in-flight login when the user types the 2FA code. Null cancels. */
+    otpWait: ((code: string | null) => void) | null;
   };
 };
 
@@ -74,9 +77,11 @@ function hub() {
   return (g.__cccRemote ??= {
     gen: 0,
     connecting: false,
+    needsOtp: false,
     error: "",
     detail: "",
     live: null,
+    otpWait: null,
   });
 }
 
@@ -168,6 +173,7 @@ export function remoteStatus(): RemotePublicStatus {
     hasSavedPassword: servers.some((s) => s.hasPassword),
     error: state.error,
     detail: state.detail,
+    needsOtp: state.needsOtp,
     codiumReady: Boolean(live?.codiumUrl),
     codiumUrl: live?.codiumUrl || "",
     codiumError: live?.codiumError || "",
@@ -260,12 +266,36 @@ export async function disconnectRemote(): Promise<void> {
   const state = hub();
   state.gen += 1;
   state.connecting = false;
+  state.needsOtp = false;
   state.error = "";
   state.detail = "";
+  const wait = state.otpWait;
+  state.otpWait = null;
+  wait?.(null);
   const live = state.live;
   state.live = null;
   await stopRemoteClis();
   await cleanup(live);
+}
+
+/** The server asked for a code. Called only after ssh has already checked the password. */
+export function submitRemoteOtp(code: string): RemotePublicStatus {
+  const state = hub();
+  const trimmed = code.trim();
+  if (!state.needsOtp || !state.otpWait) {
+    state.error = "Es wird gerade kein 2FA-Code verlangt.";
+    return remoteStatus();
+  }
+  if (!trimmed) {
+    state.error = "2FA-Code fehlt.";
+    return remoteStatus();
+  }
+  state.error = "";
+  state.needsOtp = false;
+  const wait = state.otpWait;
+  state.otpWait = null;
+  wait(trimmed);
+  return remoteStatus();
 }
 
 function waitForPort(port: number, timeoutMs: number): Promise<void> {
@@ -333,10 +363,13 @@ export async function connectRemote(input: {
     hub().error = "Passwort fehlt.";
     return remoteStatus();
   }
-  const otp = input.otp.trim();
+  let otp = input.otp.trim();
+  const typedSecrets = [password];
   const state = hub();
   const my = (state.gen += 1);
   state.connecting = true;
+  state.needsOtp = false;
+  state.otpWait = null;
   state.error = "";
   state.detail = "";
   const previous = state.live;
@@ -374,17 +407,38 @@ export async function connectRemote(input: {
 
   let transcript = "";
   let passwordSent = false;
-  let otpSent = false;
+  let otpHolding = false;
+  let otpQuietUntil = 0;
   let hostkeySent = false;
   let stage: "auth" | "probe" | "key" = "auth";
   let probes = 0;
 
   const fail = (message: string) => {
     state.connecting = false;
+    state.needsOtp = false;
+    state.otpWait = null;
     state.error = message;
-    state.detail = redact(transcript, [password, otp]);
+    state.detail = redact(transcript, typedSecrets);
     void cleanup(live);
   };
+
+  const waitForOtp = (): Promise<string> =>
+    new Promise((resolve, reject) => {
+      state.needsOtp = true;
+      state.error = "";
+      const timer = setTimeout(() => {
+        state.needsOtp = false;
+        state.otpWait = null;
+        reject(new Error("Zeitüberschreitung bei der 2FA-Eingabe."));
+      }, 180000);
+      state.otpWait = (code) => {
+        clearTimeout(timer);
+        state.needsOtp = false;
+        state.otpWait = null;
+        if (!code || my !== hub().gen) reject(new Error("Anmeldung abgebrochen."));
+        else resolve(code);
+      };
+    });
 
   try {
     live.login = pty.spawn(
@@ -404,10 +458,16 @@ export async function connectRemote(input: {
   }
 
   const done = new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("Zeitüberschreitung bei der Anmeldung.")), 45000);
+    let timer = setTimeout(() => reject(new Error("Zeitüberschreitung bei der Anmeldung.")), 45000);
+    const arm = (ms: number) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => reject(new Error("Zeitüberschreitung bei der Anmeldung.")), ms);
+    };
     const finish = (err?: Error) => {
       clearTimeout(timer);
       clearInterval(probeTimer);
+      state.needsOtp = false;
+      state.otpWait = null;
       if (err) reject(err);
       else resolve();
     };
@@ -454,26 +514,47 @@ export async function connectRemote(input: {
         passwordSent = true;
         live.login?.write(`${password}\n`);
         setTimeout(() => {
-          if (stage !== "auth" || otpSent) return;
+          if (stage !== "auth" || otpHolding || state.needsOtp) return;
           const now = classifySshTail(transcript);
           if (now === "otp" || now === "password" || now === "hostkey") return;
           stage = "probe";
         }, 2200);
         return;
       }
-      if (kind === "otp" && !otpSent) {
-        if (!otp) {
-          finish(new Error("Der Server verlangt einen 2FA-Code."));
-          return;
-        }
-        otpSent = true;
-        stage = "auth";
-        live.login?.write(`${otp}\n`);
-        setTimeout(() => {
-          if (stage === "auth") stage = "probe";
-        }, 900);
+      // Ask for the code only after ssh has printed a 2FA prompt. A code typed
+      // before that prompt would be sent into the password field.
+      if (kind === "otp" && stage === "auth" && !otpHolding && Date.now() >= otpQuietUntil) {
+        askForOtp();
       }
     });
+
+    function askForOtp() {
+      if (otpHolding || stage !== "auth" || my !== hub().gen) return;
+      otpHolding = true;
+      clearTimeout(timer);
+      const provided = otp;
+      otp = "";
+      const pending = provided ? Promise.resolve(provided) : waitForOtp();
+      pending
+        .then((code) => {
+          otpHolding = false;
+          if (my !== hub().gen || !live.login) return;
+          typedSecrets.push(code);
+          otpQuietUntil = Date.now() + 1500;
+          live.login.write(`${code}\n`);
+          arm(45000);
+          setTimeout(() => {
+            if (stage !== "auth" || my !== hub().gen) return;
+            const now = classifySshTail(transcript);
+            if (now === "otp" || now === "password" || now === "hostkey") {
+              if (now === "otp") askForOtp();
+              return;
+            }
+            stage = "probe";
+          }, 1600);
+        })
+        .catch((err: Error) => finish(err));
+    };
     live.login!.onExit(() => {
       if (stage !== "key") finish(new Error("ssh wurde vor der Anmeldung beendet."));
     });
@@ -482,7 +563,11 @@ export async function connectRemote(input: {
   try {
     await done;
   } catch (err) {
-    if (my === hub().gen) fail((err as Error).message);
+    if (my !== hub().gen) {
+      await cleanup(live);
+      return remoteStatus();
+    }
+    fail((err as Error).message);
     return remoteStatus();
   }
   if (my !== hub().gen) {
@@ -492,6 +577,7 @@ export async function connectRemote(input: {
 
   state.live = live;
   state.connecting = false;
+  state.needsOtp = false;
   state.error = "";
   rememberLogin({ ...input, password, user: target.user, host: target.host });
   void startCodium(my).catch(() => {});

@@ -4,6 +4,13 @@ All notable changes to Claude Code Control Center are documented here. Versions
 follow `package.json`; each `v*` tag publishes a self-contained Windows installer
 (`cc-control-center-Setup-<version>.exe`) via GitHub Actions.
 
+## 1.9.4 — 2026-10-12
+
+### Remote login — two fields, then the code if the server asks
+
+- The Sessions tab is the pixel office again. Server login is not on that tab.
+- Under Remote in the launcher the form is `user@IP` and the password. The 2FA field opens only after ssh has started and the server asks for a code.
+
 ## 1.9.3 — 2026-10-12
 
 ### Startup — 1.9.2 crashed before the window opened

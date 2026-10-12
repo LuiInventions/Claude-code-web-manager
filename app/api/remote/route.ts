@@ -5,6 +5,7 @@ import {
   remoteStatus,
   retryCodium,
   setRemoteDir,
+  submitRemoteOtp,
 } from "@/lib/server/remote-session";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +36,11 @@ export async function POST(req: NextRequest) {
     const dir = typeof body.dir === "string" && body.dir.trim() ? body.dir.trim() : "~";
     setRemoteDir(dir);
     return Response.json(remoteStatus());
+  }
+  if (action === "otp") {
+    const status = submitRemoteOtp(typeof body.otp === "string" ? body.otp : "");
+    if (status.error && !status.needsOtp) return Response.json(status, { status: 400 });
+    return Response.json(status);
   }
   if (action !== "connect") {
     return Response.json({ error: "Unbekannte Aktion." }, { status: 400 });
