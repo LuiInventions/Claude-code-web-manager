@@ -1,7 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
-import os from "node:os";
 import path from "node:path";
 import * as pty from "node-pty";
 import { readSettings, writeSettings, type RemoteServerRecord } from "../settings";
@@ -21,14 +20,18 @@ import {
 import { startCodiumProxy } from "./codium-proxy";
 
 /** Temp dir for the throwaway SSH key.
- *  Do not call os.tmpdir() or path.join() here. Next's file tracer evaluates
- *  those and on Windows scans the user profile, which fails on the
- *  "Application Data" junction. Environment values stay unknown to the tracer.
+ *  Not os.tmpdir() / os.homedir(): Next evaluates those while tracing and then
+ *  scans the Windows user profile.
  */
 function remoteKeyPrefix(): string {
   const env = process.env;
   const root = env.TMPDIR || env.TEMP || env.TMP || "/tmp";
   return root + path.sep + "ccc-remote-";
+}
+
+function spawnHome(): string {
+  const env = process.env;
+  return env.USERPROFILE || env.HOME || ".";
 }
 
 export type { RemotePublicStatus };
@@ -391,7 +394,7 @@ export async function connectRemote(input: {
         name: "xterm-256color",
         cols: 80,
         rows: 24,
-        cwd: os.homedir(),
+        cwd: spawnHome(),
         env: process.env as Record<string, string>,
       },
     );
@@ -514,7 +517,7 @@ async function startCodium(gen: number): Promise<void> {
       name: "xterm-256color",
       cols: 80,
       rows: 24,
-      cwd: os.homedir(),
+      cwd: spawnHome(),
       env: process.env as Record<string, string>,
     },
   );
