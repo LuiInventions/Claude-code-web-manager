@@ -11,6 +11,7 @@ import {
   type CodeCliId,
 } from "./code-clis";
 import { codeCliInstalled } from "./server/cli-bin";
+import { isThemeId, type ThemeId } from "./themes";
 
 /**
  * Central configuration. Precedence (highest first):
@@ -160,6 +161,8 @@ export interface PublicConfig {
   codeCli: CodeCliId;
   /** Last Local folder chosen in the launcher. Empty until one is picked. */
   launcherLocalPath: string;
+  /** Active palette. */
+  theme: ThemeId;
   /** Every coding CLI, with its model/effort dropdowns and whether the binary is on PATH. */
   codeClis: {
     id: CodeCliId;
@@ -204,6 +207,7 @@ export function getPublicConfig(): PublicConfig {
     port: c.port,
     codeCli: c.codeCli,
     launcherLocalPath: settings.launcherLocalPath?.trim() || "",
+    theme: settings.theme && isThemeId(settings.theme) ? settings.theme : "ink",
     codeClis: CODE_CLIS.map((cli) => ({
       id: cli.id,
       label: cli.label,

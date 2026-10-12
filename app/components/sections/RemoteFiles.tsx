@@ -79,8 +79,8 @@ export default function RemoteFiles({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col border-t border-line">
-      <label className="flex items-center gap-2 border-b border-line px-3">
+    <div className="flex min-h-0 flex-1 flex-col border-t border-glass-border">
+      <label className="flex items-center gap-2 border-b border-glass-border px-3">
         <Search className="size-3.5 shrink-0 text-faint" />
         <input
           value={query}
@@ -132,7 +132,7 @@ export default function RemoteFiles({
       </div>
       {menu && (
         <div
-          className="fixed z-50 min-w-44 rounded-md border border-line bg-surface py-1 shadow-none"
+          className="glass-pane fixed z-50 min-w-44 rounded-lg py-1"
           style={{ left: menu.x, top: menu.y }}
           onPointerDown={(e) => e.stopPropagation()}
         >

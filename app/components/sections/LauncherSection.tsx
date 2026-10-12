@@ -23,6 +23,7 @@ import { Badge, Button, Textarea, cn } from "../ui";
 import type { SectionCommand } from "../app-commands";
 import { MODEL_OPTIONS, EFFORT_OPTIONS } from "@/lib/launcher-config";
 import ClaudeCmdPane from "./launcher/ClaudeCmdPane";
+import LocalFiles from "./LocalFiles";
 import UsageBar from "./launcher/UsageBar";
 import { useSpeak } from "../use-speak";
 import Markdown from "../Markdown";
@@ -200,6 +201,12 @@ export default function LauncherSection({
       clearInterval(id);
     };
   }, [source]);
+
+  useEffect(() => {
+    if (source !== "github" || projectPath) return;
+    const first = githubProjects[0]?.path;
+    if (first) setProjectPath(first);
+  }, [source, projectPath, githubProjects]);
 
   // VS Codium opens this same local folder. Remember it when Local is selected.
   useEffect(() => {
@@ -625,6 +632,11 @@ export default function LauncherSection({
     }
   };
 
+  const openFolder = async () => {
+    const picked = await window.cccDesktop?.pickFolder();
+    if (picked) setProjectPath(picked);
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {(codeCli?.id ?? "claude") === "claude" && (
@@ -633,428 +645,49 @@ export default function LauncherSection({
       <div className="flex min-h-0 flex-1">
         {/* Left: form + sessions — collapsible to maximize the terminal */}
         {sidebarOpen && (
-        <div className="flex w-[26rem] shrink-0 flex-col border-r border-line bg-elevated">
-          <div className="space-y-3 border-b border-line p-4">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                  {pathMode === "list" ? (
-                    <select
-                      value={projectPath}
-                      onChange={(e) => setProjectPath(e.target.value)}
-                      className="h-9 min-w-0 flex-1 cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
-                    >
-                      <option value="">Select project…</option>
-                      {(source === "local" ? projects : githubProjects).map((p) => (
-                        <option key={p.path} value={p.path}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      value={projectPath}
-                      onChange={(e) => setProjectPath(e.target.value)}
-                      placeholder="Absolute path … e.g. C:\\Users\\…\\project"
-                      spellCheck={false}
-                      className="h-9 min-w-0 flex-1 rounded-md border border-line bg-raised px-2.5 font-mono text-[12.5px] text-ink outline-none focus:border-accent"
-                    />
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setPathMode((m) => (m === "list" ? "manual" : "list"))}
-                    title={pathMode === "list" ? "Enter custom path" : "Select from project list"}
-                    className="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-line bg-raised px-2.5 text-xs text-muted transition-colors hover:text-ink"
-                  >
-                    {pathMode === "list" ? (
-                      <>
-                        <FolderOpen className="size-3.5" /> Enter path
-                      </>
-                    ) : (
-                      <>
-                        <ListTree className="size-3.5" /> List
-                      </>
-                    )}
-                  </button>
-                </div>
-              {source === "github" && githubProjects.length === 0 && (
-                <p className="text-[11px] leading-5 text-faint">
-                  No cloned repos yet. Connect a token under Repos.
-                </p>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <label className="flex min-w-0 flex-1 flex-col gap-1">
-                <span className="text-[10px] font-medium uppercase tracking-wide text-faint">
-                  Model
-                </span>
-                <select
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  className="h-9 w-full cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
-                >
-                  {modelOptions.map((o) => (
-                    <option key={o.label} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex min-w-0 flex-1 flex-col gap-1">
-                <span className="text-[10px] font-medium uppercase tracking-wide text-faint">
-                  Effort
-                </span>
-                <select
-                  value={effort}
-                  onChange={(e) => setEffort(e.target.value)}
-                  className="h-9 w-full cursor-pointer rounded-md border border-line bg-raised px-2.5 text-sm text-ink outline-none focus:border-accent"
-                >
-                  {effortOptions.map((o) => (
-                    <option key={o.label} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <p className="text-[11px] text-faint">
-              Sessions open with {cliName}. Change it in Settings.
-            </p>
-
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-medium uppercase tracking-wide text-faint">
-                Boxes
-              </span>
-              <div className="flex overflow-hidden rounded-md border border-line">
+          <aside className="glass-pane flex w-72 shrink-0 flex-col border-r">
+            <div className="flex flex-col gap-3 px-3 py-3">
+              <div className="grid grid-cols-6 gap-1.5">
                 {BOX_COUNTS.map((n) => (
                   <button
                     key={n}
                     type="button"
+                    aria-pressed={boxCount === n}
                     onClick={() => setBoxCount(n)}
-                    title={`Open ${n} ${cliName} box${n > 1 ? "es" : ""} simultaneously`}
-                    className={cn(
-                      "cursor-pointer px-3 py-1.5 text-xs font-medium transition-colors",
-                      boxCount === n
-                        ? "bg-selected text-ink"
-                        : "bg-raised text-muted hover:text-ink",
-                    )}
+                    className="rail-count"
                   >
-                    ×{n}
+                    {n}
                   </button>
                 ))}
               </div>
-            </div>
-
-            {phase === "idle" && (
-              <>
-                <Textarea
-                  value={raw}
-                  onChange={(e) => setRaw(e.target.value)}
-                  rows={4}
-                  placeholder="Raw prompt … e.g. 'add dark mode'"
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted">Ordner</span>
+                <input
+                  value={projectPath}
+                  onChange={(e) => setProjectPath(e.target.value)}
+                  placeholder={source === "github" ? "Repo-Ordner" : "Lokaler Ordner"}
+                  spellCheck={false}
+                  aria-label="Startordner"
+                  className="h-9 w-full rounded-lg border border-transparent bg-raised/80 px-2.5 font-mono text-[12.5px] text-ink outline-none"
                 />
-                {improveError && <p className="text-xs text-danger">{improveError}</p>}
-                {splitError && <p className="text-xs text-danger">{splitError}</p>}
-                <Button
-                  variant="primary"
-                  icon={Wand2}
-                  className="w-full"
-                  onClick={improve}
-                  loading={improving}
-                  disabled={!projectPath || !raw.trim() || !hasAiKey}
-                  title={
-                    !hasAiKey
-                      ? "Kein AI-Provider konfiguriert — in den Einstellungen einen Key hinterlegen."
-                      : undefined
-                  }
-                >
-                  Improve prompt
-                </Button>
-                {!hasAiKey && (
-                  <p className="text-xs text-faint">
-                    Kein AI-Provider konfiguriert — Prompt-Verbesserung & Review sind aus. Du kannst
-                    trotzdem „Start without improvement“ nutzen.
-                  </p>
-                )}
-                <Button
-                  variant="secondary"
-                  icon={Zap}
-                  className="w-full"
-                  onClick={startRaw}
-                  disabled={!canStart || !raw.trim() || startBlocked}
-                >
-                  Start without improving ({boxCount}×)
-                </Button>
-                <Button
-                  variant="secondary"
-                  icon={Sparkles}
-                  className="w-full"
-                  onClick={runSplit}
-                  loading={splitting}
-                  disabled={!projectPath || !raw.trim()}
-                >
-                  AI mode: split into sessions
-                </Button>
-                <Button
-                  variant="secondary"
-                  icon={Split}
-                  className="w-full"
-                  onClick={openManual}
-                  disabled={!canStart}
-                >
-                  Split without AI
-                </Button>
-                <Button
-                  variant="ghost"
-                  icon={Play}
-                  className="w-full"
-                  onClick={startEmpty}
-                  disabled={!canStart || startBlocked}
-                >
-                  Start without prompt ({boxCount}×)
-                </Button>
-              </>
-            )}
-
-            {phase === "improved" && (
-              <>
-                <div className="text-xs font-medium uppercase tracking-wide text-faint">
-                  Improved prompt (editable)
-                </div>
-                <Textarea
-                  value={improved}
-                  onChange={(e) => setImproved(e.target.value)}
-                  rows={8}
-                  className="font-mono text-[12.5px]"
-                />
-                <div className="flex gap-2">
-                  <Button variant="ghost" icon={ArrowLeft} onClick={() => setPhase("idle")}>
-                    Back
-                  </Button>
-                  <Button
-                    variant="primary"
-                    icon={Play}
-                    className="flex-1"
-                    onClick={start}
-                    disabled={!canStart || !improved.trim() || startBlocked}
-                  >
-                    {startBlocked ? "Limit reached" : `Start ${cliName}`}
-                  </Button>
-                </div>
-              </>
-            )}
-
-            {phase === "split" && (
-              <>
-                <div className="text-xs font-medium uppercase tracking-wide text-faint">
-                  AI suggestion · {splitSessions.length}{" "}
-                  {splitSessions.length === 1 ? "session" : "sessions"} (editable)
-                </div>
-                <div className="max-h-[44vh] space-y-2 overflow-auto pr-1">
-                  {splitSessions.map((s, i) => (
-                    <div key={i} className="rounded-md border border-line bg-raised p-2">
-                      <div className="mb-1 flex items-center gap-2 text-[11px] text-faint">
-                        <span className="min-w-0 truncate font-medium text-muted">
-                          #{i + 1}
-                          {s.title ? ` · ${s.title}` : ""}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setSplitSessions((list) => list.filter((_, j) => j !== i))
-                          }
-                          title="Remove session"
-                          aria-label="Remove session"
-                          className="ml-auto inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-faint transition-colors hover:bg-surface hover:text-danger"
-                        >
-                          <X className="size-3.5" />
-                        </button>
-                      </div>
-                      <Textarea
-                        value={s.prompt}
-                        onChange={(e) =>
-                          setSplitSessions((list) =>
-                            list.map((x, j) =>
-                              j === i ? { ...x, prompt: e.target.value } : x,
-                            ),
-                          )
-                        }
-                        rows={3}
-                        className="font-mono text-[12px]"
-                      />
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="ghost" icon={ArrowLeft} onClick={() => setPhase("idle")}>
-                    Back
-                  </Button>
-                  <Button
-                    variant="primary"
-                    icon={Play}
-                    className="flex-1"
-                    onClick={startSplit}
-                    disabled={
-                      !canStart || startBlocked || splitSessions.every((s) => !s.prompt.trim())
-                    }
-                  >
-                    {startBlocked
-                      ? "Limit reached"
-                      : `Continue · start ${splitSessions.filter((s) => s.prompt.trim()).length}`}
-                  </Button>
-                </div>
-              </>
-            )}
-
-            {phase === "manual" && (
-              <>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0 truncate text-xs font-medium uppercase tracking-wide text-faint">
-                    Manual split · {manualSessions.length}/6{" "}
-                    {manualSessions.length === 1 ? "session" : "sessions"}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setManualSessions((list) =>
-                        list.length >= 6 ? list : [...list, { prompt: "" }],
-                      )
-                    }
-                    disabled={manualSessions.length >= 6}
-                    title="Add session"
-                    aria-label="Add session"
-                    className="inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md border border-line bg-raised text-muted transition-colors hover:border-line-strong hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <Plus className="size-4" />
-                  </button>
-                </div>
-                <div className="max-h-[44vh] space-y-2 overflow-auto pr-1">
-                  {manualSessions.map((s, i) => (
-                    <div key={i} className="rounded-md border border-line bg-raised p-2">
-                      <div className="mb-1 flex items-center gap-2 text-[11px] text-faint">
-                        <span className="min-w-0 truncate font-medium text-muted">
-                          #{i + 1}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setManualSessions((list) => list.filter((_, j) => j !== i))
-                          }
-                          title="Remove session"
-                          aria-label="Remove session"
-                          className="ml-auto inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-faint transition-colors hover:bg-surface hover:text-danger"
-                        >
-                          <X className="size-3.5" />
-                        </button>
-                      </div>
-                      <Textarea
-                        value={s.prompt}
-                        onChange={(e) =>
-                          setManualSessions((list) =>
-                            list.map((x, j) =>
-                              j === i ? { ...x, prompt: e.target.value } : x,
-                            ),
-                          )
-                        }
-                        rows={3}
-                        placeholder={`Prompt for session #${i + 1}…`}
-                        className="font-mono text-[12px]"
-                      />
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="ghost" icon={ArrowLeft} onClick={() => setPhase("idle")}>
-                    Back
-                  </Button>
-                  <Button
-                    variant="primary"
-                    icon={Play}
-                    className="flex-1"
-                    onClick={startManual}
-                    disabled={
-                      !canStart || startBlocked || manualSessions.every((s) => !s.prompt.trim())
-                    }
-                  >
-                    {startBlocked
-                      ? "Limit reached"
-                      : `Start ${manualSessions.filter((s) => s.prompt.trim()).length}`}
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="space-y-1 border-b border-line px-4 py-3">
-            <Button
-              variant="secondary"
-              icon={reviewing ? Loader2 : FileText}
-              className="w-full"
-              onClick={doReview}
-              disabled={sessions.length === 0 || reviewing || !hasAiKey}
-              title={
-                !hasAiKey
-                  ? "Kein AI-Provider konfiguriert — in den Einstellungen einen Key hinterlegen."
-                  : undefined
-              }
-            >
-              {reviewing ? "Reviewing sessions…" : "Review sessions"}
-            </Button>
-            {reviewError && <p className="text-xs text-danger">{reviewError}</p>}
-          </div>
-          <div className="px-4 py-2 text-xs font-medium uppercase tracking-wide text-faint">
-            Sessions
-          </div>
-          <div className="min-h-0 flex-1 overflow-auto px-2 pb-2">
-            {sessions.length === 0 && (
-              <p className="px-2 py-3 text-xs text-faint">No sessions started yet.</p>
-            )}
-            {[...sessions]
-              .sort(
-                (a, b) =>
-                  (numberById.get(a.id) ?? 0) - (numberById.get(b.id) ?? 0),
-              )
-              .map((s) => (
-              <div
-                key={s.id}
-                className={cn(
-                  "mb-1 flex items-start gap-1 rounded-md border pr-1 transition-colors",
-                  s.id === selectedId
-                    ? "border-line-strong bg-selected"
-                    : "border-transparent hover:bg-raised",
-                )}
+              </label>
+              <Button
+                variant="primary"
+                icon={Play}
+                className="w-full"
+                onClick={startEmpty}
+                disabled={!canStart || startBlocked}
               >
-                <button
-                  onClick={() => setSelectedId(s.id)}
-                  className="flex min-w-0 flex-1 cursor-pointer flex-col gap-1 px-3 py-2 text-left"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="flex min-w-0 items-center gap-2">
-                      <InstanceNumber n={numberById.get(s.id) ?? 0} active={s.id === selectedId} />
-                      <span
-                        dir="rtl"
-                        title={s.projectPath || s.projectName}
-                        className="truncate text-left text-sm text-ink"
-                      >
-                        {String.fromCharCode(0x200e) + (s.projectPath || s.projectName || "Project")}
-                      </span>
-                    </span>
-                    <StatusPill status={s.status} />
-                  </div>
-                  <span className="truncate text-xs text-faint">{s.prompt}</span>
-                </button>
-                <button
-                  onClick={() => closeSession(s.id)}
-                  title="Close session"
-                  aria-label="Close session"
-                  className="mt-2 inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-faint transition-colors hover:bg-raised hover:text-danger"
-                >
-                  <X className="size-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+                Starten
+              </Button>
+            </div>
+            <LocalFiles path={projectPath} onPathChange={setProjectPath} />
+            <div className="border-t border-glass-border px-3 py-3">
+              <Button variant="secondary" icon={FolderOpen} className="w-full" onClick={() => void openFolder()}>
+                Ordner öffnen
+              </Button>
+            </div>
+          </aside>
         )}
 
         {/* Right: live terminals as a symmetric grid. Every pane stays mounted
@@ -1142,10 +775,9 @@ export default function LauncherSection({
                   <Rocket className="size-6" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className="text-sm font-medium text-ink">{cliName} Launcher</h3>
+                  <h3 className="text-sm font-medium text-ink">{cliName}</h3>
                   <p className="mx-auto max-w-sm text-sm text-muted">
-                    Select a project, write a prompt, choose the number of boxes, start —
-                    sessions then run live as a terminal grid here.
+                    Ordner wählen und Starten. Die Sitzung läuft hier als Terminal.
                   </p>
                 </div>
               </div>
@@ -1193,13 +825,8 @@ export default function LauncherSection({
                   if (first) setSelectedId(first.id);
                 }}
                 aria-label={`Page ${i + 1}`}
-                aria-current={!activeReviewId && id === activeBatchId}
-                className={cn(
-                  "flex size-9 cursor-pointer items-center justify-center rounded-md border text-sm font-medium transition-colors",
-                  !activeReviewId && id === activeBatchId
-                    ? "border-accent bg-accent/15 text-accent"
-                    : "border-line text-muted hover:border-accent/50 hover:text-ink",
-                )}
+                aria-pressed={!activeReviewId && id === activeBatchId}
+                className="rail-count flex size-9 items-center justify-center text-sm"
               >
                 {i + 1}
               </button>
@@ -1210,13 +837,8 @@ export default function LauncherSection({
                 onClick={() => setActiveReviewId(rev.id)}
                 title={`Review ${rev.title}`}
                 aria-label={`Review ${rev.title}`}
-                aria-current={activeReviewId === rev.id}
-                className={cn(
-                  "flex size-9 cursor-pointer items-center justify-center rounded-md border transition-colors",
-                  activeReviewId === rev.id
-                    ? "border-accent bg-accent/15 text-accent"
-                    : "border-line text-muted hover:border-accent/50 hover:text-ink",
-                )}
+                aria-pressed={activeReviewId === rev.id}
+                className="rail-count flex size-9 items-center justify-center"
               >
                 <FileText className="size-4" />
               </button>

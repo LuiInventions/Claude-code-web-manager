@@ -30,7 +30,8 @@ import { setProviderCapabilities } from "./office/toolUtils";
 import type { OfficeLayout } from "./office/types";
 import { setWallSprites } from "./office/wallTiles";
 import type { OfficeState } from "./office/engine/officeState";
-import { numberSessions, sessionActivity, type ToolKind, type VisualSession } from "@/lib/sessions";
+import { sessionActivity, type ToolKind, type VisualSession } from "@/lib/sessions";
+import { assignSessionNames, sessionPlace, type SessionPlace } from "@/lib/session-names";
 
 /** Same shape as pixel-agents' SubagentCharacter (re-exported for ToolOverlay). */
 export interface SubagentCharacter {
@@ -52,12 +53,10 @@ export interface SessionMessagesState {
    * upstream's per-tool status text.
    */
   agentCaptions: Record<number, string>;
-  /**
-   * Office agent-id → the session's stable Launcher number (the same `#N` shown
-   * in the Launcher tab, oldest = #1). The overlay renders this permanently over
-   * each character. Sub-agents inherit their parent session's number.
-   */
-  agentNumbers: Record<number, number>;
+  /** Office agent-id → the session's name. Sub-agents inherit the parent name. */
+  agentNames: Record<number, string>;
+  /** Office agent-id → GitHub, local, or server. */
+  agentPlaces: Record<number, SessionPlace>;
 }
 
 /**
@@ -123,7 +122,8 @@ export function useSessionMessages(
   const [agents, setAgents] = useState<number[]>([]);
   const [subagentCharacters, setSubagentCharacters] = useState<SubagentCharacter[]>([]);
   const [agentCaptions, setAgentCaptions] = useState<Record<number, string>>({});
-  const [agentNumbers, setAgentNumbers] = useState<Record<number, number>>({});
+  const [agentNames, setAgentNames] = useState<Record<number, string>>({});
+  const [agentPlaces, setAgentPlaces] = useState<Record<number, SessionPlace>>({});
 
   // Stable session-id → office agent-id assignment (first-seen order).
   const agentIdBySession = useRef<Map<string, number>>(new Map());
@@ -188,16 +188,15 @@ export function useSessionMessages(
     const os = getOfficeState();
     const map = agentIdBySession.current;
     const present = new Set<string>();
+    const live = sessions.filter((s) => s.status === "running");
     // Rebuilt each poll: office agent-id → live desk caption (active agents only).
     const caps: Record<number, string> = {};
-    // Rebuilt each poll: office agent-id → stable Launcher number (#N). The
-    // numbering is keyed on the session's spawn time (oldest = #1), identical to
-    // the Launcher tab, so a session shows the SAME number in both places.
-    const nums: Record<number, number> = {};
-    const numberBySession = numberSessions(sessions);
+    const names: Record<number, string> = {};
+    const places: Record<number, SessionPlace> = {};
+    const nameBySession = assignSessionNames(live.map((s) => s.id));
 
     // Add / update agents for every live session.
-    for (const s of sessions) {
+    for (const s of live) {
       present.add(s.id);
       let agentId = map.get(s.id);
       if (agentId === undefined) {
@@ -214,8 +213,9 @@ export function useSessionMessages(
       // the original; drives the live "✎ file" / "$ command" label.
       const caption = active ? toolCaption(s.tool, s.detail) : null;
       if (caption) caps[agentId] = caption;
-      const launcherNumber = numberBySession.get(s.id);
-      if (launcherNumber) nums[agentId] = launcherNumber;
+      const name = nameBySession.get(s.id);
+      if (name) names[agentId] = name;
+      places[agentId] = sessionPlace(s);
       const prev = lastSnapshot.current.get(agentId);
 
       if (!prev || prev.active !== active) os.setAgentActive(agentId, active);
@@ -245,11 +245,12 @@ export function useSessionMessages(
     }
 
     setAgentCaptions(caps);
-    setAgentNumbers(nums);
+    setAgentNames(names);
+    setAgentPlaces(places);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions, layoutReady]);
 
-  return { agents, layoutReady, subagentCharacters, agentCaptions, agentNumbers };
+  return { agents, layoutReady, subagentCharacters, agentCaptions, agentNames, agentPlaces };
 }
 
 /** Spawn / update / despawn this session's detected subagents as office characters. */

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { CodeCliId } from "./code-clis";
+import type { ThemeId } from "./themes";
 
 /** A server saved from the launcher or the Sessions tab. No password here. */
 export interface RemoteServerRecord {
@@ -60,6 +61,8 @@ export interface Settings {
    * Not a remote path.
    */
   launcherLocalPath?: string;
+  /** One of the built-in palettes. Missing means Ink. */
+  theme?: ThemeId;
 }
 
 const DATA_DIR = path.join(process.cwd(), ".data");

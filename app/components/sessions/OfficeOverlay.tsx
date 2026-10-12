@@ -12,8 +12,8 @@
  * Responsibilities:
  *   - Point 3: the live activity caption ("desk caption") above each active
  *     agent — the current file ("✎ App.tsx") or command ("$ npm run build").
- *   - Point 4: a permanent "#N" badge over every character, N = the same
- *     Launcher number as in the Launcher tab for that session.
+ *   - A name over every character, with GitHub / Lokal / Server above it.
+ *     Clicking the name opens that tab.
  */
 
 import { useEffect, useState } from "react";
@@ -22,6 +22,7 @@ import { CHARACTER_SITTING_OFFSET_PX, TOOL_OVERLAY_VERTICAL_OFFSET } from "./con
 import type { OfficeState } from "./office/engine/officeState";
 import { CharacterState, TILE_SIZE } from "./office/types";
 import type { SubagentCharacter } from "./useSessionMessages";
+import { placeLabel, type SessionPlace } from "@/lib/session-names";
 
 interface OfficeOverlayProps {
   officeState: OfficeState;
@@ -34,8 +35,11 @@ interface OfficeOverlayProps {
   subagentCharacters: SubagentCharacter[];
   /** office agent-id → live desk caption ("✎ App.tsx" / "$ npm run build"). */
   agentCaptions: Record<number, string>;
-  /** office agent-id → Launcher number (#N). Sub-agents inherit their parent's. */
-  agentNumbers: Record<number, number>;
+  /** office agent-id → session name. Sub-agents inherit their parent's. */
+  agentNames: Record<number, string>;
+  /** office agent-id → where the session was started. */
+  agentPlaces: Record<number, SessionPlace>;
+  onOpen?: (place: SessionPlace) => void;
 }
 
 export function OfficeOverlay({
@@ -46,7 +50,9 @@ export function OfficeOverlay({
   agents,
   subagentCharacters,
   agentCaptions,
-  agentNumbers,
+  agentNames,
+  agentPlaces,
+  onOpen,
 }: OfficeOverlayProps) {
   // Re-render every frame so labels follow moving characters (same as ToolOverlay).
   const [, setTick] = useState(0);
@@ -75,8 +81,6 @@ export function OfficeOverlay({
   const deviceOffsetY = Math.floor((canvasH - mapH) / 2) + Math.round(pan.y);
 
   const allIds = [...agents, ...subagentCharacters.map((s) => s.id)];
-  // Sub-agent character id → its parent agent id, so a sub-agent can inherit the
-  // parent session's #N.
   const parentById = new Map(subagentCharacters.map((s) => [s.id, s.parentAgentId] as const));
 
   return (
@@ -85,16 +89,12 @@ export function OfficeOverlay({
         const ch = officeState.characters.get(id);
         if (!ch || ch.matrixEffect === "despawn") return null;
 
-        // Launcher number (#N): top-level agents map directly; sub-agents inherit
-        // their parent session's number so they read as "part of #N".
-        const num = ch.isSubagent
-          ? agentNumbers[parentById.get(id) ?? -1]
-          : agentNumbers[id];
-        // Sub-agents have no session of their own, so no desk caption.
+        const owner = ch.isSubagent ? (parentById.get(id) ?? -1) : id;
+        const name = agentNames[owner];
+        const place = agentPlaces[owner];
         const caption = ch.isSubagent ? undefined : agentCaptions[id];
 
-        // Nothing to show for this character this frame.
-        if (num === undefined && !caption) return null;
+        if (!name && !caption) return null;
 
         const sittingOffset = ch.state === CharacterState.TYPE ? CHARACTER_SITTING_OFFSET_PX : 0;
         const screenX = (deviceOffsetX + ch.x * zoom) / dpr;
@@ -109,24 +109,34 @@ export function OfficeOverlay({
             data-testid="agent-overlay"
             data-agent-id={id}
           >
-            {num !== undefined && (
-              <span
-                data-testid="agent-number"
+            {name && (
+              <button
+                type="button"
+                data-testid="agent-name"
+                onClick={() => place && onOpen?.(place)}
+                className="pointer-events-auto cursor-pointer border-0"
                 style={{
-                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  lineHeight: 1.3,
-                  color: "#ffffff",
-                  background: "rgba(0,0,0,0.66)",
-                  padding: "0px 5px",
-                  borderRadius: 4,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  fontFamily: "ui-sans-serif, system-ui, sans-serif",
+                  lineHeight: 1.15,
+                  color: "#f4f4f5",
+                  background: "rgba(0,0,0,0.55)",
+                  backdropFilter: "blur(8px)",
+                  padding: "3px 7px 4px",
+                  borderRadius: 8,
                   whiteSpace: "nowrap",
-                  opacity: ch.isSubagent ? 0.7 : 1,
+                  opacity: ch.isSubagent ? 0.75 : 1,
                 }}
               >
-                #{num}
-              </span>
+                {place && (
+                  <span style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.72 }}>
+                    {placeLabel(place)}
+                  </span>
+                )}
+                <span style={{ fontSize: 12, fontWeight: 600 }}>{name}</span>
+              </button>
             )}
             {caption && (
               <span

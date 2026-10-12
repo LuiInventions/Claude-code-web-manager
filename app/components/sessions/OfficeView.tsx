@@ -19,6 +19,8 @@ import { EditorState } from "./office/editor/editorState";
 import { OfficeState } from "./office/engine/officeState";
 import { useSessionMessages } from "./useSessionMessages";
 import type { VisualSession } from "@/lib/sessions";
+import { useAppCommands } from "../app-commands";
+import type { SessionPlace } from "@/lib/session-names";
 
 const noop = () => {};
 
@@ -36,8 +38,14 @@ export default function OfficeView({ sessions }: { sessions: VisualSession[] }) 
   const containerRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(3);
 
-  const { layoutReady, agents, subagentCharacters, agentCaptions, agentNumbers } =
+  const { navigate } = useAppCommands();
+  const { layoutReady, agents, subagentCharacters, agentCaptions, agentNames, agentPlaces } =
     useSessionMessages(getOfficeState, sessions);
+  const openPlace = (place: SessionPlace) => {
+    if (place === "github") navigate("github-launch");
+    else if (place === "server") navigate("remote");
+    else navigate("launcher");
+  };
 
   if (!layoutReady) {
     return (
@@ -73,7 +81,9 @@ export default function OfficeView({ sessions }: { sessions: VisualSession[] }) 
         agents={agents}
         subagentCharacters={subagentCharacters}
         agentCaptions={agentCaptions}
-        agentNumbers={agentNumbers}
+        agentNames={agentNames}
+        agentPlaces={agentPlaces}
+        onOpen={openPlace}
       />
     </div>
   );

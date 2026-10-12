@@ -5,6 +5,16 @@ follow `package.json`. From 1.9.6 each `v*` tag publishes
 `jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
 `cc-control-center-Setup-<version>.exe`.
 
+## 1.9.11 — 2026-10-12
+
+### Sessions, one kind of rail, and themes
+
+- The Sessions office shows only sessions that are still running. Each character has its own name, with GitHub, Lokal, or Server above it. Clicking the name opens that tab.
+- The Jarvis title block is gone. The tabs start at the top. Local Projects is no longer a tab.
+- Local and GitHub use the same rail as Remote: a count, **Ordner**, **Starten**, and the file list. **Ordner öffnen** picks the folder. Model and prompt controls are not on that rail.
+- Buttons are flat, the surfaces are glassy, and Settings has six themes: Ink, Dusk, Moss, Tide, Clay, and Plum.
+- The window icon is a black-and-white mark.
+
 ## 1.9.10 — 2026-10-12
 
 ### VS Codium, and one Remote rail

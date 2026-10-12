@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AudioLines, Check, FolderOpen, KeyRound, Save, Server, Sparkles, Terminal } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Badge, Button, Card, Input, Spinner } from "../ui";
+import { THEMES } from "@/lib/themes";
 
 interface ProviderOpt {
   id: string;
@@ -36,6 +37,7 @@ interface PublicConfig {
   cartesiaVoice: string;
   host: string;
   port: number;
+  theme?: string;
 }
 
 interface VoiceOption {
@@ -197,6 +199,48 @@ export default function SettingsSection() {
       <div className="mx-auto max-w-2xl space-y-4 p-6">
         <Card className="space-y-3 p-5">
           <Label
+            icon={Sparkles}
+            title="Theme"
+            hint="Six calm palettes. The choice stays on this PC."
+          />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {THEMES.map((theme) => {
+              const on = (cfg.theme || "ink") === theme.id;
+              return (
+                <button
+                  key={theme.id}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => {
+                    document.documentElement.dataset.theme = theme.id;
+                    void saveSettings({ theme: theme.id });
+                  }}
+                  className={
+                    "flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors " +
+                    (on ? "bg-[color-mix(in_oklab,var(--accent)_16%,transparent)]" : "bg-white/5 hover:bg-white/10")
+                  }
+                >
+                  <span className="flex shrink-0 -space-x-1">
+                    {theme.swatch.map((color) => (
+                      <span
+                        key={color}
+                        className="size-4 rounded-full border border-black/30"
+                        style={{ background: color }}
+                      />
+                    ))}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-ink">{theme.label}</span>
+                    <span className="block truncate text-[11px] text-faint">{theme.hint}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+
+        <Card className="space-y-3 p-5">
+          <Label
             icon={Terminal}
             title="Code CLI"
             hint="Which CLI the launcher starts. Claude Code, Grok, or ChatGPT Codex."
@@ -230,7 +274,7 @@ export default function SettingsSection() {
           <Label
             icon={FolderOpen}
             title="Local Projects folder"
-            hint="Direct subfolders are listed as projects (Local Projects & index)."
+            hint="Used by the project index. Open a folder from Local or GitHub to start there."
           />
           <div className="flex gap-2">
             <Input

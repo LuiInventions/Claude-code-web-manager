@@ -6,10 +6,7 @@ import {
   FolderGit2,
   FolderOpen,
   Gamepad2,
-  LayoutDashboard,
   Monitor,
-  PanelLeftClose,
-  PanelLeftOpen,
   Server,
   Settings as SettingsIcon,
   type LucideIcon,
@@ -22,7 +19,6 @@ import {
   type SectionCommand,
   type SectionId,
 } from "./app-commands";
-import DashboardSection from "./sections/DashboardSection";
 import LauncherSection from "./sections/LauncherSection";
 import SessionsSection from "./sections/SessionsSection";
 import SettingsSection from "./sections/SettingsSection";
@@ -43,7 +39,6 @@ const MAIN_SECTIONS: SectionDef[] = [
   { id: "sessions", label: "Sessions", desc: "Live code-CLI sessions, visualized", icon: Gamepad2 },
   { id: "remote", label: "Remote", desc: "SSH to your server and start a code CLI", icon: Server },
   { id: "codium", label: "VS Codium", desc: "Editor in the local project folder", icon: Monitor },
-  { id: "dashboard", label: "Local Projects", desc: "All your local projects at a glance", icon: LayoutDashboard },
   { id: "github", label: "Repos", desc: "Connect a GitHub token and clone repos", icon: Code },
 ];
 
@@ -117,9 +112,8 @@ export default function Shell() {
   return (
     <AppCommandsContext.Provider value={commands}>
       <div className="flex h-screen overflow-hidden">
-        <aside className="flex w-60 shrink-0 flex-col border-r border-line bg-elevated">
-          <Brand />
-          <nav className="flex-1 space-y-0.5 px-3 py-3">
+        <aside className="glass-pane flex w-56 shrink-0 flex-col border-r">
+          <nav className="flex-1 space-y-1 px-2.5 py-2.5">
             {MAIN_SECTIONS.map((s) => (
               <NavItem key={s.id} def={s} active={active === s.id} onClick={() => go(s.id)} />
             ))}
@@ -156,8 +150,6 @@ export default function Shell() {
 
 function renderSection(id: SectionId, command: SectionCommand | null) {
   switch (id) {
-    case "dashboard":
-      return <DashboardSection />;
     case "launcher":
       return <LauncherSection command={command} sourceLock="local" />;
     case "github-launch":
@@ -198,42 +190,26 @@ function NavItem({
     <button
       onClick={onClick}
       className={cn(
-        "group flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-        active ? "bg-selected text-ink" : "text-muted hover:bg-raised hover:text-ink",
+        "group flex h-10 w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 text-[13px] font-medium transition-colors",
+        active
+          ? "bg-[color-mix(in_oklab,var(--accent)_16%,transparent)] text-ink"
+          : "text-muted hover:bg-white/5 hover:text-ink",
       )}
     >
       <Icon
         className={cn(
-          "size-[18px] shrink-0 transition-colors",
+          "size-4 shrink-0 transition-colors",
           active ? "text-accent" : "text-faint group-hover:text-muted",
         )}
       />
       <span className="truncate">{def.label}</span>
-      {active && <span className="ml-auto h-4 w-1 rounded-full bg-accent" />}
     </button>
-  );
-}
-
-function Brand() {
-  return (
-    <div className="flex h-14 items-center gap-2.5 border-b border-line px-5">
-      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M12 2 21 7v10l-9 5-9-5V7l9-5Z" stroke="var(--accent)" strokeWidth="1.5" strokeLinejoin="round" />
-        <circle cx="12" cy="12" r="3" fill="var(--accent)" />
-      </svg>
-      <div className="leading-tight">
-        <div className="text-sm font-semibold tracking-tight text-ink">JARVIS</div>
-        <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-faint">
-          Control Center
-        </div>
-      </div>
-    </div>
   );
 }
 
 function ServerStatus({ host }: { host: string }) {
   return (
-    <div className="flex items-center gap-2 rounded-md bg-surface px-3 py-2">
+    <div className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2">
       <span className="size-1.5 rounded-full bg-running dot-running" />
       <span className="font-mono text-[11px] text-muted">{host}</span>
       <span className="ml-auto text-[10px] uppercase tracking-wide text-faint">loopback</span>

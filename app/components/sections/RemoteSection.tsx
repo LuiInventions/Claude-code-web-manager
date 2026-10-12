@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Play, X } from "lucide-react";
-import { Button, Input, cn } from "../ui";
+import { Button, Input } from "../ui";
 import ClaudeCmdPane from "./launcher/ClaudeCmdPane";
 import RemoteFiles from "./RemoteFiles";
 import SshLoginPane from "./SshLoginPane";
@@ -165,20 +165,16 @@ export default function RemoteSection() {
   return (
     <div className="flex h-full min-h-0">
       {status.connected && (
-        <aside className="flex w-72 shrink-0 flex-col border-r border-line bg-canvas">
+        <aside className="glass-pane flex w-72 shrink-0 flex-col border-r">
           <div className="flex flex-col gap-3 px-3 py-3">
             <div className="grid grid-cols-6 gap-1.5">
               {BOX_COUNTS.map((n) => (
                 <button
                   key={n}
                   type="button"
+                  aria-pressed={boxCount === n}
                   onClick={() => setBoxCount(n)}
-                  className={cn(
-                    "h-9 rounded-md text-sm font-medium transition-colors",
-                    boxCount === n
-                      ? "bg-ink text-canvas"
-                      : "bg-raised text-muted hover:text-ink",
-                  )}
+                  className="rail-count"
                 >
                   {n}
                 </button>
@@ -192,7 +188,7 @@ export default function RemoteSection() {
                 placeholder="~"
                 spellCheck={false}
                 aria-label="Startordner auf dem Server"
-                className="h-9 w-full rounded-md border border-line bg-raised px-2.5 font-mono text-[12.5px] text-ink outline-none focus:border-line-strong"
+                className="h-9 w-full rounded-lg border border-transparent bg-raised/80 px-2.5 font-mono text-[12.5px] text-ink outline-none"
               />
             </label>
             <Button variant="primary" icon={Play} className="w-full" onClick={startEmpty}>
@@ -236,7 +232,12 @@ export default function RemoteSection() {
               >
                 <button
                   type="button"
-                  onClick={() => setBoxes((prev) => prev.filter((b) => b.id !== box.id))}
+                  onClick={() => {
+                    void fetch(`/api/launcher/live-sessions?id=${encodeURIComponent(box.id)}`, {
+                      method: "DELETE",
+                    });
+                    setBoxes((prev) => prev.filter((b) => b.id !== box.id));
+                  }}
                   title="Stop / close box"
                   aria-label="Close box"
                   className="absolute right-1.5 top-1.5 z-20 inline-flex size-7 cursor-pointer items-center justify-center rounded-md border border-line bg-surface/80 text-faint backdrop-blur transition-colors hover:text-danger"

@@ -23,7 +23,7 @@ export default function SessionsSection() {
     fetch("/api/launcher/live-sessions")
       .then((r) => r.json())
       .then((d: { sessions?: VisualSession[] }) => {
-        setSessions(d.sessions ?? []);
+        setSessions((d.sessions ?? []).filter((s) => s.status === "running"));
         setLoaded(true);
       })
       .catch(() => setLoaded(true));

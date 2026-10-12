@@ -15,11 +15,10 @@ type ButtonSize = "sm" | "md";
 const BTN_BASE =
   "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors cursor-pointer select-none disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_VARIANT: Record<ButtonVariant, string> = {
-  primary: "bg-accent text-accent-ink hover:bg-accent-hover",
-  secondary:
-    "border border-line bg-raised text-ink hover:bg-selected hover:border-line-strong",
-  ghost: "text-muted hover:bg-raised hover:text-ink",
-  danger: "bg-danger text-white hover:bg-danger-hover",
+  primary: "border border-transparent bg-accent text-accent-ink hover:bg-accent-hover",
+  secondary: "border border-transparent bg-raised/80 text-ink backdrop-blur-md hover:bg-selected",
+  ghost: "border border-transparent text-muted hover:bg-white/5 hover:text-ink",
+  danger: "border border-transparent bg-danger text-white hover:bg-danger-hover",
 };
 const BTN_SIZE: Record<ButtonSize, string> = {
   sm: "h-8 px-3 text-[13px]",
@@ -85,7 +84,7 @@ export function IconButton({
 export function Card({ className, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("rounded-lg border border-line bg-surface", className)}
+      className={cn("glass-pane rounded-xl border", className)}
       {...rest}
     />
   );

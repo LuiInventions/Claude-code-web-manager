@@ -4,6 +4,7 @@ import { getPublicConfig } from "@/lib/config";
 import { isCodeCliId, type CodeCliId } from "@/lib/code-clis";
 import { writeSettings } from "@/lib/settings";
 import { appVersion } from "@/lib/version";
+import { isThemeId, type ThemeId } from "@/lib/themes";
 import { warmCodeCli } from "@/lib/server/cli-warm";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ export async function POST(req: NextRequest) {
     cartesiaVoice?: string;
     codeCli?: string;
     launcherLocalPath?: string;
+    theme?: string;
     /** Sent by the setup screen on "Loslegen" — stamps this app version. */
     setupComplete?: boolean;
   };
@@ -39,6 +41,7 @@ export async function POST(req: NextRequest) {
     codeCli?: CodeCliId;
     setupVersion?: string;
     launcherLocalPath?: string;
+    theme?: ThemeId;
   } = {};
 
   if (typeof body.projectsDir === "string") {
@@ -59,6 +62,7 @@ export async function POST(req: NextRequest) {
     }
     patch.launcherLocalPath = dir;
   }
+  if (typeof body.theme === "string" && isThemeId(body.theme)) patch.theme = body.theme;
   if (typeof body.codeCli === "string" && body.codeCli.trim()) {
     const id = body.codeCli.trim();
     if (!isCodeCliId(id)) {

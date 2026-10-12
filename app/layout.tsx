@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import ThemeBoot from "./components/ThemeBoot";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -35,7 +36,10 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full bg-canvas font-sans text-ink">{children}</body>
+      <body className="min-h-full bg-canvas font-sans text-ink">
+        <ThemeBoot />
+        {children}
+      </body>
     </html>
   );
 }
