@@ -11,7 +11,8 @@ describe("remote session broker", () => {
     expect(cmd.includes("CCC_BROKER_%s")).toBe(true);
   });
 
-  it("spawns a command over the local broker", async () => {
+  // The broker uses Unix pty/fcntl. It runs on the server, not on the Windows app.
+  it.skipIf(process.platform === "win32")("spawns a command over the local broker", async () => {
     const proc = spawn("python3", ["-c", brokerSource()], { stdio: ["ignore", "pipe", "pipe"] });
     let err = "";
     proc.stderr?.on("data", (chunk) => {

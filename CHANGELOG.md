@@ -5,14 +5,19 @@ follow `package.json`. From 1.9.6 each `v*` tag publishes
 `jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
 `cc-control-center-Setup-<version>.exe`.
 
-## 1.9.6 — 2026-10-12
+## 1.9.7 — 2026-10-12
 
 ### Jarvis Control Center
 
-- The app, the window title, and the Windows installer are **Jarvis Control Center** (`jarvis-control-center-Setup-1.9.6.exe`). Settings from the previous install are copied into the new profile folder. The setup screen shows once more.
+- The app, the window title, and the Windows installer are **Jarvis Control Center** (`jarvis-control-center-Setup-1.9.7.exe`). Settings from the previous install are copied into the new profile folder. The setup screen shows once more.
 - The interface is black, with quiet borders and no glow.
 - After a remote login the SSH pane on the right closes. The left rail shows the server, counts 1–6, **Start without prompt**, and **Trennen**.
 - A code CLI on the server reuses the SSH login that is already open. A second SSH connection is not started, so a server that asks for keyboard-interactive on every connection no longer ends that session with code 255.
+- The Windows test run no longer starts that Unix broker. v1.9.6 stopped before an installer was published.
+
+## 1.9.6 — 2026-10-12
+
+No installer. The release test on Windows started the Unix session broker and failed on `fcntl`.
 
 ## 1.9.5 — 2026-10-12
 
