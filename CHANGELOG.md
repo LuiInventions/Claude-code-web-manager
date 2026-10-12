@@ -5,6 +5,12 @@ follow `package.json`. From 1.9.6 each `v*` tag publishes
 `jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
 `cc-control-center-Setup-<version>.exe`.
 
+## 1.9.12 — 2026-10-12
+
+### Window icon
+
+- The app icon is a white J on black.
+
 ## 1.9.11 — 2026-10-12
 
 ### Sessions, one kind of rail, and themes
