@@ -13,19 +13,54 @@ function isProfileJunction(value) {
   return typeof value === "string" && JUNCTION.test(value);
 }
 
+function isDeniedJunction(err, target) {
+  return (
+    err &&
+    (err.code === "EPERM" || err.code === "EACCES") &&
+    (isProfileJunction(String(err.path || "")) || isProfileJunction(target))
+  );
+}
+
 const readdirSync = fs.readdirSync;
 fs.readdirSync = function (target, options) {
   if (isProfileJunction(target)) return [];
   try {
     return readdirSync.call(this, target, options);
   } catch (err) {
-    if (
-      err &&
-      (err.code === "EPERM" || err.code === "EACCES") &&
-      isProfileJunction(String(err.path || ""))
-    ) {
-      return [];
-    }
+    if (isDeniedJunction(err, target)) return [];
+    throw err;
+  }
+};
+
+// The tracer uses the async glob, which calls fs.readdir, not readdirSync.
+const readdir = fs.readdir;
+fs.readdir = function (target, options, callback) {
+  let cb = callback;
+  let opts = options;
+  if (typeof options === "function") {
+    cb = options;
+    opts = undefined;
+  }
+  if (typeof cb !== "function") return readdir.call(this, target, options, callback);
+  if (isProfileJunction(target)) {
+    cb(null, []);
+    return;
+  }
+  const done = (err, entries) => {
+    if (isDeniedJunction(err, target)) cb(null, []);
+    else cb(err, entries);
+  };
+  if (opts === undefined) return readdir.call(this, target, done);
+  return readdir.call(this, target, opts, done);
+};
+
+const readdirPromise = fs.promises.readdir;
+fs.promises.readdir = async function (target, options) {
+  if (isProfileJunction(target)) return [];
+  try {
+    return await readdirPromise.call(this, target, options);
+  } catch (err) {
+    if (isDeniedJunction(err, target)) return [];
     throw err;
   }
 };
