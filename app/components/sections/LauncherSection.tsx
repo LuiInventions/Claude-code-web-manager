@@ -112,6 +112,7 @@ export default function LauncherSection({
   const [projects, setProjects] = useState<ProjectOpt[]>([]);
   const [githubProjects, setGithubProjects] = useState<ProjectOpt[]>([]);
   const [githubConnected, setGithubConnected] = useState(false);
+  const [githubRestoring, setGithubRestoring] = useState(false);
   const [projectPath, setProjectPath] = useState("");
   const localPathRef = useRef("");
   const [pathMode, setPathMode] = useState<"list" | "manual">("list");
@@ -273,6 +274,10 @@ export default function LauncherSection({
               path: r.localPath,
               fullName: r.fullName || r.name,
             }));
+          setGithubRestoring(
+            next.length === 0 &&
+              repos.some((r) => r.cloneStatus === "pending" || r.cloneStatus === "cloning"),
+          );
           // A new array every poll re-rendered the terminals. Keep the old
           // one when the clone list did not change.
           setGithubProjects((prev) =>
@@ -756,7 +761,9 @@ export default function LauncherSection({
                       className="h-9 w-full cursor-pointer rounded-lg border border-transparent bg-raised/80 px-2.5 text-[12.5px] text-ink outline-none disabled:cursor-default disabled:text-faint"
                     >
                       {githubProjects.length === 0 ? (
-                        <option value="">Keine geklonten Repos</option>
+                        <option value="">
+                          {githubRestoring ? "Repos werden neu geklont …" : "Keine geklonten Repos"}
+                        </option>
                       ) : (
                         githubProjects.map((p) => (
                           <option key={p.path} value={p.path}>

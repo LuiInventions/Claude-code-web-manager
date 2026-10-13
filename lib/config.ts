@@ -23,8 +23,9 @@ import { isThemeId, type ThemeId } from "./themes";
  * Voice (STT + TTS) is powered by Cartesia.
  *
  * Project folders follow Settings, then PROJECTS_DIR, then `./projects`.
- * GitHub clones always live in `<program folder>/github_repos`. The packaged
- * app sets CCC_GITHUB_DIR to that folder (next to the exe). A dev run uses
+ * GitHub clones live in the directory the packaged app pins with
+ * CCC_GITHUB_DIR (Local AppData, outside the install folder, because the
+ * installer deletes the program folder on upgrade). A dev run uses
  * `<cwd>/github_repos`. settings.githubDir is not read: older builds stored
  * clones under the projects folder, and that path is what the CLI abbreviated.
  */
@@ -61,9 +62,9 @@ export interface AppConfig {
 }
 
 /**
- * Folder that holds cloned repos. Packaged Electron sets CCC_GITHUB_DIR to a
- * writable `<install dir>/github_repos` before the server starts. Otherwise the
- * program dir is CCC_PROGRAM_DIR, a non-asar CCC_APP_ROOT, or the cwd.
+ * Folder that holds cloned repos. Packaged Electron sets CCC_GITHUB_DIR before
+ * the server starts. Otherwise the program dir is CCC_PROGRAM_DIR, a non-asar
+ * CCC_APP_ROOT, or the cwd.
  */
 export function defaultGithubReposDir(): string {
   const pinned = process.env.CCC_GITHUB_DIR?.trim();

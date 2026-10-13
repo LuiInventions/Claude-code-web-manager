@@ -5,24 +5,35 @@ import { gitHasPendingPush } from "./git";
 import type { StoredRepo } from "./github-store";
 
 /**
- * Move clones into `<program>/github_repos/<name>` and point `localPath` there.
- * A folder a live session is still using stays put, so the Repos tab keeps
- * pushing the files that session is editing. A clean copy already at the
- * destination is replaced when the old folder has local changes.
+ * Point each clone at `<github dir>/<name>`.
+ * The packaged app keeps that directory outside the install folder: the
+ * installer deletes the program folder on upgrade and used to take the clones
+ * with it. A folder a live session is still using stays put. A clone whose
+ * directory is gone is marked pending (`wiped`) so the GitHub tab does not
+ * browse a missing path. The caller clones those again.
  */
 export async function placeClones(
   repos: StoredRepo[],
   githubDir: string,
   busyCwds: string[],
-): Promise<{ repos: StoredRepo[]; changed: boolean }> {
-  if (repos.length === 0) return { repos, changed: false };
+): Promise<{ repos: StoredRepo[]; changed: boolean; wiped: string[] }> {
+  if (repos.length === 0) return { repos, changed: false, wiped: [] };
   await fs.mkdir(githubDir, { recursive: true });
   let changed = false;
+  const wiped: string[] = [];
   const next: StoredRepo[] = [];
   for (const repo of repos) {
     const dest = path.join(githubDir, repo.name);
     const src = (repo.localPath || "").trim();
     if (!src || samePath(src, dest)) {
+      // The stored path is already the destination, but the installer removed
+      // the directory. Leave it pending instead of "cloned".
+      if (repo.cloneStatus === "cloned" && !existsSync(dest)) {
+        next.push({ ...repo, localPath: dest, cloneStatus: "pending" });
+        changed = true;
+        wiped.push(repo.fullName);
+        continue;
+      }
       if (repo.localPath !== dest) {
         next.push({ ...repo, localPath: dest });
         changed = true;
@@ -31,7 +42,9 @@ export async function placeClones(
       }
       continue;
     }
-    if (isBusy(src, busyCwds)) {
+    // A live session keeps a folder that is still on disk. A deleted folder
+    // has nothing to keep, so fall through and restore it.
+    if (isBusy(src, busyCwds) && existsSync(src)) {
       next.push(repo);
       continue;
     }
@@ -90,8 +103,31 @@ export async function placeClones(
         : repo.cloneStatus;
     next.push({ ...repo, localPath: dest, cloneStatus: status });
     if (repo.localPath !== dest || repo.cloneStatus !== status) changed = true;
+    if (repo.cloneStatus === "cloned" && status === "pending" && !existsSync(dest)) {
+      wiped.push(repo.fullName);
+    }
   }
-  return { repos: next, changed };
+  return { repos: next, changed, wiped };
+}
+
+/**
+ * Repos whose directory is gone and that are waiting on a clone.
+ * `cloned` is never returned: placeClones turns a missing clone into
+ * `pending` first. `error` stays put so a failed clone is not retried on
+ * every poll. Folders that still exist are left untouched.
+ */
+export function reposMissingOnDisk(
+  repos: StoredRepo[],
+  inFlight: ReadonlySet<string>,
+  exists: (target: string) => boolean = existsSync,
+): StoredRepo[] {
+  return repos.filter((repo) => {
+    if (!repo.fullName || !repo.cloneUrl || !repo.localPath) return false;
+    if (repo.cloneStatus !== "pending" && repo.cloneStatus !== "cloning") return false;
+    if (inFlight.has(repo.fullName)) return false;
+    if (exists(repo.localPath) || exists(path.join(repo.localPath, ".git"))) return false;
+    return true;
+  });
 }
 
 let tail: Promise<unknown> = Promise.resolve();

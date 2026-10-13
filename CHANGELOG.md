@@ -5,6 +5,14 @@ follow `package.json`. From 1.9.6 each `v*` tag publishes
 `jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
 `cc-control-center-Setup-<version>.exe`.
 
+## 1.9.18 — 2026-10-13
+
+### GitHub clones survive an update
+
+- Clones are stored in `%LOCALAPPDATA%\Jarvis Control Center\github_repos`, outside the program folder. The installer deletes the program folder on upgrade, and that deleted the clones.
+- A clone whose folder is gone is cloned again with the saved GitHub token. The GitHub tab no longer opens that missing folder.
+- A clone that is still on disk moves to the new folder and keeps its files.
+
 ## 1.9.17 — 2026-10-13
 
 ### Grok sessions no longer repeat failing Claude hooks

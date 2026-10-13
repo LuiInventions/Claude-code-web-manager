@@ -10,15 +10,13 @@ import {
   type StoredRepo,
 } from "@/lib/github-store";
 import { existsSync } from "node:fs";
-import { gitClone } from "@/lib/git";
 import { getConfig } from "@/lib/config";
 import { placeClones, withCloneLock } from "@/lib/github-place";
 import { listPtySessions } from "@/lib/server/claude-pty";
+import { scheduleMissingClone } from "@/lib/server/github-restore";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
-
-const CLONE_CONCURRENCY = 4;
 
 export async function POST(req: NextRequest) {
   let body: { token?: string };
@@ -63,34 +61,14 @@ export async function POST(req: NextRequest) {
   writeGithubToken(token);
   setConnection(user, stored);
 
-  // Clone all repos in the background; never block the response on it.
-  void cloneAll(stored, token);
+  // Clone missing repos in the background; never block the response on it.
+  for (const repo of stored) {
+    if (existsSync(path.join(repo.localPath, ".git"))) {
+      markRepoStatus(repo.fullName, "cloned");
+    } else {
+      scheduleMissingClone(repo, token);
+    }
+  }
 
   return Response.json(readGithubState());
-}
-
-async function cloneAll(repos: StoredRepo[], token: string): Promise<void> {
-  let i = 0;
-  const worker = async () => {
-    while (i < repos.length) {
-      const repo = repos[i++];
-      let exists = false;
-      try {
-        await fs.access(path.join(repo.localPath, ".git"));
-        exists = true;
-      } catch {
-        /* not cloned yet */
-      }
-      if (exists) {
-        markRepoStatus(repo.fullName, "cloned");
-        continue;
-      }
-      markRepoStatus(repo.fullName, "cloning");
-      const ok = await gitClone(repo.cloneUrl, repo.localPath, token);
-      markRepoStatus(repo.fullName, ok ? "cloned" : "error");
-    }
-  };
-  await Promise.all(
-    Array.from({ length: Math.min(CLONE_CONCURRENCY, repos.length) || 1 }, worker),
-  );
 }

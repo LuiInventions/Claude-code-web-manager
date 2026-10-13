@@ -110,9 +110,20 @@ function resolveIcon(): string | undefined {
   return fs.existsSync(ico) ? ico : undefined;
 }
 
-function resolveWritableGithubDir(programDir: string, userData: string): string {
-  const preferred = path.join(programDir, "github_repos");
-  if (canWriteDir(preferred)) return preferred;
+function resolveWritableGithubDir(userData: string): string {
+  // The NSIS upgrade deletes the previous install directory. Clones stored in
+  // `<install>\github_repos` were deleted with it, and the GitHub tab still
+  // listed those paths. Keep clones outside Programs. userData survives an
+  // upgrade and is the fallback when Local AppData rejects the write.
+  const candidates: string[] = [];
+  if (process.platform === "win32") {
+    const local = process.env.LOCALAPPDATA?.trim();
+    if (local) candidates.push(path.join(local, "Jarvis Control Center", "github_repos"));
+  }
+  candidates.push(path.join(userData, "github_repos"));
+  for (const dir of candidates) {
+    if (canWriteDir(dir)) return dir;
+  }
   const fallback = path.join(userData, "github_repos");
   fs.mkdirSync(fallback, { recursive: true });
   return fallback;
@@ -154,13 +165,11 @@ async function boot(): Promise<void> {
   // from CCC_APP_ROOT instead of cwd.
   process.env.CCC_APP_ROOT = ROOT;
 
-  // Clones live in github_repos next to the program, not under Documents.
-  // app.asar is not writable. The install directory (per-user NSIS) is.
-  // If that directory rejects the write, fall back to userData so clones
-  // are not lost inside a read-only Program Files install.
+  // Clones live outside the install directory. NSIS deletes that directory
+  // on upgrade, which used to delete github_repos with it.
   const programDir = app.isPackaged ? path.dirname(app.getPath("exe")) : ROOT;
   process.env.CCC_PROGRAM_DIR = programDir;
-  process.env.CCC_GITHUB_DIR = resolveWritableGithubDir(programDir, app.getPath("userData"));
+  process.env.CCC_GITHUB_DIR = resolveWritableGithubDir(app.getPath("userData"));
   log("githubDir=" + process.env.CCC_GITHUB_DIR);
 
   ensureDepsFromSource();

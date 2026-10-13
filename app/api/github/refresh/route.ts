@@ -9,10 +9,11 @@ import {
   type StoredRepo,
 } from "@/lib/github-store";
 import { existsSync } from "node:fs";
-import { gitClone, gitPull } from "@/lib/git";
+import { gitPull } from "@/lib/git";
 import { getConfig } from "@/lib/config";
 import { placeClones, withCloneLock } from "@/lib/github-place";
 import { listPtySessions } from "@/lib/server/claude-pty";
+import { scheduleMissingClone } from "@/lib/server/github-restore";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -68,33 +69,26 @@ export async function POST() {
 
   setConnection(user, merged);
 
-  // Sync to latest in the background; never block the response on it.
-  void syncAll(merged, token);
+  const present: StoredRepo[] = [];
+  for (const repo of merged) {
+    if (existsSync(path.join(repo.localPath, ".git"))) present.push(repo);
+    else scheduleMissingClone(repo, token);
+  }
+
+  // Fast-forward clones that are already on disk. Missing ones clone above.
+  // Never block the response on the pull.
+  void pullAll(present, token);
 
   return Response.json(readGithubState());
 }
 
-async function syncAll(repos: StoredRepo[], token: string): Promise<void> {
+async function pullAll(repos: StoredRepo[], token: string): Promise<void> {
   let i = 0;
   const worker = async () => {
     while (i < repos.length) {
       const repo = repos[i++];
-      let cloned = false;
-      try {
-        await fs.access(path.join(repo.localPath, ".git"));
-        cloned = true;
-      } catch {
-        /* not cloned yet */
-      }
-      if (cloned) {
-        // Already present → fast-forward to latest (silent; stays "cloned").
-        await gitPull(repo.localPath, token);
-        markRepoStatus(repo.fullName, "cloned");
-      } else {
-        markRepoStatus(repo.fullName, "cloning");
-        const ok = await gitClone(repo.cloneUrl, repo.localPath, token);
-        markRepoStatus(repo.fullName, ok ? "cloned" : "error");
-      }
+      await gitPull(repo.localPath, token);
+      markRepoStatus(repo.fullName, "cloned");
     }
   };
   await Promise.all(

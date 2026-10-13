@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { placeClones } from "../github-place";
+import { placeClones, reposMissingOnDisk } from "../github-place";
 import type { StoredRepo } from "../github-store";
 
 const pexec = promisify(execFile);
@@ -87,5 +87,81 @@ describe("placeClones", () => {
     expect(placed.repos[0].localPath).toBe(dest);
     expect(fs.readFileSync(path.join(dest, "from-cli.txt"), "utf8")).toBe("local\n");
     expect(fs.existsSync(src)).toBe(false);
+    expect(placed.wiped).toEqual([]);
+  });
+
+  it("does not leave a deleted clone marked cloned", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ccc-place-"));
+    dirs.push(root);
+    const githubDir = path.join(root, "github_repos");
+    const dest = path.join(githubDir, "demo");
+
+    const placed = await placeClones([repo("demo", dest)], githubDir, [dest]);
+
+    expect(placed.changed).toBe(true);
+    expect(placed.repos[0].cloneStatus).toBe("pending");
+    expect(placed.repos[0].localPath).toBe(dest);
+    expect(placed.wiped).toEqual(["octo/demo"]);
+    expect(fs.existsSync(dest)).toBe(false);
+  });
+
+  it("points a wiped install-folder clone at the new folder", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ccc-place-"));
+    dirs.push(root);
+    const old = path.join(root, "Programs", "Jarvis Control Center", "github_repos", "demo");
+    const githubDir = path.join(root, "Jarvis Control Center", "github_repos");
+
+    const placed = await placeClones([repo("demo", old)], githubDir, [old]);
+
+    const dest = path.join(githubDir, "demo");
+    expect(placed.repos[0].cloneStatus).toBe("pending");
+    expect(placed.repos[0].localPath).toBe(dest);
+    expect(placed.wiped).toEqual(["octo/demo"]);
+    expect(fs.existsSync(old)).toBe(false);
+    expect(fs.existsSync(dest)).toBe(false);
+  });
+
+  it("keeps a cloning repo cloning while its folder is still missing", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ccc-place-"));
+    dirs.push(root);
+    const dest = path.join(root, "github_repos", "demo");
+    const cloning = repo("demo", dest);
+    cloning.cloneStatus = "cloning";
+
+    const placed = await placeClones([cloning], path.dirname(dest), []);
+
+    expect(placed.repos[0].cloneStatus).toBe("cloning");
+    expect(placed.wiped).toEqual([]);
+  });
+});
+
+describe("reposMissingOnDisk", () => {
+  it("selects pending and cloning repos whose folder is gone", () => {
+    const missing = repo("demo", path.join(os.tmpdir(), "ccc-missing-demo"));
+    missing.cloneStatus = "pending";
+    const cloning = repo("other", path.join(os.tmpdir(), "ccc-missing-other"));
+    cloning.cloneStatus = "cloning";
+    const failed = repo("bad", path.join(os.tmpdir(), "ccc-missing-bad"));
+    failed.cloneStatus = "error";
+    const stillThere = repo("kept", path.join(os.tmpdir(), "ccc-missing-kept"));
+
+    const picked = reposMissingOnDisk(
+      [missing, cloning, failed, stillThere],
+      new Set([cloning.fullName]),
+      () => false,
+    ).map((item) => item.name);
+
+    expect(picked).toEqual(["demo"]);
+  });
+
+  it("skips a folder that is still on disk", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ccc-place-"));
+    dirs.push(root);
+    const dest = path.join(root, "demo");
+    fs.mkdirSync(dest);
+    const pending = repo("demo", dest);
+    pending.cloneStatus = "pending";
+
+    expect(reposMissingOnDisk([pending], new Set())).toEqual([]);
   });
 });

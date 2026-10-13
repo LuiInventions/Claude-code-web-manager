@@ -21,8 +21,8 @@ export interface Settings {
   /** Absolute path to the folder whose subfolders are treated as projects. */
   projectsDir?: string;
   /**
-   * Ignored. Clones live in `<program folder>/github_repos` (see
-   * defaultGithubReposDir). Left on the type so an older settings.json still loads.
+   * Ignored. Clones live outside the install folder (see defaultGithubReposDir).
+   * Left on the type so an older settings.json still loads.
    */
   githubDir?: string;
   /** Active AI provider id (e.g. "openai", "groq"). */
