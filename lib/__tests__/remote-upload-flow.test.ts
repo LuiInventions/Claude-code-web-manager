@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   confirmUploadQuestion,
   imageSetFolderName,
+  imageSetNames,
   imageSetPrompt,
   isImageFile,
   relativeUploadPath,
@@ -61,6 +62,16 @@ describe("image set", () => {
     const random = imageSetFolderName();
     expect(random).toMatch(/^image_set[a-zA-Z]{8}$/);
     expect(imageSetPrompt("~/work/image_setabcdefgh")).toBe("in ~/work/image_setabcdefgh sind die bilder:");
+    expect(
+      imageSetNames([
+        { name: "image_setb", dir: true },
+        { name: "image_setb", dir: true },
+        { name: "notes", dir: true },
+        { name: "image_seta", dir: true },
+        { name: "image_seta.png", dir: false },
+        { name: "image_set-old", dir: true },
+      ]),
+    ).toEqual(["image_seta", "image_setb"]);
   });
 
   it("accepts images up to 10 and 2 GB", () => {

@@ -85,6 +85,17 @@ export function takeImages(existing: readonly { size: number }[], incoming: read
   return { take, error };
 }
 
+const IMAGE_SET_NAME = /^image_set[A-Za-z]+$/;
+
+/** Folder names this uploader created, in a stable order for the picker bar. */
+export function imageSetNames(entries: readonly { name: string; dir?: boolean }[]): string[] {
+  const seen = new Set<string>();
+  for (const entry of entries) {
+    if (entry.dir && IMAGE_SET_NAME.test(entry.name)) seen.add(entry.name);
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b));
+}
+
 /** `image_set` plus 8 letters, so the folder name is safe to paste into a prompt. */
 export function imageSetFolderName(seed?: Uint8Array): string {
   const bytes = seed && seed.length >= 8 ? seed : randomLetterBytes();

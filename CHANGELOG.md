@@ -5,6 +5,13 @@ follow `package.json`. From 1.9.6 each `v*` tag publishes
 `jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
 `cc-control-center-Setup-<version>.exe`.
 
+## 1.9.20 — 2026-10-14
+
+### Remote upload and image sets
+
+- **Dateien hochladen** accepts every file type and folders through Uppy. Dropping or choosing asks for confirmation, then shows the percent, then confirms when the copy is done. The dialog is a solid color.
+- **Bild hochladen** pastes up to 10 images, 2 GB together, into a new `image_set` folder on every upload. A bar above lists older image folders. Choosing one copies the line `in {path} sind die bilder:` and sends further images into that folder.
+
 ## 1.9.19 — 2026-10-13
 
 ### CLI panes, new repos, and remote files

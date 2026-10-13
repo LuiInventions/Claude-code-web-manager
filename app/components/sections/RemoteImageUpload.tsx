@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
-import { confirmUploadQuestion, imageSetFolderName, imageSetPrompt, takeImages, uniqueImageName } from "@/lib/remote-upload-flow";
+import { confirmUploadQuestion, imageSetFolderName, imageSetNames, imageSetPrompt, takeImages, uniqueImageName } from "@/lib/remote-upload-flow";
 import { joinRemote, transferSummary } from "@/lib/remote-transfer";
+import { cn } from "../ui";
 import { CenterDialog, TransferProgress } from "./CenterDialog";
 import { collectDataTransfer, uploadLocalItems, type LocalItem } from "./remoteUppyUpload";
 
@@ -16,6 +17,51 @@ interface PastedImage {
 }
 
 type Phase = "pick" | "confirm" | "work" | "copy" | "error";
+
+function chipClass(on: boolean): string {
+  return cn(
+    "h-9 shrink-0 cursor-pointer rounded-lg px-3 text-sm font-semibold",
+    on ? "bg-white text-[#1a1030]" : "bg-[#2c2158] text-white hover:bg-[#3a2c78]",
+  );
+}
+
+function FolderBar({
+  names,
+  selected,
+  allowNew,
+  onSelect,
+}: {
+  names: string[];
+  selected: string;
+  allowNew: boolean;
+  onSelect: (name: string) => void;
+}) {
+  return (
+    <div className="grid gap-2">
+      <span className="text-xs font-medium text-[#d2c6f5]">Ordner</span>
+      <div className="flex gap-2 overflow-x-auto pb-1" role="listbox" aria-label="Bildordner">
+        {allowNew && (
+          <button type="button" role="option" aria-selected={selected === "new"} onClick={() => onSelect("new")} className={chipClass(selected === "new")}>
+            Neuer Ordner
+          </button>
+        )}
+        {names.map((name) => (
+          <button
+            key={name}
+            type="button"
+            role="option"
+            aria-selected={selected === name}
+            onClick={() => onSelect(name)}
+            className={cn(chipClass(selected === name), "font-mono")}
+          >
+            {name}
+          </button>
+        ))}
+        {names.length === 0 && !allowNew && <span className="text-sm text-[#d2c6f5]">Noch kein Bildordner</span>}
+      </div>
+    </div>
+  );
+}
 
 function filesFromClipboard(data: DataTransfer): File[] {
   if (data.files.length > 0) return [...data.files];
@@ -41,6 +87,9 @@ export default function RemoteImageUpload({
   const [images, setImages] = useState<PastedImage[]>([]);
   const [error, setError] = useState("");
   const [folderName, setFolderName] = useState("");
+  const [sets, setSets] = useState<string[]>([]);
+  const [target, setTarget] = useState("new");
+  const [listNonce, setListNonce] = useState(0);
   const [question, setQuestion] = useState("");
   const [queued, setQueued] = useState<LocalItem[]>([]);
   const [sentence, setSentence] = useState("");
@@ -102,6 +151,22 @@ export default function RemoteImageUpload({
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const params = new URLSearchParams({ path: dir });
+    fetch(`/api/remote/fs?${params}`)
+      .then((response) => response.json())
+      .then((data: { entries?: { name: string; dir?: boolean }[] }) => {
+        if (!cancelled) setSets(imageSetNames(data.entries ?? []));
+      })
+      .catch(() => {
+        if (!cancelled) setSets([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dir, listNonce]);
+
   const addFiles = (incoming: File[]) => {
     if (incoming.length === 0) return;
     const decision = takeImages(
@@ -142,7 +207,7 @@ export default function RemoteImageUpload({
 
   const goNext = () => {
     if (images.length === 0) return;
-    const folder = folderName || imageSetFolderName();
+    const folder = target === "new" ? imageSetFolderName() : target;
     const folderPath = joinRemote(dir, folder);
     if (!folderPath) {
       setError("Pfad ungültig.");
@@ -182,7 +247,9 @@ export default function RemoteImageUpload({
         },
       });
       setSummary(transferSummary(result.files, result.bytes, result.dirs));
+      setTarget(folderName);
       setCopied(false);
+      setListNonce((n) => n + 1);
       setPhase("copy");
       onRefresh();
     } catch (err) {
@@ -199,9 +266,21 @@ export default function RemoteImageUpload({
     }
   };
 
-  const copySentence = async () => {
+  const selectFolder = (name: string) => {
+    setCopied(false);
+    setTarget(name);
+    if (name === "new") return;
+    const path = joinRemote(dir, name);
+    if (path) setSentence(imageSetPrompt(path));
+  };
+
+  const knownSets = folderName && !sets.includes(folderName) ? [folderName, ...sets] : sets;
+  const previewPath = target !== "new" ? joinRemote(dir, target) : null;
+  const previewSentence = previewPath ? imageSetPrompt(previewPath) : "";
+
+  const copySentence = async (value = sentence) => {
     try {
-      await navigator.clipboard.writeText(sentence);
+      await navigator.clipboard.writeText(value);
       setCopied(true);
     } catch {
       sentenceRef.current?.focus();
@@ -232,6 +311,28 @@ export default function RemoteImageUpload({
     >
       {phase === "pick" && (
         <div className="grid gap-4">
+          <FolderBar names={sets} selected={target} allowNew onSelect={selectFolder} />
+          <p className="text-xs text-[#d2c6f5]">
+            {target === "new" ? "Jeder Upload legt einen neuen Ordner an." : `Neue Bilder kommen in ${target}.`}
+          </p>
+          {previewSentence && (
+            <div className="flex gap-2">
+              <input
+                readOnly
+                value={previewSentence}
+                onFocus={(event) => event.currentTarget.select()}
+                aria-label="Satz für die KI"
+                className="h-12 min-w-0 flex-1 rounded-xl border-2 border-[#7c5cff] bg-[#120a24] px-4 font-mono text-sm text-white outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => void copySentence(previewSentence)}
+                className="h-12 cursor-pointer rounded-xl bg-white px-4 text-sm font-semibold text-[#1a1030] hover:bg-[#efeaff]"
+              >
+                {copied ? "Kopiert" : "Kopieren"}
+              </button>
+            </div>
+          )}
           <div className="grid min-h-56 grid-cols-2 gap-3 rounded-2xl bg-[#120a24] p-3 sm:grid-cols-5">
             {images.length === 0 && (
               <p className="col-span-full grid place-items-center text-sm text-[#d2c6f5]">Noch keine Bilder</p>
@@ -317,6 +418,12 @@ export default function RemoteImageUpload({
         <div className="grid gap-4 py-2">
           <p className="text-center text-sm font-semibold text-white">Die Bilder liegen auf dem Server.</p>
           <p className="text-center text-xs text-[#d2c6f5]">{summary}</p>
+          <FolderBar
+            names={knownSets}
+            selected={target === "new" ? folderName : target}
+            allowNew={false}
+            onSelect={selectFolder}
+          />
           <label className="grid gap-2">
             <span className="text-xs font-medium text-[#d2c6f5]">Satz für die KI</span>
             <div className="flex gap-2">
