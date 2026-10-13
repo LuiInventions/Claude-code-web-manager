@@ -94,4 +94,14 @@ describe("code CLIs", () => {
     expect(spawnEnv("grok").DISABLE_AUTOUPDATER).toBeUndefined();
     expect(spawnEnv("codex").CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC).toBeUndefined();
   });
+
+  it("turns Claude settings hooks off for a Grok session", () => {
+    const saved = process.env.GROK_CLAUDE_HOOKS_ENABLED;
+    process.env.GROK_CLAUDE_HOOKS_ENABLED = "true";
+    expect(spawnEnv("grok").GROK_CLAUDE_HOOKS_ENABLED).toBe("false");
+    expect(spawnEnv("claude").GROK_CLAUDE_HOOKS_ENABLED).toBe("true");
+    expect(spawnEnv("codex").GROK_CLAUDE_HOOKS_ENABLED).toBe("true");
+    if (saved === undefined) delete process.env.GROK_CLAUDE_HOOKS_ENABLED;
+    else process.env.GROK_CLAUDE_HOOKS_ENABLED = saved;
+  });
 });

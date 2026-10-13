@@ -5,6 +5,14 @@ follow `package.json`. From 1.9.6 each `v*` tag publishes
 `jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
 `cc-control-center-Setup-<version>.exe`.
 
+## 1.9.17 — 2026-10-13
+
+### Grok sessions no longer repeat failing Claude hooks
+
+- A Grok session started from Jarvis does not run hooks from Claude's `settings.local.json`. Those hooks were failing on every file read and the error was printed again each time.
+- In a git checkout that does not already track `.grok/config.toml`, the session also turns off the `everything-claude-code` plugin hooks for that checkout. The file stays local and is not committed by Update.
+- Grok's own file tools are unchanged. Grok started outside Jarvis still uses the hooks you configured there.
+
 ## 1.9.16 — 2026-10-13
 
 ### Clone folder, local changes, and a smoother session

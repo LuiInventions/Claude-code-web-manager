@@ -175,5 +175,10 @@ export function spawnEnv(id: CodeCliId): NodeJS.ProcessEnv {
       env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
     }
   }
+  if (id === "grok") {
+    // Claude settings hooks run around every real tool call. When they fail,
+    // Grok prints the error and continues, so the same lines repeat.
+    env.GROK_CLAUDE_HOOKS_ENABLED = "false";
+  }
   return env;
 }

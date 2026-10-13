@@ -124,7 +124,9 @@ export function buildRemoteCliCommand(opts: {
   const env =
     opts.cli === "claude"
       ? "DISABLE_AUTOUPDATER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 "
-      : "";
+      : opts.cli === "grok"
+        ? "GROK_CLAUDE_HOOKS_ENABLED=false "
+        : "";
   const argv = [opts.bin, ...opts.args].map(shellQuote).join(" ");
   const locale = "export LANG=C.UTF-8 LC_ALL=C.UTF-8 TERM=xterm-256color COLORTERM=truecolor; ";
   return `${locale}${cdPrefix(opts.cwd)}${env}exec ${argv}`;

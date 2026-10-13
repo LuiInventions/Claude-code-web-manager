@@ -12,6 +12,7 @@ import {
   type CodeCliId,
 } from "../code-clis";
 import { resolveCliBin } from "./cli-bin";
+import { silenceGrokPluginHooks } from "./grok-hooks";
 import { buildRemoteCliCommand } from "../remote-ssh";
 import { openRemoteCli } from "./remote-broker";
 import { remoteBrokerPort } from "./remote-session";
@@ -301,6 +302,7 @@ export function handleClaudePty(ws: WebSocket, url: URL): void {
     const bin = cli === "claude" ? resolveClaudeBin() : resolveCliBin(spec.bin) ?? spec.bin;
     const spawnArgs = args;
     const env = spawnEnv(cli) as Record<string, string>;
+    if (cli === "grok") silenceGrokPluginHooks(cwd);
     try {
       term = pty.spawn(bin, spawnArgs, {
         name: "xterm-256color",

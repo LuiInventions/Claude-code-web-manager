@@ -65,6 +65,7 @@ describe("remote ssh login", () => {
     });
     expect(cmd).toContain(`cd "$HOME"/'src/app'`);
     expect(cmd).toContain("exec 'grok' '--permission-mode' 'bypassPermissions' 'fix it'\\''s bug'");
+    expect(cmd).toContain("GROK_CLAUDE_HOOKS_ENABLED=false ");
     expect(cmd).not.toContain("DISABLE_AUTOUPDATER");
   });
 
