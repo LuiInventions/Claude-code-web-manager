@@ -1,8 +1,8 @@
 # Jarvis Control Center
 
-> A local mission control for **Claude Code** and your projects — a single app that
-> launches, supervises, and reviews up to six Claude Code sessions at once.
-> Runs **exclusively on `127.0.0.1`**, for you and only you.
+> Mission control for **Claude Code**, **Grok**, and **ChatGPT Codex** — on this PC,
+> in a cloned GitHub repo, or over SSH on your own server. **VS Codium** runs in
+> the same window. The app itself binds to **`127.0.0.1`**.
 
 <p align="center">
   <a href="https://github.com/LuiInventions/jarvis-control-center/releases/latest">
@@ -20,35 +20,34 @@
 </p>
 
 > [!TIP]
-> **v1.9.18** is **Jarvis Control Center**. It launches **Claude Code**, **Grok**, or **ChatGPT Codex** locally or,
-> from the **Remote** tab, on your own server. The launcher is **Local** or **GitHub**.
-> **VS Codium** is a local editor in that same Local folder.
-> The installer file is `jarvis-control-center-Setup-1.9.18.exe`. v1.8.0 was withdrawn. v1.9.6 has no installer.
-> [**Changelog**](CHANGELOG.md)
+> **v1.9.18** is the current release. The sidebar order is **Remote**, **GitHub**,
+> **Local**, **Repos**, **VS Codium**, **Sessions**. Remote starts a code CLI on
+> your server. **Repos → Update** commits local changes, merges what GitHub gained,
+> and pushes. VS Codium is an editor inside the app, on the Local folder.
+> The installer is `jarvis-control-center-Setup-1.9.18.exe`. v1.8.0 was withdrawn.
+> v1.9.6 has no installer. [**Changelog**](CHANGELOG.md)
 
-<img width="1920" height="1080" alt="Desktop Screenshot 2026 06 28 - 19 27 23 07" src="https://github.com/user-attachments/assets/961f27e3-c90e-4594-bbbc-ce2fa462e56b" />
+<img width="1920" height="1080" alt="Jarvis Control Center" src="https://github.com/user-attachments/assets/961f27e3-c90e-4594-bbbc-ce2fa462e56b" />
 
 ---
 
 ## What it is
 
-Claude Code is powerful on the command line, but a terminal gives you one session,
-no overview of your projects, and no memory of what each run actually accomplished.
+A terminal gives you one session, no view of the server, and a manual `git add` /
+`git commit` / `git push` after the agent is done.
 
-**Jarvis Control Center** wraps it in a real interface:
+**Jarvis Control Center** is one window for the whole loop:
 
-- **Browse your projects** as cards — stack, Git status, size, README — and drill into any of them.
-- **Launch Claude Code, Grok, or ChatGPT Codex** with a prompt (optionally AI-improved
-  or split into parallel sub-tasks) into a grid of live terminals that survive browser reloads.
-- **Review** what each session did — a language model reads the terminal output and
-  tells you what's done and what's still open, optionally read aloud.
-- **Work on GitHub repos** as if they were local: clone, edit with Claude, then
-  commit + pull + push with one click.
+- **Remote** — log into your server with SSH and start Claude Code, Grok, or Codex there, in a folder you pick, with the server's files beside the terminal.
+- **GitHub** — start the same CLI inside a repo you cloned. **Repos** keeps the token, the clone, and a one-click **Update** that commits and pushes for you.
+- **Local** — the same launcher against a folder on this PC.
+- **VS Codium** — the editor embedded in the app, opened on that local folder.
+- **Sessions** — every running agent as a character in a pixel office.
 
-It ships two ways: as a ready-to-install **Windows desktop app** — just
-[**download the `.exe`**](https://github.com/LuiInventions/jarvis-control-center/releases/latest)
-and run it — or as a **web app** you start from source. Either way the server binds hard
-to loopback, so nothing is ever exposed to your network.
+It ships as a **Windows desktop app**
+([**download the `.exe`**](https://github.com/LuiInventions/jarvis-control-center/releases/latest))
+or as a **web app** you start from source. The control center listens only on
+loopback. Remote is an SSH session *from* that app out to a host you name.
 
 ---
 
@@ -56,10 +55,12 @@ to loopback, so nothing is ever exposed to your network.
 
 - [Highlights](#highlights)
 - [Features](#features)
-  - [Local Projects](#local-projects)
-  - [Launcher — run Claude Code](#launcher--run-claude-code)
-  - [Sessions — visualize your agents](#sessions--visualize-your-agents)
-  - [GitHub](#github)
+  - [Remote](#remote)
+  - [GitHub and Repos](#github-and-repos)
+  - [Local](#local)
+  - [VS Codium](#vs-codium)
+  - [Files](#files)
+  - [Sessions](#sessions)
   - [Settings](#settings)
 - [A typical session](#a-typical-session)
 - [Quick start](#quick-start)
@@ -76,184 +77,140 @@ to loopback, so nothing is ever exposed to your network.
 
 ## Highlights
 
-- 🗂️ **Local Projects** — every folder in your projects directory at a glance.
-- 🚀 **Up to 6 parallel Claude Code sessions** in a live terminal grid, backed by real
-  server-side PTYs that survive page reloads.
-- 🎮 **Sessions, visualized** — a dedicated tab renders every launcher session live as a
-  **pixel-art office** (inspired by *pixel-agents*): a character per agent across **Work**,
-  **Meeting**, and **Break** rooms, animated by exactly what each agent is doing — down to
-  the file it's editing or the command it's running — with subagents as their own little
-  people and each desk numbered to match the Launcher.
-- 🧠 **Prompt improver & "KI Modus"** — let any of **11 AI providers** (OpenAI, Groq,
-  xAI/Grok, OpenRouter, DeepSeek, Mistral, Together, Fireworks, Perplexity, Gemini,
-  Cerebras) sharpen your prompt, or split one big task into focused sub-sessions. Fully
-  **optional** — without a key the app still launches and supervises Claude.
-- 🎛️ **Per-launch model & effort** — pick Opus / Sonnet / Haiku / Fable and a reasoning
-  effort, or keep Claude Code's defaults.
-- 📋 **Session review** — an LLM reads each terminal's scrollback and reports what's done
-  vs. open, as Markdown you can also have **read aloud**.
-- 🎙️ **Voice in and out** — dictate prompts (speech-to-text) and an optional local
-  **wake-word**, plus text-to-speech for reviews (Cartesia + Picovoice).
-- 🐙 **GitHub built in** — connect a token, clone, create repos, flip visibility, and
-  **commit + pull + push** in one click (never automatically).
-- 🖥️ **One-click desktop app** — [download a self-contained Windows `.exe`](https://github.com/LuiInventions/jarvis-control-center/releases/latest);
-  no Node, no terminal, keys encrypted at rest via Windows DPAPI.
+- 🛰️ **Remote first** — `user@IP`, then the password and a 2FA code only when SSH asks. **Starten** opens 1–6 live terminals on the server, reusing the login that is already open.
+- 🐙 **GitHub, with the commit written for you** — connect a token, clone, create a repo, flip public/private. **Update** lists the changed files, then commits them (`Update via Control Center`), merges remote commits, and pushes.
+- 📁 **Clones survive an upgrade** — they live in `%LOCALAPPDATA%\Jarvis Control Center\github_repos`, outside the program folder the installer replaces. A missing clone is fetched again with the saved token.
+- 🖥️ **VS Codium in the window** — `codium` or `code serve-web` on the Local folder, shown inside the app.
+- 🚀 **Claude Code, Grok, or ChatGPT Codex** — pick the CLI once. Local, GitHub, and Remote all start that CLI. Up to six sessions, real server-side PTYs that survive a reload.
+- 📄 **Click a file** — Local, GitHub, and Remote open it where the terminals sit. CodeMirror for text; images, PDF, audio, and video in the viewer.
+- 🎮 **Sessions office** — running agents as pixel characters, labeled **GitHub**, **Lokal**, or **Server**.
+- 🎨 **Six themes** — Dusk is the default. Ink, Moss, Tide, Clay, and Plum sit next to it.
+- 🔒 **Loopback app, encrypted keys** — the window talks to `127.0.0.1`. API keys and the GitHub token are encrypted at rest in the desktop build (Windows DPAPI).
 
 ---
 
 ## Features
 
-### Local Projects
+The sidebar, top to bottom: **Remote**, **GitHub**, **Local**, **Repos**, **VS Codium**, **Sessions**, then **Settings**.
 
-The Local Projects view scans your configured projects directory and renders a card for every
-direct subfolder, showing the project **name, path, last-modified date, size, detected
-tech stack**, and **Git status** (branch, clean/dirty, latest commits) plus a short
-README excerpt. Click any card to open a detail view with the **full file tree** and the
-**rendered README**. The list refreshes automatically and on demand.
+### Remote
 
-### Launcher — run Claude Code
+Remote is the first tab. It is how you run a code CLI on a machine that is not this PC.
 
-The Launcher is the heart of the app. The flow:
+1. Enter **`user@IP`** (or pick a saved server) and press **Verbinden**. SSH starts in the background. The password field appears when the server asks for a password, and the 2FA field when it asks for a code. The code is not stored. **IP und Passwort speichern** keeps the host, user, and password.
+2. Once you are in, the left rail matches the other launchers: **Session count** (1–6), **Ordner**, **Starten**, and the server's file list. The connected IP is shown in green next to **Trennen**.
+3. **Starten** opens that many terminals in the folder in **Ordner**. Each one is the code CLI from Settings (Claude Code, Grok, or Codex), with an empty prompt, so you talk to it in the terminal. The CLI reuses the SSH login that is already open. A second connection is not started.
+4. Click a folder in the list to put that path into **Ordner**. Left-click a file to open it. **Dateien** and **Sessions** switch the main area between the file and the terminals.
 
-1. **Pick a project** and write a prompt.
-2. **(Optional) Improve it** — your chosen AI provider rewrites the prompt to be clearer
-   and more actionable before any code runs. Pick from 11 providers in Settings, or skip
-   it entirely with **Start without improvement**.
-3. **(Optional) KI Modus** — instead of one session, let the model **split** your task
-   into 1–6 structured sub-prompts that run in parallel (e.g. "tests", "docs", "refactor").
-4. **Choose model & effort** — the dropdowns follow the selected code CLI (Claude Code,
-   Grok, or ChatGPT Codex), or leave both on *Standard* to use that CLI's own defaults.
-5. **Start** — the selected CLI opens in a **live terminal grid of up to six sessions**, each
-   box stably numbered #1–#6.
+A saved server can be chosen again from the dropdown. **Trennen** closes the session.
 
-Sessions are backed by **real server-side PTYs**, so they keep running — and keep their
-output — even if you reload the browser or close and reopen the desktop window. A
-**usage bar** keeps token consumption visible while you work.
+### GitHub and Repos
 
-When a run is underway, the built-in **review assistant** reads each terminal's
-scrollback, asks a language model to classify what is **already done** and what is
-**still open**, and presents the result as a formatted **Markdown report** on its own
-page. Reports can optionally be **read aloud** via text-to-speech (Cartesia Sonic).
+Two tabs share one clone:
 
-### Sessions — visualize your agents
+- **GitHub** starts the code CLI in a cloned repo. The rail is a **Repo** dropdown, **Session count**, **Starten**, and that repo's files. Without a connected account the tab asks you to connect GitHub under **Repos**.
+- **Repos** is the account. Paste a personal access token, clone repos you can see, create a repository (public or private), and change visibility later.
 
-The **Sessions** tab turns the launcher's live Claude Code sessions into a single,
-graphical **pixel office** — a native re-creation of
-[**pixel-agents**](https://github.com/pixel-agents-hq/pixel-agents). Every session you
-start in the Launcher shows up here within ~1 second and disappears when it's stopped.
+Cloned repos are stored in `%LOCALAPPDATA%\Jarvis Control Center\github_repos`
+(a source checkout uses `github_repos` in the working directory). **Ordner öffnen**
+on GitHub opens that folder. An upgrade deletes the program folder and leaves
+the clones in place. A clone whose folder is gone is cloned again with the saved
+token. A clone that is still on disk is moved and keeps its files.
 
-It's one shared office rendered on a canvas, split into **rooms**:
+Each repo card lists uncommitted files — edits from the CLI, from VS Codium, or
+by hand. **Update** opens those files, and **Pushen** then:
 
-- **Work Room** — active sessions at desks. Each character animates to its **precise live
-  activity** — typing while editing, reading while searching, running while in a shell,
-  bobbing with thought-dots while thinking, raising an amber **"needs approval"** flag when
-  it's waiting for you, a red shake on error. The desk caption shows **what's being worked
-  on right now** — the file (`✎ PixelOfficeView.tsx`), the search, or the command
-  (`$ npm run build`) — and the monitor glows to match.
-- **Meeting Room** — **KI-Modus** batches (sessions started together) seated around a round
-  table, one table per batch.
-- **Break Room** — finished sessions relaxing on couches with a ✓.
+1. `git add -A` and a commit with the message `Update via Control Center`, when the working tree is dirty.
+2. `git fetch`, then a merge when the remote is ahead. A conflict aborts the merge. A commit from step 1 stays.
+3. `git push` to `origin/<branch>`.
 
-**In-session subagents** (the Task tool) appear as their own little **pixel people** beside
-their parent. Every character wears a **#N name-plate whose number is identical to the
-Launcher's** (oldest = #1), so each session is unambiguous across both tabs. Hover or click
-a character for the project, prompt, model, current action, and its subagents.
+The GitHub token is sent as an auth header for that call. It is not written into `.git/config`.
 
-The office is **built into the app** (offline, no extra install, no third-party assets),
-rendered natively in the style of pixel-agents, and driven by the same live session
-registry the Launcher uses — including activity, current tool/file, and subagent state
-parsed server-side — so what you see always matches what's actually running.
+`git user.name` and `git user.email` have to be set on the machine, or the commit step stops.
 
-### GitHub
+### Local
 
-The GitHub section lets you connect a personal access token and work with remote
-repositories as if they were local projects:
+Local is the same rail against a folder on this PC: **Session count**, **Ordner**, **Starten**, the file list, and **Ordner öffnen** (the projects folder from Settings). **Starten** opens the selected code CLI there. Clicking a subfolder writes that path into **Ordner**. The VS Codium tab uses this same folder.
 
-- **Clone** any repo you have access to, then launch Claude Code on it just like a
-  local project.
-- **Create** a new repository or **change its visibility** (public ↔ private) without
-  leaving the app.
-- **Update** — each repo card has one button that **commits** the local changes,
-  **merges in** anything the remote gained meanwhile, and **pushes**. One click, one repo.
+A Claude Code session shows the usage bar. Grok and Codex do not.
 
-> Pushing only ever happens when *you* press Update. Nothing is committed or pushed
-> automatically.
+### VS Codium
+
+**VS Codium** is its own tab. The app starts `codium serve-web` (or `code serve-web` when Codium is not installed) in the Local folder and shows the editor in the window. **Neu laden** refreshes it. **Erneut versuchen** starts it again.
+
+The editor is on this PC. The Remote SSH login is separate and is not used to open it.
+
+On Windows the `.cmd` shim is started through `cmd.exe`, so `serve-web` actually returns its port.
+
+### Files
+
+A left-click in the file list on **Local**, **GitHub**, or **Remote** opens the file in the area the terminals use. Text opens in CodeMirror with line numbers and color, and can be edited and saved. Images, PDF, audio, and video use the viewer. While a session is running, **Dateien** and **Sessions** switch that area. Folder lists use **Zurück**.
+
+### Sessions
+
+The **Sessions** tab draws every launcher session that is still running as a pixel office, in the style of [pixel-agents](https://github.com/pixel-agents-hq/pixel-agents). The office is built into the app.
+
+Each character has its own name. Above the name is where it was started: **GitHub**, **Lokal**, or **Server**. Clicking the name opens that tab. The pose follows the live tool — typing, reading, a shell command, waiting — and in-session subagents are their own small characters. The assets ship with the app.
 
 ### Settings
 
-Choose the **code CLI** the launcher starts — Claude Code, Grok, or ChatGPT Codex —
-on the first-run screen or here. Then choose your **AI provider** — OpenAI, Groq, xAI (Grok), OpenRouter, DeepSeek, Mistral,
-Together, Fireworks, Perplexity, Google Gemini, or Cerebras (11 in all) — enter its key,
-and **pick a model from a dropdown of that provider's current models**. The dropdown is
-shown for **every** provider, even before you add a key, and is enriched with the
-provider's live model list once a key is set. Voice, projects directory,
-and **API-key status** are adjustable here too — **no server restart required**. The AI
-provider is **optional**: without a key the prompt improver and session review are simply
-disabled and everything else keeps working. Keys are entered here (or on the first-run
-setup screen) and stored server-side — encrypted in the desktop app — and the UI only ever
-shows **whether** a key is set, never its value. The app opens on the **Launcher** by
-default.
+- **Code CLI** — Claude Code (`claude`), Grok (`grok`), or ChatGPT Codex (`codex`). Local, GitHub, and Remote all start this binary. Model and effort stay on the CLI's own defaults (**Standard**).
+- **Theme** — Ink, Dusk, Moss, Tide, Clay, Plum. Dusk is used when none is saved.
+- **AI provider** *(optional)* — OpenAI, Groq, xAI (Grok), OpenRouter, DeepSeek, Mistral, Together, Fireworks, Perplexity, Google Gemini, or Cerebras. Pick a model from that provider's list. The key stays server-side. The UI shows only whether it is set.
+- **Voice** *(optional)* — Cartesia for speech-to-text and reading text aloud, Picovoice for a local wake-word.
+- **Projects folder** — the directory Local treats as home. A native folder picker is used in the desktop app.
+
+The first-run screen asks for the projects folder, the code CLI, and an optional provider key. After an update that screen runs once more. The GitHub token, saved keys, and clones stay.
 
 ---
 
 ## A typical session
 
 ```text
-Local Projects ──▶ open project   Launcher ──▶ prompt ──▶ (improve / split) ──▶ Start
-                                                                                  │
-                                          ┌───────────────────────────────────────┘
-                                          ▼
-                        live terminal grid  #1  #2  #3   …  (real PTYs)
-                                          │
-                                          ▼
-                          Review ──▶ "done / open" Markdown report ──▶ 🔊 read aloud
+Remote ──▶ user@IP ──▶ SSH ──▶ Ordner ──▶ Starten ──▶ CLI on the server
+GitHub ──▶ pick a clone ──▶ Starten ──▶ CLI in the repo ──▶ Repos ──▶ Update
+Local  ──▶ Ordner ──▶ Starten ──▶ CLI here ──▶ VS Codium on the same folder
+                                      │
+                                      ▼
+                    live terminals  #1 … #6    Dateien ⇄ Sessions
+                                      │
+                                      ▼
+                         Sessions office  (GitHub / Lokal / Server)
 ```
 
-You browse to a project, hand Claude Code a task, watch it work across one or more
-terminals, then ask for a review to see — in plain language — what actually got done.
+You connect, start the CLI, watch it in the terminal or the office, open files beside it, and send the repo back to GitHub with **Update**.
 
 ---
 
 ## Quick start
 
-There are two ways to run it. Most people want **Option A** (just an app); developers and
-contributors want **Option B** (run from source).
+Most people want **Option A**. **Option B** is for running from source.
 
 ### Option A — Desktop app (.exe)
 
-**This is the easiest way to run the app — no Node.js, no terminal, no `npm install`.**
+**No Node.js, no terminal, no `npm install`.**
 
 1. **Download the installer** from the
    [**latest release**](https://github.com/LuiInventions/jarvis-control-center/releases/latest):
    **`jarvis-control-center-Setup-<version>.exe`**.
-2. **Run it.** It installs per-user (no admin rights required) and adds a Start-menu
-   shortcut. The whole UI runs in its own window while the loopback server stays internal.
-3. **First launch → setup screen.** Pick your projects folder (native folder picker),
-   choose the code CLI (Claude Code, Grok, or ChatGPT Codex), choose an AI provider
-   and model from the dropdowns, and (optionally) enter its key.
+2. **Run it.** It installs per-user (no admin rights) and adds a Start-menu shortcut. The UI is its own window. The loopback server stays inside the process.
+3. **First launch → setup screen.** Pick your projects folder, choose the code CLI (Claude Code, Grok, or ChatGPT Codex), and optionally an AI provider and key.
 
-> **Publisher & the "Unknown publisher" prompt.** The app is published by
-> **LT Digital Concepts (Luis Kleemann)** — you'll see that name in the file's
-> Details. Until the build is signed with a CA-issued certificate, Windows
-> SmartScreen may still show an "Unknown publisher" prompt; click **More info →
-> Run anyway**. The signing pipeline is wired and ready — see
-> [`build/SIGNING.md`](build/SIGNING.md).
+> **Publisher.** The app is published by **LT Digital Concepts (Luis Kleemann)**.
+> Until the build is signed with a CA-issued certificate, Windows SmartScreen may
+> show an "Unknown publisher" prompt. Click **More info → Run anyway**. The
+> signing pipeline is described in [`build/SIGNING.md`](build/SIGNING.md).
 
-> **Updating is safe.** After installing a new version the welcome/setup screen
-> runs once more (so you can re-confirm provider + model), but your data in the
-> per-user profile — including your **connected GitHub token** and saved keys —
-> is **kept**.
+> **Updating keeps your data.** The welcome screen runs once so you can
+> re-confirm the provider and model. The per-user profile — GitHub token, saved
+> keys, saved SSH logins — stays. Clones live under
+> `%LOCALAPPDATA%\Jarvis Control Center\github_repos`, so replacing the program
+> folder does not delete them.
 
-The installer is **fully self-contained** — Node, Next.js, and Claude Code's runtime
-dependencies are bundled, so nothing else is downloaded at runtime. Your API keys are
-stored **encrypted** (Windows DPAPI via Electron `safeStorage`) in your user profile,
-never in the app folder, and stay editable later under **Settings**. User data lives in
-the per-user `userData` directory, so the app keeps your settings across updates.
-
-> You still need the **code CLI you selected** installed and logged in
-> (`claude`, `grok`, or `codex`). An **AI provider key**
-> is **optional** (any one of 11 providers) and only powers the prompt improver, KI Modus,
-> and reviews — see [Requirements](#requirements).
+The installer bundles Node and the app runtime. You still install the **code CLI**
+you selected (`claude`, `grok`, or `codex`) and log in to it. Remote needs the
+**OpenSSH Client**. VS Codium needs **VS Codium** or **VS Code** on this PC.
+Keys are encrypted with Windows DPAPI in your user profile.
 
 <details>
 <summary><strong>Build the installer yourself instead</strong></summary>
@@ -282,17 +239,15 @@ cd jarvis-control-center
 
 **2. Install & configure (guided)**
 
-A PowerShell script handles install and API-key configuration end to end:
-
 ```powershell
 .\setup.ps1
 ```
 
-It will: verify Node.js and git are available → run `npm install` → create `.env.local`
-from `.env.example` → interactively prompt for `OPENAI_API_KEY`, an optional
-`CARTESIA_API_KEY`, and your projects folder, and write them into `.env.local`.
+It verifies Node.js and git, runs `npm install`, creates `.env.local` from
+`.env.example`, and prompts for `OPENAI_API_KEY`, an optional `CARTESIA_API_KEY`,
+and your projects folder.
 
-If PowerShell blocks the script, run it once for the current process only:
+If PowerShell blocks the script:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup.ps1
@@ -304,9 +259,9 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1
 npm run dev
 ```
 
-Then open **http://127.0.0.1:3100**. If any required setting is missing, the app greets you
-with the same **first-run setup screen** as the desktop build, so you can finish
-configuration in the browser.
+Then open **http://127.0.0.1:3100**. Missing settings show the same first-run screen as the desktop build.
+
+In a source checkout, GitHub clones land in `github_repos` inside the working directory.
 
 <details>
 <summary><strong>Manual install (instead of <code>setup.ps1</code>)</strong></summary>
@@ -325,100 +280,92 @@ npm run dev
 
 ## Requirements
 
-- **Windows 11**, **Node.js ≥ 20.9** (developed/tested on Node 24)
-- **git** on your `PATH`
-- **One code CLI** installed and logged in: **Claude Code** (`claude`), **Grok**
-  (`grok`, [Grok Build](https://x.ai/cli)), or **ChatGPT Codex** (`codex`). Pick it
-  in the app. The others are optional.
-- *(Optional)* an API key for **any one of 11 AI providers** (OpenAI, Groq, xAI/Grok,
-  OpenRouter, DeepSeek, Mistral, Together, Fireworks, Perplexity, Gemini, Cerebras) —
-  powers the prompt improver, KI Modus, and reviews. Without one the app still launches
-  and supervises the selected code CLI; only these AI features are disabled.
-- *(Optional)* a **Cartesia API key** for voice (speech-to-text input + reading reviews
-  aloud), and a **Picovoice access key** for the local wake-word. Everything else works
-  without them.
+- **Windows 11**, **Node.js ≥ 20.9** (developed and tested on Node 24) for a source checkout. The installer does not need Node.
+- **git** on your `PATH`, with `user.name` and `user.email` set (Repos → Update commits as you).
+- **One code CLI**, installed and logged in: **Claude Code** (`claude`), **Grok** (`grok`, [Grok Build](https://x.ai/cli)), or **ChatGPT Codex** (`codex`).
+- **OpenSSH Client** for the Remote tab (`ssh.exe`, the Windows optional feature).
+- **VS Codium** or **VS Code** for the editor tab. Codium is preferred when both are installed.
+- *(Optional)* an API key for one of 11 AI providers — OpenAI, Groq, xAI/Grok, OpenRouter, DeepSeek, Mistral, Together, Fireworks, Perplexity, Gemini, Cerebras.
+- *(Optional)* a **Cartesia** key for voice, and a **Picovoice** key for the local wake-word.
 
 ---
 
 ## Configuration
 
-Settings come from `.env.local` **or** the in-app **Settings page** / first-run screen.
+Settings come from `.env.local` **or** the in-app **Settings** page / first-run screen.
 Precedence, highest first: **Settings UI** (`.data/settings.json`) → **environment**
 (`.env.local`) → **built-in default**.
 
 | Variable | What it controls | Default |
 |---|---|---|
-| `OPENAI_API_KEY` | OpenAI key — prompt improver, KI Modus, reviews. **Server-side only.** | – *(optional)* |
-| `GROQ_API_KEY`, `XAI_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `MISTRAL_API_KEY`, `TOGETHER_API_KEY`, `FIREWORKS_API_KEY`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`, `CEREBRAS_API_KEY` | Keys for the other 10 AI providers. Server-side only. | – *(optional)* |
-| `OPENAI_MODEL` | Legacy OpenAI model (provider + model are normally chosen in Settings → `aiProvider` / `aiModel`) | `gpt-5.4-mini` |
-| `CARTESIA_API_KEY` | Cartesia key — voice in (STT) + out (TTS). Server-side only. | – *(optional)* |
+| `OPENAI_API_KEY` | OpenAI key. **Server-side only.** | – *(optional)* |
+| `GROQ_API_KEY`, `XAI_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `MISTRAL_API_KEY`, `TOGETHER_API_KEY`, `FIREWORKS_API_KEY`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`, `CEREBRAS_API_KEY` | Keys for the other providers. Server-side only. | – *(optional)* |
+| `OPENAI_MODEL` | Legacy OpenAI model. Provider and model are chosen in Settings (`aiProvider` / `aiModel`). | `gpt-5.4-mini` |
+| `CARTESIA_API_KEY` | Cartesia key — voice in (STT) and out (TTS). Server-side only. | – *(optional)* |
 | `CARTESIA_VOICE` | TTS voice (selectable in Settings) | Sebastian – Orator |
 | `CARTESIA_TTS_MODEL` | Text-to-speech model | `sonic-turbo` |
 | `CARTESIA_STT_MODEL` | Speech-to-text model | `ink-whisper` |
 | `VOICE_LANGUAGE` | Voice language | `de` |
-| `PICOVOICE_ACCESS_KEY` | Local wake-word (Porcupine) — optional | – |
-| `PROJECTS_DIR` | Folder whose direct subfolders are treated as projects | `./projects` (inside the app) |
-| `GITHUB_DIR` | Where cloned GitHub repos land | `./projects/github` |
-| `HOST` | Bind address — **do not change** | `127.0.0.1` |
+| `PICOVOICE_ACCESS_KEY` | Local wake-word (Porcupine) | – |
+| `PROJECTS_DIR` | Folder Local starts from, until you pick another in the app | `./projects` |
+| `HOST` | Bind address. Leave this. | `127.0.0.1` |
 | `PORT` | Port | `3100` |
 | `CLAUDE_BIN` | Explicit path to the Claude CLI | auto (`where claude`) |
 
-> **Keys never reach the frontend.** They are used server-side only; the UI shows just
-> *whether* each key is set. In a source checkout, keys entered via the setup/Settings
-> screens are written to a gitignored `.data/secrets.json`; in the desktop build they are
-> encrypted with Windows DPAPI.
+The code CLI is `codeCli` in `.data/settings.json`: `claude`, `grok`, or `codex`.
 
-Paths default to folders **inside the app directory** (not your home folder), so a fresh
-checkout is self-contained. Point `PROJECTS_DIR` / `GITHUB_DIR` elsewhere via the Settings
-UI or environment variables (use absolute paths).
+**Clone folder.** The desktop app sets `CCC_GITHUB_DIR` to
+`%LOCALAPPDATA%\Jarvis Control Center\github_repos` before the server starts.
+A dev run uses `<cwd>/github_repos`. That path is not a Settings field.
+
+> **Keys never reach the frontend.** The UI shows whether each key is set. In a
+> source checkout, keys from setup or Settings go to a gitignored
+> `.data/secrets.json`. In the desktop build they are encrypted with Windows DPAPI.
+
+`PROJECTS_DIR` defaults to a folder inside the app directory. Point it elsewhere
+from Settings or the environment (absolute path).
 
 ---
 
 ## How it works
 
-A **custom Node server** (`server.ts`) binds to `127.0.0.1` and hosts both Next.js and a
-**`ws` WebSocket server** on the same port: HMR upgrades go to Next, everything under
-`/ws/*` goes to us. Claude Code sessions stream over WebSocket (`/ws/claude-pty`,
-`/ws/claude`) and run as real **`node-pty`** PTYs on the server, which is why they survive
-reloads. Git runs via `child_process`; an **OpenAI-compatible SDK** (Chat Completions,
-across all 11 providers) powers prompt improvement, splitting, and review; **Cartesia**
-handles voice; the desktop shell is **Electron**.
+A **custom Node server** (`server.ts`) binds to `127.0.0.1` and hosts Next.js and a
+**`ws` WebSocket server** on the same port. Code-CLI sessions stream over WebSocket
+and run as **`node-pty`** PTYs, which is why they survive a reload.
+
+**Remote** opens one OpenSSH session (`ssh.exe`). After login, a broker inside
+that same session starts the code CLI. A second SSH connection is not opened.
+Server files are listed and read through that session.
+
+**Repos → Update** calls `gitSyncAndPush`: commit when the tree is dirty, fetch,
+merge, push. The token rides on the git command as an HTTP header.
+
+**VS Codium** spawns `serve-web` on the Local folder and the window embeds that URL.
 
 ```text
-server.ts                Custom server: Next + ws, binds 127.0.0.1
+server.ts                  Next + ws, binds 127.0.0.1
 lib/
-  config.ts              Configuration (env + settings.json + secrets)
-  secrets.ts             API-key storage (DPAPI in desktop, .data file in dev)
-  paths.ts, store.ts     Path / JSON helpers
-  projects.ts            Project scan
-  stack-detect.ts        Stack / framework detection
-  git.ts                 Git status
-  indexer.ts             Persistent project index
-  openai.ts              OpenAI client + model list
-  prompt-improver.ts     Prompt improvement for Claude
-  prompt-splitter.ts     "KI Modus" — split one prompt into sub-sessions
-  session-review.ts      Session review: output context + LLM → {markdown, speech}
-  console-read.ts        PTY scrollback → readable text tail
-  usage-store.ts         Token-usage tracking for the launcher
-  voice.ts               Cartesia STT + TTS
-  launcher-store.ts      Launcher history
-  window-instances.ts    Stable #1–#N numbering
+  config.ts                Env + settings.json + secrets
+  code-clis.ts             Claude Code, Grok, ChatGPT Codex
+  git.ts                   Status, and Update (commit + merge + push)
+  github-store.ts          Connected repos
+  remote-ssh.ts            SSH login, saved servers
+  editor-bin.ts            VS Codium / VS Code spawn (Windows .cmd shim)
   server/
-    ws-hub.ts            WebSocket dispatch (/ws/*)
-    claude-pty.ts        Server-side Claude sessions (PTY registry)
-    claude-runner.ts     Spawns Claude Code, parses stream-json
-    bot-collect.ts       Collects live + persisted sessions
+    claude-pty.ts          PTY registry
+    remote-broker.ts       SSH session forward
+    remote-session.ts      CLI on the connected server
+    local-codium.ts        serve-web on the Local folder
+    codium-proxy.ts        Loopback proxy in front of the editor
 app/
-  api/                   Route handlers (fs, projects, index, launcher
-                         [improve, split, review, sessions, usage], settings,
-                         models, secrets, open, github [+ create, update,
-                         visibility, changes], voice [tts, voices])
-  components/            Shell, sections (Local Projects/Launcher/Sessions/GitHub/Settings),
-                         sessions/ (pixel-office view), setup
-build/                   Electron wrapper + electron-builder config + build scripts
-.data/                   Local storage (gitignored): settings.json, secrets.json,
-                         index.json, launcher.json
+  components/sections/     Remote, GitHub, Local, Repos, VS Codium, Sessions
+  api/remote, api/github, api/codium
+build/                     Electron main, preload, NSIS installer
 ```
+
+Desktop user data (settings, secrets, launcher state) lives in the Electron
+`userData` directory. Clones live beside it, under Local AppData, so an
+installer upgrade can replace the program folder and leave the repos.
 
 ---
 
@@ -436,21 +383,18 @@ npm run electron:build # Self-contained Windows .exe -> build/dist/
 ```
 
 **Tech stack:** Next.js 15 (App Router) · React 19 · TypeScript · Tailwind CSS v4 ·
-Electron · `ws` · `node-pty` · OpenAI SDK · Cartesia · `xterm.js` · `highlight.js` ·
-`react-markdown` · `lucide-react`.
+Electron · `ws` · `node-pty` · CodeMirror 6 · OpenAI SDK · Cartesia · `xterm.js` ·
+`highlight.js` · `react-markdown` · `lucide-react`.
 
 ---
 
 ## Security
 
-- **Loopback only** — the server binds hard to `127.0.0.1`. Do not set `HOST` to
-  `0.0.0.0`; this app has no authentication and is meant for one local user.
-- **Full privileges** — the Launcher runs commands with *your* user privileges, by design.
-  Run it locally, only for yourself.
-- **Claude Code runs with `--dangerously-skip-permissions`** and can modify files in the
-  selected project folder. Review the (improved) prompt before you press Start.
-- **No secrets in the frontend** — API keys stay server-side; the UI only reports whether
-  a key is set. In the desktop build keys are encrypted at rest (Windows DPAPI).
+- **Loopback only.** The server binds to `127.0.0.1`. Leave `HOST` as it is. The app has no login of its own and is meant for one person on this PC.
+- **Remote is outbound SSH.** You type the host. The password can be saved. The 2FA code is not. The code CLI then runs as that user on that server.
+- **The CLI runs with your privileges, and permission prompts are skipped** for sessions started here: Claude Code uses `--dangerously-skip-permissions`, Grok uses `--permission-mode bypassPermissions`, Codex uses `--dangerously-bypass-approvals-and-sandbox`.
+- **Update pushes when you press Pushen** on the file list for that repo. The commit message is `Update via Control Center`.
+- **Secrets stay server-side.** The UI reports whether a key is set. The desktop build encrypts keys at rest with Windows DPAPI. The GitHub token is not written into `.git/config`.
 
 ---
 
