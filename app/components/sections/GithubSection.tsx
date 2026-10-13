@@ -17,9 +17,6 @@ import {
 } from "lucide-react";
 import type { GithubState, StoredRepo } from "@/lib/github-store";
 import { Badge, Button, EmptyState, Input, Spinner, cn } from "../ui";
-import { FileTree } from "../FileTree";
-
-const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? "";
 
 const revealInExplorer = (path: string) =>
   fetch("/api/open", {
@@ -35,6 +32,7 @@ export default function GithubSection() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [githubDir, setGithubDir] = useState("");
   const [visRepo, setVisRepo] = useState<StoredRepo | null>(null);
 
   const cloningRef = useRef(false);
@@ -129,6 +127,17 @@ export default function GithubSection() {
     }
   };
 
+  const openCreate = async () => {
+    try {
+      const r = await fetch("/api/settings");
+      const d = (await r.json()) as { githubDir?: string };
+      setGithubDir(typeof d.githubDir === "string" ? d.githubDir : "");
+    } catch {
+      setGithubDir("");
+    }
+    setCreating(true);
+  };
+
   const disconnect = async () => {
     await fetch("/api/github/disconnect", { method: "POST" }).catch(() => {});
     setState({ connected: false, login: null, name: null, avatarUrl: null, repos: [] });
@@ -206,7 +215,7 @@ export default function GithubSection() {
             size="sm"
             variant="primary"
             icon={Plus}
-            onClick={() => setCreating(true)}
+            onClick={() => void openCreate()}
           >
             New repo
           </Button>
@@ -248,6 +257,7 @@ export default function GithubSection() {
 
       {creating && (
         <CreateRepoModal
+          githubDir={githubDir}
           onClose={() => setCreating(false)}
           onCreated={(s) => {
             setState(s);
@@ -305,31 +315,32 @@ function Modal({
 }
 
 /**
- * Create a new GitHub repo from a local folder: pick a folder in the in-app
- * explorer, name it, choose public/private, then create + push.
+ * Create a new GitHub repo in the clones directory. That path is fixed:
+ * the server always uses `<githubDir>/<name>`, so the picker cannot change it.
  */
 function CreateRepoModal({
+  githubDir,
   onClose,
   onCreated,
 }: {
+  githubDir: string;
   onClose: () => void;
   onCreated: (state: GithubState) => void;
 }) {
-  const [folder, setFolder] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [isPrivate, setIsPrivate] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const create = async () => {
-    if (!folder || !name.trim()) return;
+    if (!githubDir || !name.trim()) return;
     setBusy(true);
     setErr(null);
     try {
       const r = await fetch("/api/github/create", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ folderPath: folder, name: name.trim(), private: isPrivate }),
+        body: JSON.stringify({ name: name.trim(), private: isPrivate }),
       });
       const d = await r.json();
       if (d.error) throw new Error(d.error);
@@ -344,26 +355,22 @@ function CreateRepoModal({
   return (
     <Modal title="Create new repo" onClose={onClose}>
       <div className="flex min-h-0 flex-col gap-3 p-5">
-        <div>
-          <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-faint">
-            Choose folder
-          </div>
-          <div className="h-56 overflow-auto rounded-md border border-line bg-surface py-1">
-            <FileTree
-              selectedPath={folder}
-              selectDirs
-              onOpenFile={(p) => {
-                setFolder(p);
-                setName((cur) => (cur.trim() ? cur : baseName(p)));
-              }}
-            />
-          </div>
-          {folder && (
-            <p className="mt-1 truncate font-mono text-[11px] text-muted" title={folder}>
-              {folder}
-            </p>
-          )}
-        </div>
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-faint">
+            Folder
+          </span>
+          <input
+            value={githubDir}
+            readOnly
+            aria-readonly="true"
+            aria-label="Ordner aller geklonten Repos"
+            spellCheck={false}
+            className="h-9 w-full cursor-default rounded-md border border-line bg-surface px-3 font-mono text-[12px] text-muted outline-none"
+          />
+          <span className="text-[11px] text-faint">
+            Neue Repos werden hier angelegt. Der Ordner ist fest.
+          </span>
+        </label>
 
         <label className="flex flex-col gap-1">
           <span className="text-[11px] font-medium uppercase tracking-wide text-faint">
@@ -410,7 +417,7 @@ function CreateRepoModal({
           icon={Plus}
           onClick={create}
           loading={busy}
-          disabled={!folder || !name.trim()}
+          disabled={!githubDir || !name.trim()}
         >
           Create &amp; push
         </Button>

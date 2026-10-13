@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { placeClones, reposMissingOnDisk } from "../github-place";
+import { newCloneDir, placeClones, reposMissingOnDisk } from "../github-place";
 import type { StoredRepo } from "../github-store";
 
 const pexec = promisify(execFile);
@@ -132,6 +132,24 @@ describe("placeClones", () => {
 
     expect(placed.repos[0].cloneStatus).toBe("cloning");
     expect(placed.wiped).toEqual([]);
+  });
+});
+
+describe("newCloneDir", () => {
+  const root = path.resolve("github_repos");
+
+  it("puts a new repo directly in the clones directory", () => {
+    expect(newCloneDir(root, "demo")).toBe(path.join(root, "demo"));
+    expect(newCloneDir(root, "  demo  ")).toBe(path.join(root, "demo"));
+  });
+
+  it("rejects a name that would leave the clones directory", () => {
+    expect(newCloneDir(root, "")).toBeNull();
+    expect(newCloneDir(root, ".")).toBeNull();
+    expect(newCloneDir(root, "..")).toBeNull();
+    expect(newCloneDir(root, "../outside")).toBeNull();
+    expect(newCloneDir(root, "nested/name")).toBeNull();
+    expect(newCloneDir(root, "nested\\name")).toBeNull();
   });
 });
 

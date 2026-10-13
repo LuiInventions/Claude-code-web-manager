@@ -297,8 +297,9 @@ if (!app.requestSingleInstanceLock()) {
     if (typeof text === "string" && text) clipboard.writeText(text);
   });
 
-  ipcMain.handle("ccc:pick-folder", async () => {
+  ipcMain.handle("ccc:pick-folder", async (_event, title: unknown) => {
     const res = await dialog.showOpenDialog(mainWindow ?? undefined!, {
+      title: typeof title === "string" && title.trim() ? title : undefined,
       properties: ["openDirectory"],
     });
     return res.canceled || res.filePaths.length === 0 ? null : res.filePaths[0];

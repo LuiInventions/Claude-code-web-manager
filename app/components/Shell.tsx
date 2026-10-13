@@ -6,7 +6,6 @@ import {
   FolderGit2,
   FolderOpen,
   Gamepad2,
-  Monitor,
   Server,
   Settings as SettingsIcon,
   type LucideIcon,
@@ -23,7 +22,6 @@ import LauncherSection from "./sections/LauncherSection";
 import SessionsSection from "./sections/SessionsSection";
 import SettingsSection from "./sections/SettingsSection";
 import GithubSection from "./sections/GithubSection";
-import RemoteCodiumSection from "./sections/RemoteCodiumSection";
 import RemoteSection from "./sections/RemoteSection";
 
 interface SectionDef {
@@ -38,7 +36,6 @@ const MAIN_SECTIONS: SectionDef[] = [
   { id: "github-launch", label: "GitHub", desc: "Launch a code CLI in a connected repo", icon: FolderGit2 },
   { id: "launcher", label: "Local", desc: "Launch a code CLI in a local folder", icon: FolderOpen },
   { id: "github", label: "Repos", desc: "Connect a GitHub token and clone repos", icon: Code },
-  { id: "codium", label: "VS Codium", desc: "Editor in the local project folder", icon: Monitor },
   { id: "sessions", label: "Sessions", desc: "Live code-CLI sessions, visualized", icon: Gamepad2 },
 ];
 
@@ -54,7 +51,7 @@ const ALL_SECTIONS = [...MAIN_SECTIONS, SETTINGS_SECTION];
 export default function Shell() {
   const [active, setActive] = useState<SectionId>("launcher");
   const [opened, setOpened] = useState<Set<SectionId>>(
-    () => new Set<SectionId>(["launcher", "codium"]),
+    () => new Set<SectionId>(["launcher"]),
   );
   const [command, setCommand] = useState<{
     target: SectionId;
@@ -155,8 +152,6 @@ function renderSection(id: SectionId, command: SectionCommand | null, active: bo
       return <SessionsSection active={active} />;
     case "remote":
       return <RemoteSection />;
-    case "codium":
-      return <RemoteCodiumSection />;
     case "github":
       return <GithubSection />;
     case "settings":

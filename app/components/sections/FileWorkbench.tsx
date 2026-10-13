@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FileText, Save, X } from "lucide-react";
+import { Download, FileText, Save, X } from "lucide-react";
+import { formatBytes } from "@/lib/format";
 import { Button, cn } from "../ui";
 import type { FileView } from "@/lib/file-view";
+import { useRemoteDownload } from "./useRemoteDownload";
 
 export interface OpenFile {
   path: string;
@@ -27,6 +29,7 @@ export default function FileWorkbench({
   onActivate: (path: string) => void;
   onClose: (path: string) => void;
 }) {
+  const download = useRemoteDownload();
   if (files.length === 0) {
     return (
       <div className="grid h-full place-items-center px-6 text-center text-sm text-faint">
@@ -74,8 +77,10 @@ export default function FileWorkbench({
           source={source}
           file={file}
           hidden={file.path !== activePath}
+          onDownload={source === "remote" ? () => void download.start(file.path, false, file.name) : undefined}
         />
       ))}
+      {download.dialog}
     </div>
   );
 }
@@ -84,10 +89,12 @@ function FileBody({
   source,
   file,
   hidden,
+  onDownload,
 }: {
   source: "local" | "remote";
   file: OpenFile;
   hidden: boolean;
+  onDownload?: () => void;
 }) {
   const [view, setView] = useState<FileView | null>(null);
   const [draft, setDraft] = useState("");
@@ -156,18 +163,26 @@ function FileBody({
         <span className="truncate font-mono text-[11px] text-faint" title={file.path}>
           {file.path}
         </span>
-        {showEditor && (
-          <Button
-            variant="primary"
-            size="sm"
-            icon={Save}
-            className="ml-auto"
-            loading={saving}
-            disabled={!dirty}
-            onClick={() => void save()}
-          >
-            Speichern
-          </Button>
+        {(showEditor || onDownload) && (
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            {onDownload && (
+              <Button variant="secondary" size="sm" icon={Download} onClick={onDownload}>
+                Herunterladen
+              </Button>
+            )}
+            {showEditor && (
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Save}
+                loading={saving}
+                disabled={!dirty}
+                onClick={() => void save()}
+              >
+                Speichern
+              </Button>
+            )}
+          </div>
         )}
       </div>
       <div className="min-h-0 flex-1">
@@ -175,7 +190,7 @@ function FileBody({
         {error && <p className="px-4 py-3 text-sm text-danger">{error}</p>}
         {view?.tooLarge && (
           <p className="px-4 py-3 text-sm text-muted">
-            {view.name} ist zu gross für die Ansicht ({view.size} Bytes).
+            {`${view.name} ist zu gross für die Ansicht (${formatBytes(view.size)}).${onDownload ? " Mit Herunterladen auf den PC speichern." : ""}`}
           </p>
         )}
         {view && !view.tooLarge && view.kind === "binary" && (

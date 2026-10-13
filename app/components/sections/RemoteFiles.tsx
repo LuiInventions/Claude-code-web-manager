@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Folder, File, Search, ChevronLeft } from "lucide-react";
 import { cn } from "../ui";
 import { copyText } from "../term-copy";
+import { useRemoteDownload } from "./useRemoteDownload";
 
 interface Entry {
   name: string;
@@ -32,16 +33,19 @@ function parentDir(path: string): string {
  */
 export default function RemoteFiles({
   path,
+  reloadToken = 0,
   onPathChange,
   onOpenFile,
 }: {
   path: string;
+  reloadToken?: number;
   onPathChange: (path: string) => void;
   onOpenFile?: (path: string, name: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [listing, setListing] = useState<Listing>({ entries: [] });
-  const [menu, setMenu] = useState<{ x: number; y: number; path: string; dir: boolean } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; path: string; name: string; dir: boolean } | null>(null);
+  const download = useRemoteDownload();
 
   useEffect(() => {
     let cancelled = false;
@@ -62,7 +66,7 @@ export default function RemoteFiles({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [path, query]);
+  }, [path, query, reloadToken]);
 
   useEffect(() => {
     if (!menu) return;
@@ -120,7 +124,7 @@ export default function RemoteFiles({
             onContextMenu={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setMenu({ x: e.clientX, y: e.clientY, path: entry.path, dir: entry.dir });
+              setMenu({ x: e.clientX, y: e.clientY, path: entry.path, name: entry.name, dir: entry.dir });
             }}
             className={cn(
               "flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[13px] text-ink hover:bg-raised",
@@ -145,6 +149,17 @@ export default function RemoteFiles({
             type="button"
             className="block w-full cursor-pointer px-3 py-1.5 text-left text-sm text-ink hover:bg-raised"
             onClick={() => {
+              const picked = menu;
+              setMenu(null);
+              void download.start(picked.path, picked.dir, picked.name);
+            }}
+          >
+            Herunterladen
+          </button>
+          <button
+            type="button"
+            className="block w-full cursor-pointer px-3 py-1.5 text-left text-sm text-ink hover:bg-raised"
+            onClick={() => {
               void copyText(menu.path);
               setMenu(null);
             }}
@@ -163,6 +178,7 @@ export default function RemoteFiles({
           </button>
         </div>
       )}
+      {download.dialog}
     </div>
   );
 }

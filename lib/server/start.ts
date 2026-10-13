@@ -3,6 +3,8 @@ import next from "next";
 import nextConfig from "../../next.config.mjs";
 import { getConfig } from "../config";
 import { handleWsUpgrade } from "./ws-hub";
+import { remoteBrokerPort } from "./remote-session";
+import { handleRemoteTransfer, isRemoteTransfer } from "./remote-transfer-http";
 import { startUsagePoller } from "./usage-poller";
 import { warmCodeCli } from "./cli-warm";
 
@@ -44,8 +46,14 @@ export async function startServer(
   const upgrade = app.getUpgradeHandler();
 
   const server: Server = createServer((req, res) => {
+    // Copies run longer than Node's default 5-minute request timeout.
+    if (isRemoteTransfer(req.url)) {
+      void handleRemoteTransfer(req, res, remoteBrokerPort);
+      return;
+    }
     handle(req, res);
   });
+  server.requestTimeout = 0;
 
   server.on("upgrade", (req, socket, head) => {
     const url = req.url || "";

@@ -9,7 +9,7 @@ import { viewFromBuffer, type FileView } from "../file-view";
  */
 
 const BROKER_PY = `
-import base64, json, fcntl, os, pty, select, signal, socket, struct, termios, threading
+import base64, json, fcntl, os, pty, select, signal, socket, stat, struct, termios, threading
 s = socket.socket()
 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 try:
@@ -122,6 +122,249 @@ def do_write(raw, payload):
     with open(path, "wb") as handle:
         handle.write(data)
     return {"ok": True, "path": path}
+
+MAX_TRANSFER = 10 * 1024 * 1024 * 1024
+
+def split_rel(rel):
+    text = rel or ""
+    if "\\x00" in text:
+        return None
+    text = text.replace("\\\\", "/")
+    parts = []
+    for part in text.split("/"):
+        if part in ("", "."):
+            continue
+        if part == "..":
+            return None
+        parts.append(part)
+    return parts
+
+def inside(root, probe):
+    sep = os.sep
+    base = root.rstrip(sep) or sep
+    if probe == base:
+        return True
+    prefix = sep if base == sep else base + sep
+    return probe.startswith(prefix)
+
+def dest_under(root_raw, rel, allow_empty):
+    root = safe_path(root_raw)
+    if not os.path.isdir(root):
+        return None
+    root = os.path.realpath(root)
+    parts = split_rel(rel)
+    if parts is None:
+        return None
+    if not parts:
+        return root if allow_empty else None
+    parent = root
+    for part in parts[:-1]:
+        nxt = os.path.join(parent, part)
+        if os.path.islink(nxt):
+            return None
+        if not os.path.isdir(nxt):
+            try:
+                os.mkdir(nxt, 0o755)
+            except OSError:
+                if not os.path.isdir(nxt) or os.path.islink(nxt):
+                    return None
+        parent = os.path.realpath(nxt)
+        if not inside(root, parent):
+            return None
+    dest = os.path.join(parent, parts[-1])
+    if os.path.islink(dest) or not inside(root, dest):
+        return None
+    return dest
+
+def discard_exact(conn, n, rest):
+    left = n
+    if rest:
+        take = min(len(rest), left)
+        left -= take
+    while left > 0:
+        chunk = conn.recv(min(1024 * 1024, left))
+        if not chunk:
+            return False
+        left -= len(chunk)
+    return True
+
+def write_exact(conn, n, rest, handle):
+    left = n
+    if rest:
+        take = rest[:left]
+        if take:
+            handle.write(take)
+            left -= len(take)
+    while left > 0:
+        chunk = conn.recv(min(1024 * 1024, left))
+        if not chunk:
+            return False
+        handle.write(chunk)
+        left -= len(chunk)
+    return True
+
+def do_mkdir(root_raw, rel):
+    dest = dest_under(root_raw, rel, False)
+    if not dest:
+        return {"error": "Pfad ungueltig."}
+    try:
+        if not os.path.isdir(dest):
+            os.mkdir(dest, 0o755)
+    except OSError as exc:
+        return {"error": str(exc)}
+    return {"ok": True, "path": dest}
+
+def do_put(conn, root_raw, rel, size, rest):
+    if size < 0 or size > MAX_TRANSFER:
+        try:
+            conn.sendall(b"ERR Maximal 10 GB.\\n")
+            conn.close()
+        except Exception:
+            pass
+        return
+    dest = dest_under(root_raw, rel, False)
+    if not dest:
+        discard_exact(conn, size, rest)
+        try:
+            conn.sendall(b"ERR Pfad ungueltig.\\n")
+            conn.close()
+        except Exception:
+            pass
+        return
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    ok = False
+    try:
+        fd = os.open(dest, flags, 0o644)
+    except OSError as exc:
+        discard_exact(conn, size, rest)
+        try:
+            conn.sendall(("ERR %s\\n" % exc).encode())
+            conn.close()
+        except Exception:
+            pass
+        return
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            ok = write_exact(conn, size, rest, handle)
+    except Exception:
+        ok = False
+    if not ok:
+        try:
+            os.remove(dest)
+        except OSError:
+            pass
+        try:
+            conn.sendall(b"ERR Uebertragung unvollstaendig.\\n")
+            conn.close()
+        except Exception:
+            pass
+        return
+    send_json(conn, {"ok": True, "path": dest, "size": size})
+
+def send_file(conn, path):
+    if not os.path.isfile(path):
+        conn.sendall(b"ERR Keine Datei.\\n")
+        conn.close()
+        return
+    try:
+        size = os.path.getsize(path)
+    except OSError as exc:
+        conn.sendall(("ERR %s\\n" % exc).encode())
+        conn.close()
+        return
+    if size > MAX_TRANSFER:
+        conn.sendall(b"ERR Maximal 10 GB.\\n")
+        conn.close()
+        return
+    conn.sendall(("OK %d\\n" % size).encode())
+    try:
+        with open(path, "rb") as handle:
+            left = size
+            while left > 0:
+                chunk = handle.read(min(1024 * 1024, left))
+                if not chunk:
+                    break
+                conn.sendall(chunk)
+                left -= len(chunk)
+    except Exception:
+        pass
+    try:
+        conn.close()
+    except Exception:
+        pass
+
+def b64s(text):
+    return base64.b64encode(text.encode("utf-8")).decode("ascii")
+
+def send_walk(conn, raw):
+    root = safe_path(raw)
+    if os.path.isfile(root):
+        try:
+            size = os.path.getsize(root)
+        except OSError as exc:
+            conn.sendall(("ERR %s\\n" % exc).encode())
+            conn.close()
+            return
+        if size > MAX_TRANSFER:
+            conn.sendall(b"ERR Maximal 10 GB.\\n")
+            conn.close()
+            return
+        name = os.path.basename(root) or "download"
+        conn.sendall(("FILE %d %s\\n" % (size, b64s(name))).encode())
+        conn.sendall(("END 1 %d\\n" % size).encode())
+        conn.close()
+        return
+    if not os.path.isdir(root):
+        conn.sendall(b"ERR Kein Ordner.\\n")
+        conn.close()
+        return
+    root_real = os.path.realpath(root)
+    total = 0
+    count = 0
+    for dirpath, dirnames, filenames in os.walk(root):
+        kept = []
+        for name in sorted(dirnames):
+            full = os.path.join(dirpath, name)
+            if os.path.islink(full):
+                continue
+            if inside(root_real, os.path.realpath(full)):
+                kept.append(name)
+        dirnames[:] = kept
+        here = os.path.realpath(dirpath)
+        if here != root_real:
+            conn.sendall(("DIR %s\\n" % b64s(os.path.relpath(dirpath, root))).encode())
+        for name in sorted(filenames):
+            full = os.path.join(dirpath, name)
+            try:
+                lst = os.lstat(full)
+            except OSError:
+                continue
+            if stat.S_ISLNK(lst.st_mode):
+                try:
+                    st = os.stat(full)
+                    real = os.path.realpath(full)
+                except OSError:
+                    continue
+                if not stat.S_ISREG(st.st_mode) or not inside(root_real, real):
+                    continue
+                size = st.st_size
+            elif stat.S_ISREG(lst.st_mode):
+                if not inside(root_real, os.path.realpath(full)):
+                    continue
+                size = lst.st_size
+            else:
+                continue
+            total += size
+            if total > MAX_TRANSFER:
+                conn.sendall(b"ERR Maximal 10 GB.\\n")
+                conn.close()
+                return
+            conn.sendall(("FILE %d %s\\n" % (size, b64s(os.path.relpath(full, root)))).encode())
+            count += 1
+    conn.sendall(("END %d %d\\n" % (count, total)).encode())
+    conn.close()
 
 def send_json(conn, payload):
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -236,6 +479,35 @@ def handle(conn):
         if op == "WRITE" and len(parts) == 3:
             raw = base64.b64decode(parts[1]).decode("utf-8", "replace")
             send_json(conn, do_write(raw, parts[2]))
+            return
+
+        if op == "PUT" and len(parts) == 4:
+            root = base64.b64decode(parts[1]).decode("utf-8", "replace")
+            rel = base64.b64decode(parts[2]).decode("utf-8", "replace")
+            if len(parts[3]) > 20:
+                conn.sendall(b"ERR Groesse ungueltig.\\n")
+                conn.close()
+                return
+            try:
+                size = int(parts[3])
+            except ValueError:
+                conn.sendall(b"ERR Groesse ungueltig.\\n")
+                conn.close()
+                return
+            do_put(conn, root, rel, size, rest)
+            return
+        if op == "MKDIR" and len(parts) == 3:
+            root = base64.b64decode(parts[1]).decode("utf-8", "replace")
+            rel = base64.b64decode(parts[2]).decode("utf-8", "replace")
+            send_json(conn, do_mkdir(root, rel))
+            return
+        if op == "GET" and len(parts) == 2:
+            raw = base64.b64decode(parts[1]).decode("utf-8", "replace")
+            send_file(conn, safe_path(raw))
+            return
+        if op == "WALK" and len(parts) == 2:
+            raw = base64.b64decode(parts[1]).decode("utf-8", "replace")
+            send_walk(conn, raw)
             return
         conn.sendall(b"ERR bad\\n")
         conn.close()

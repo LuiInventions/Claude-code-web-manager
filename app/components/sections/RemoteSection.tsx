@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Play, X } from "lucide-react";
+import { Play, Upload, X } from "lucide-react";
 import { Button, Input } from "../ui";
 import ClaudeCmdPane from "./launcher/ClaudeCmdPane";
 import FileWorkbench, { type OpenFile } from "./FileWorkbench";
 import RemoteFiles from "./RemoteFiles";
+import RemoteUpload from "./RemoteUpload";
 import { ViewBar } from "./SessionBar";
 import SshLoginPane from "./SshLoginPane";
 import type { RemotePublicStatus } from "@/lib/remote-ssh";
@@ -55,6 +56,8 @@ export default function RemoteSection() {
   const [cli, setCli] = useState("claude");
   const [cwd, setCwd] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [filesNonce, setFilesNonce] = useState(0);
 
   const load = useCallback(() => {
     fetch("/api/remote")
@@ -235,8 +238,16 @@ export default function RemoteSection() {
             <Button variant="primary" icon={Play} className="w-full" onClick={startEmpty}>
               Starten
             </Button>
+            <Button variant="secondary" icon={Upload} className="w-full" onClick={() => setUploadOpen(true)}>
+              Dateien hochladen
+            </Button>
           </div>
-          <RemoteFiles path={cwd.trim() || "~"} onPathChange={setCwd} onOpenFile={openListedFile} />
+          <RemoteFiles
+            path={cwd.trim() || "~"}
+            reloadToken={filesNonce}
+            onPathChange={setCwd}
+            onOpenFile={openListedFile}
+          />
           <div className="flex items-center justify-between gap-3 border-t border-line px-3 py-3">
             <button
               type="button"
@@ -446,6 +457,13 @@ export default function RemoteSection() {
             <SshLoginPane />
           </div>
         </aside>
+      )}
+      {status.connected && uploadOpen && (
+        <RemoteUpload
+          dir={cwd.trim() || "~"}
+          onClose={() => setUploadOpen(false)}
+          onRefresh={() => setFilesNonce((n) => n + 1)}
+        />
       )}
     </div>
   );

@@ -447,3 +447,13 @@
   border-top: 1px solid var(--line);
   margin: 1em 0;
 }
+
+/* The global scrollbar gutter is 10px. On a short CLI pane that gutter, plus
+   xterm's own viewport scroll, shifts the first paint. The CLI scrolls itself. */
+.cli-term .xterm-viewport {
+  scrollbar-width: none;
+}
+.cli-term .xterm-viewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}

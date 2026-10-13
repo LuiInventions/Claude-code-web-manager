@@ -142,6 +142,22 @@ export function withCloneLock<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
+/** A single folder name under the clones directory. Slashes and ".." cannot pass. */
+const REPO_DIR_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+
+/**
+ * Where a repo created in the app is stored: always `<githubDir>/<name>`.
+ * Null when the name is empty or would leave that directory.
+ */
+export function newCloneDir(githubDir: string, name: string): string | null {
+  const trimmed = name.trim();
+  if (!REPO_DIR_NAME.test(trimmed)) return null;
+  const root = path.resolve(githubDir);
+  const dest = path.resolve(root, trimmed);
+  if (samePath(dest, root) || !samePath(path.dirname(dest), root)) return null;
+  return dest;
+}
+
 function samePath(a: string, b: string): boolean {
   const left = path.resolve(a);
   const right = path.resolve(b);

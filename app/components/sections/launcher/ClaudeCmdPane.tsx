@@ -2,21 +2,19 @@
 
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef } from "react";
+import { cliGridForBox } from "@/lib/cli-grid";
 import { enableTermCopy } from "../../term-copy";
 
 /**
- * Live, interactive Claude Code session rendered in the web (launcher "CMD"
- * mode). Connects to /ws/claude-pty, which spawns `claude` in a real PTY cwd'd
- * to the project. The user sees the running session live and can type into it —
- * no separate OS window. Mount one per session (key by session id).
+ * Live, interactive code-CLI session. Connects to /ws/claude-pty, which spawns
+ * the CLI in a real PTY cwd'd to the project. Mount one per session.
  *
- * Sizing: xterm must be fit to a *settled* container. The launcher collapses its
- * sidebar when a session starts, so an immediate synchronous fit would measure a
- * mid-transition width and leave the chat interface visually shifted until the
- * user toggled the sidebar. We therefore (a) defer the initial fit across two
- * animation frames, (b) refit when the socket opens, (c) refit a few times while
- * the sidebar slide settles, and (d) refit whenever `layoutNonce` changes (the
- * launcher bumps it on sidebar toggle / active-batch switch).
+ * Sizing: the host is taken out of flow (`absolute inset-2`) so the terminal's
+ * own 80×24 default cannot inflate the pane. The socket opens only after that
+ * box has a real size, and the CLI is spawned at that grid. Starting at 80×24
+ * in a short window scrolls the first paint upward — the pane looks shifted
+ * until something resizes it. A hidden pane (another batch) still starts at
+ * 80×24 and is corrected when it is shown.
  */
 
 const XTERM_THEME = {
@@ -97,18 +95,30 @@ export default function ClaudeCmdPane({
   const fittedRef = useRef({ c: 0, r: 0 });
 
   // Fit to the (current) container size and tell the PTY the new dimensions.
+  // A hidden or not-yet-laid-out box reports ~0. Fitting that would lock the
+  // CLI to a tiny grid and shift the screen once the pane is actually shown.
   const refit = () => {
+    const el = containerRef.current;
     const fit = fitRef.current;
     const term = termRef.current;
     const ws = wsRef.current;
-    if (!fit || !term) return;
+    if (!fit || !term || !el) return;
+    if (!cliGridForBox(el.clientWidth, el.clientHeight)) return;
     try {
       fit.fit();
     } catch {
       /* container not measurable yet */
     }
+    // Full-screen CLIs use the alternate buffer. If the pane was shorter than
+    // the grid xterm first built, the viewport stays scrolled and the UI sits
+    // high in the box. Pin it back to the top after a real fit.
+    if (term.buffer?.active?.type === "alternate") {
+      const viewport = el.querySelector(".xterm-viewport");
+      if (viewport instanceof HTMLElement) viewport.scrollTop = 0;
+    }
     const cols = term.cols;
     const rows = term.rows;
+    if (cols < 2 || rows < 2) return;
     if (cols === fittedRef.current.c && rows === fittedRef.current.r) return;
     fittedRef.current = { c: cols, r: rows };
     if (ws && ws.readyState === WebSocket.OPEN)
@@ -131,10 +141,6 @@ export default function ClaudeCmdPane({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let term: any = null;
 
-    // Open the PTY before xterm finishes loading. Output that arrives early is
-    // buffered and written once the terminal exists, so the CLI's own startup
-    // overlaps the widget import instead of waiting for it.
-    const pending: { t: string; d?: string; code?: number }[] = [];
     let termReady = false;
     const writeMsg = (msg: { t: string; d?: string; code?: number }) => {
       if (!term) return;
@@ -145,54 +151,45 @@ export default function ClaudeCmdPane({
       }
     };
 
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    const box = containerRef.current;
-    const guessCols =
-      box && box.clientWidth > 40 ? Math.max(20, Math.floor(box.clientWidth / 8.4)) : 80;
-    const guessRows =
-      box && box.clientHeight > 40 ? Math.max(8, Math.floor(box.clientHeight / 17)) : 24;
-    const qs = new URLSearchParams({
-      id,
-      cwd,
-      prompt,
-      model,
-      effort,
-      cols: String(guessCols),
-      rows: String(guessRows),
-    });
-    if (projectName) qs.set("projectName", projectName);
-    if (batchId) qs.set("batchId", batchId);
-    if (createdAt) qs.set("startedAt", String(createdAt));
-    if (origin) qs.set("origin", origin);
-    if (repoFullName) qs.set("repoFullName", repoFullName);
-    if (where === "remote") qs.set("where", "remote");
-    if (cli) qs.set("cli", cli);
-    ws = new WebSocket(`${proto}://${location.host}/ws/claude-pty?${qs}`);
-    wsRef.current = ws;
-    ws.onopen = () => {
-      if (termReady) deferredRefit();
-    };
-    ws.onmessage = (ev) => {
-      try {
-        const msg = JSON.parse(ev.data as string) as {
-          t: string;
-          d?: string;
-          code?: number;
-        };
-        if (!termReady) pending.push(msg);
-        else writeMsg(msg);
-      } catch {
-        /* ignore non-JSON frames */
-      }
-    };
+    const frame = () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+
+    const readBox = (el: HTMLElement) => cliGridForBox(el.clientWidth, el.clientHeight);
 
     (async () => {
       const { Terminal } = await import("@xterm/xterm");
       const { FitAddon } = await import("@xterm/addon-fit");
+      if (disposed) return;
       const el = containerRef.current;
-      if (disposed || !el) return;
+      if (!el) return;
 
+      // The sidebar closes in the same commit that mounts this pane. Wait
+      // until that layout (and a short window's row height) has settled
+      // before choosing the grid the CLI is born at.
+      let grid = readBox(el);
+      for (let i = 0; i < 3 && !grid && !disposed; i++) {
+        await frame();
+        const box = containerRef.current;
+        grid = box ? readBox(box) : null;
+      }
+      if (!grid && !disposed) {
+        await new Promise<void>((resolve) => {
+          window.setTimeout(() => resolve(), 50);
+        });
+        const box = containerRef.current;
+        grid = box ? readBox(box) : null;
+      }
+      if (disposed || !containerRef.current) return;
+
+      const host = containerRef.current;
+      // Hidden batch panes have no box yet. 80×24 is only for those; a
+      // visible short pane must not start there or the UI paints shifted.
+      const born = grid ?? { cols: 80, rows: 24 };
       term = new Terminal({
+        cols: born.cols,
+        rows: born.rows,
         fontFamily: '"Cascadia Mono", Consolas, "Courier New", monospace',
         fontSize: 14,
         lineHeight: 1,
@@ -205,17 +202,71 @@ export default function ClaudeCmdPane({
       });
       const fit = new FitAddon();
       term.loadAddon(fit);
-      term.open(el);
-      enableTermCopy(term, el);
+      term.open(host);
+      enableTermCopy(term, host);
       fitRef.current = fit;
       termRef.current = term;
-      termReady = true;
-      for (const msg of pending) writeMsg(msg);
-      pending.length = 0;
 
-      // Defer the first fit until the container has settled (the sidebar may be
-      // collapsing right now); the resize message below corrects the PTY size.
-      deferredRefit();
+      let cols = born.cols;
+      let rows = born.rows;
+      if (grid) {
+        try {
+          fit.fit();
+        } catch {
+          /* keep the measured grid */
+        }
+        if (term.cols >= 2 && term.rows >= 2) {
+          cols = term.cols;
+          rows = term.rows;
+        }
+        const viewport = host.querySelector(".xterm-viewport");
+        if (viewport instanceof HTMLElement) viewport.scrollTop = 0;
+      }
+      fittedRef.current = { c: cols, r: rows };
+      if (disposed) {
+        try {
+          term.dispose();
+        } catch {
+          /* noop */
+        }
+        return;
+      }
+
+      termReady = true;
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      const qs = new URLSearchParams({
+        id,
+        cwd,
+        prompt,
+        model,
+        effort,
+        cols: String(cols),
+        rows: String(rows),
+      });
+      if (projectName) qs.set("projectName", projectName);
+      if (batchId) qs.set("batchId", batchId);
+      if (createdAt) qs.set("startedAt", String(createdAt));
+      if (origin) qs.set("origin", origin);
+      if (repoFullName) qs.set("repoFullName", repoFullName);
+      if (where === "remote") qs.set("where", "remote");
+      if (cli) qs.set("cli", cli);
+      ws = new WebSocket(`${proto}://${location.host}/ws/claude-pty?${qs}`);
+      wsRef.current = ws;
+      ws.onopen = () => {
+        if (termReady) deferredRefit();
+      };
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data as string) as {
+            t: string;
+            d?: string;
+            code?: number;
+          };
+          writeMsg(msg);
+        } catch {
+          /* ignore non-JSON frames */
+        }
+      };
 
       term.onData((d: string) => {
         if (ws && ws.readyState === WebSocket.OPEN)
@@ -226,12 +277,15 @@ export default function ClaudeCmdPane({
         cancelAnimationFrame(fitFrame);
         fitFrame = requestAnimationFrame(() => refitRef.current());
       });
-      resizeObs.observe(el);
+      resizeObs.observe(host);
 
-      // Catch the sidebar slide / late layout without relying on a single frame.
+      // Font load and the last flex pass can still change the cell size.
       for (const ms of [60, 200, 450]) {
         timers.push(window.setTimeout(() => refitRef.current(), ms));
       }
+      void document.fonts?.ready.then(() => {
+        if (!disposed) refitRef.current();
+      });
       term.focus();
     })();
 
@@ -268,8 +322,10 @@ export default function ClaudeCmdPane({
   }, [layoutNonce]);
 
   return (
-    <div className="min-h-0 flex-1 bg-canvas p-2">
-      <div ref={containerRef} className="h-full w-full" />
+    <div className="relative min-h-0 flex-1 bg-canvas">
+      {/* Out of flow, so the terminal's intrinsic size cannot grow the pane
+          and make fit() measure the terminal instead of the window. */}
+      <div ref={containerRef} className="cli-term absolute inset-2 overflow-hidden" />
     </div>
   );
 }
