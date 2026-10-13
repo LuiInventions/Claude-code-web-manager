@@ -71,6 +71,12 @@ export function localDestWith(pathApi: PathApi, root: string, rel: string): stri
   return dest;
 }
 
+/** Every parent of `rel`. Remote mkdir is not recursive, so `a/b/c` needs `a` then `a/b`. */
+function addParents(rel: string, dirs: Set<string>): void {
+  const parts = rel.split("/");
+  for (let i = 1; i < parts.length; i++) dirs.add(parts.slice(0, i).join("/"));
+}
+
 export function planTransfer(entries: readonly TransferEntry[]): { ok: true; plan: PlannedTransfer } | { ok: false; error: string } {
   const files = new Map<string, number>();
   const dirs = new Set<string>();
@@ -79,7 +85,10 @@ export function planTransfer(entries: readonly TransferEntry[]): { ok: true; pla
     const rel = remoteRelative(entry.rel);
     if (rel === null) return { ok: false, error: "Dateiname ungültig." };
     if (entry.dir) {
-      if (rel) dirs.add(rel);
+      if (rel) {
+        addParents(rel, dirs);
+        dirs.add(rel);
+      }
       continue;
     }
     if (!rel) return { ok: false, error: "Dateiname ungültig." };
@@ -89,13 +98,15 @@ export function planTransfer(entries: readonly TransferEntry[]): { ok: true; pla
     if (total + entry.size > MAX_TRANSFER_BYTES) return { ok: false, error: "Maximal 10 GB." };
     files.set(rel, entry.size);
     total += entry.size;
+    // A dropped folder arrives as files with a relative path, not as directory entries.
+    addParents(rel, dirs);
   }
   if (files.size === 0 && dirs.size === 0) return { ok: false, error: "Nichts zum Hochladen." };
   return {
     ok: true,
     plan: {
       files: [...files].map(([rel, size]) => ({ rel, size })),
-      dirs: [...dirs],
+      dirs: [...dirs].sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b)),
       total,
     },
   };

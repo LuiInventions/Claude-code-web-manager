@@ -2,120 +2,23 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Plus } from "lucide-react";
-import { encodePathHeader, planTransfer, remoteRelative, runPool, transferSummary } from "@/lib/remote-transfer";
+import { confirmUploadQuestion } from "@/lib/remote-upload-flow";
+import { planTransfer, transferSummary } from "@/lib/remote-transfer";
 import { cn } from "../ui";
 import { CenterDialog, TransferProgress, TransferSuccess } from "./CenterDialog";
+import { collectDataTransfer, itemsFromBrowserFiles, uploadLocalItems, type LocalItem } from "./remoteUppyUpload";
 
-interface Collected {
-  rel: string;
-  size: number;
-  dir?: boolean;
-  file?: File;
-}
+type Phase = "idle" | "confirm" | "work" | "done" | "error";
 
-interface EntryLike {
-  isFile: boolean;
-  isDirectory: boolean;
-  name: string;
-  file: (ok: (file: File) => void, err?: () => void) => void;
-  createReader: () => {
-    readEntries: (ok: (entries: EntryLike[]) => void, err?: () => void) => void;
-  };
-}
-
-function entryOf(item: DataTransferItem): EntryLike | null {
-  const read = (item as unknown as { webkitGetAsEntry?: () => EntryLike | null }).webkitGetAsEntry;
-  return read?.() ?? null;
-}
-
-async function readEntry(entry: EntryLike, prefix: string): Promise<Collected[]> {
-  const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-  if (entry.isFile) {
-    const file = await new Promise<File>((resolve, reject) => {
-      entry.file(resolve, () => reject(new Error("Datei nicht lesbar.")));
-    });
-    return [{ rel, size: file.size, file }];
+function openPicker(input: HTMLInputElement | null) {
+  if (!input) return;
+  try {
+    input.showPicker();
+    return;
+  } catch {
+    // showPicker throws when the browser refuses the gesture.
   }
-  if (!entry.isDirectory) return [];
-  const reader = entry.createReader();
-  const children: EntryLike[] = [];
-  for (;;) {
-    const batch = await new Promise<EntryLike[]>((resolve, reject) => {
-      reader.readEntries(resolve, () => reject(new Error("Ordner nicht lesbar.")));
-    });
-    if (batch.length === 0) break;
-    children.push(...batch);
-  }
-  if (children.length === 0) return [{ rel, size: 0, dir: true }];
-  const out: Collected[] = [];
-  for (const child of children) out.push(...(await readEntry(child, rel)));
-  return out;
-}
-
-async function fromDataTransfer(data: DataTransfer): Promise<Collected[]> {
-  const entries: EntryLike[] = [];
-  if (data.items) {
-    for (let i = 0; i < data.items.length; i++) {
-      const entry = entryOf(data.items[i]);
-      if (entry) entries.push(entry);
-    }
-  }
-  if (entries.length > 0) {
-    const out: Collected[] = [];
-    for (const entry of entries) out.push(...(await readEntry(entry, "")));
-    return out;
-  }
-  return [...data.files].map((file) => ({
-    rel: (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name,
-    size: file.size,
-    file,
-  }));
-}
-
-function fromFileList(list: FileList | File[]): Collected[] {
-  return [...list].map((file) => ({
-    rel: (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name,
-    size: file.size,
-    file,
-  }));
-}
-
-function postOne(
-  dir: string,
-  rel: string,
-  body: Blob | null,
-  kind: "file" | "dir",
-  onLoaded: (loaded: number) => void,
-  register: (xhr: XMLHttpRequest) => void,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    register(xhr);
-    xhr.open("POST", "/api/remote/upload");
-    xhr.setRequestHeader("x-ccc-dir", encodePathHeader(dir));
-    xhr.setRequestHeader("x-ccc-rel", encodePathHeader(rel));
-    xhr.setRequestHeader("x-ccc-kind", kind);
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) onLoaded(event.loaded);
-    };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve();
-        return;
-      }
-      let message = "Hochladen fehlgeschlagen.";
-      try {
-        const data = JSON.parse(xhr.responseText) as { error?: string };
-        if (data.error) message = data.error;
-      } catch {
-        // The body was not JSON.
-      }
-      reject(new Error(message));
-    };
-    xhr.onerror = () => reject(new Error("Hochladen fehlgeschlagen."));
-    xhr.onabort = () => reject(new Error("Abgebrochen."));
-    xhr.send(body);
-  });
+  input.click();
 }
 
 export default function RemoteUpload({
@@ -127,9 +30,11 @@ export default function RemoteUpload({
   onClose: () => void;
   onRefresh: () => void;
 }) {
-  const [phase, setPhase] = useState<"idle" | "work" | "done" | "error">("idle");
+  const [phase, setPhase] = useState<Phase>("idle");
   const [hot, setHot] = useState(false);
   const [error, setError] = useState("");
+  const [question, setQuestion] = useState("");
+  const [pending, setPending] = useState<LocalItem[]>([]);
   const [written, setWritten] = useState(0);
   const [total, setTotal] = useState(0);
   const [current, setCurrent] = useState("");
@@ -137,111 +42,106 @@ export default function RemoteUpload({
   const fileRef = useRef<HTMLInputElement>(null);
   const dirRef = useRef<HTMLInputElement>(null);
   const depth = useRef(0);
-  const xhrs = useRef(new Set<XMLHttpRequest>());
-  const cancelRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
   const busyRef = useRef(false);
-  const startRef = useRef<(pending: Promise<Collected[]> | Collected[]) => Promise<void>>(async () => {});
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
 
   useEffect(() => {
-    dirRef.current?.setAttribute("webkitdirectory", "");
-    dirRef.current?.setAttribute("directory", "");
+    const input = dirRef.current;
+    input?.setAttribute("webkitdirectory", "");
+    input?.setAttribute("directory", "");
+  }, []);
+
+  useEffect(() => {
+    const allow = (event: DragEvent) => {
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    };
+    window.addEventListener("dragover", allow);
+    window.addEventListener("drop", allow);
+    return () => {
+      window.removeEventListener("dragover", allow);
+      window.removeEventListener("drop", allow);
+    };
   }, []);
 
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {
+      if (phaseRef.current !== "idle") return;
       const data = event.clipboardData;
       if (!data) return;
       const hasFile = data.files.length > 0 || [...data.items].some((item) => item.kind === "file");
       if (!hasFile) return;
       event.preventDefault();
-      void startRef.current(fromDataTransfer(data));
+      void offer(collectDataTransfer(data));
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, []);
+  }, [dir]);
 
-  const start = async (pending: Promise<Collected[]> | Collected[]) => {
-    if (busyRef.current) return;
-    busyRef.current = true;
+  const offer = async (incoming: Promise<LocalItem[]> | LocalItem[]) => {
+    if (phaseRef.current === "work") return;
     setError("");
-    let items: Collected[];
+    let items: LocalItem[];
     try {
-      items = await pending;
+      items = await incoming;
     } catch (err) {
-      busyRef.current = false;
       setError((err as Error).message);
+      setPhase("idle");
       return;
     }
     const planned = planTransfer(items);
     if (!planned.ok) {
-      busyRef.current = false;
       setError(planned.error);
+      setPhase("idle");
       return;
     }
-    const files = new Map<string, File>();
-    for (const item of items) {
-      const rel = remoteRelative(item.rel);
-      if (rel && item.file) files.set(rel, item.file);
-    }
-    cancelRef.current = false;
+    setPending(items);
+    setQuestion(confirmUploadQuestion(items, dir));
+    setPhase("confirm");
+  };
+
+  const run = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     setPhase("work");
     setWritten(0);
-    setTotal(planned.plan.total);
+    setTotal(0);
     setCurrent("");
-    let doneBytes = 0;
-    const flying = new Map<string, number>();
-    const publish = () => {
-      let n = doneBytes;
-      for (const value of flying.values()) n += value;
-      setWritten(n);
-    };
+    setError("");
     try {
-      await runPool(planned.plan.dirs, 3, async (rel) => {
-        if (cancelRef.current) throw new Error("Abgebrochen.");
-        setCurrent(rel);
-        await postOne(dir, rel, null, "dir", () => {}, (xhr) => xhrs.current.add(xhr));
+      const result = await uploadLocalItems({
+        dir,
+        items: pending,
+        signal: ctrl.signal,
+        onProgress: (nextWritten, nextTotal, name) => {
+          setWritten(nextWritten);
+          setTotal(nextTotal);
+          setCurrent(name);
+        },
       });
-      await runPool(planned.plan.files, 3, async (file) => {
-        if (cancelRef.current) throw new Error("Abgebrochen.");
-        const body = files.get(file.rel);
-        if (!body) throw new Error("Datei fehlt.");
-        flying.set(file.rel, 0);
-        setCurrent(file.rel);
-        await postOne(
-          dir,
-          file.rel,
-          body,
-          "file",
-          (loaded) => {
-            flying.set(file.rel, loaded);
-            publish();
-          },
-          (xhr) => xhrs.current.add(xhr),
-        );
-        flying.delete(file.rel);
-        doneBytes += file.size;
-        publish();
-      });
-      setSummary(transferSummary(planned.plan.files.length, planned.plan.total, planned.plan.dirs.length));
+      setSummary(transferSummary(result.files, result.bytes, result.dirs));
       setPhase("done");
       onRefresh();
     } catch (err) {
-      for (const xhr of xhrs.current) xhr.abort();
       onRefresh();
-      if (cancelRef.current || (err as Error).message === "Abgebrochen.") {
+      const message = (err as Error).message;
+      if (ctrl.signal.aborted || message === "Abgebrochen.") {
         onClose();
         return;
       }
-      setError((err as Error).message);
+      setError(message);
       setPhase("error");
+    } finally {
       busyRef.current = false;
     }
   };
-  startRef.current = start;
 
   const cancel = () => {
-    cancelRef.current = true;
-    for (const xhr of xhrs.current) xhr.abort();
+    abortRef.current?.abort();
   };
 
   return (
@@ -249,92 +149,127 @@ export default function RemoteUpload({
       title={phase === "done" ? "Hochgeladen" : phase === "work" ? "Wird hochgeladen" : "Dateien hochladen"}
       subtitle={dir}
       busy={phase === "work"}
+      solid
       onClose={phase === "work" ? cancel : onClose}
     >
       {phase === "idle" && (
-        <div
-          className="grid gap-3"
-          onDragOver={(event) => {
-            event.preventDefault();
-            event.dataTransfer.dropEffect = "copy";
-          }}
-          onDragEnter={(event) => {
-            event.preventDefault();
-            depth.current += 1;
-            setHot(true);
-          }}
-          onDragLeave={() => {
-            depth.current -= 1;
-            if (depth.current <= 0) {
-              depth.current = 0;
-              setHot(false);
-            }
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
-            depth.current = 0;
-            setHot(false);
-            void start(fromDataTransfer(event.dataTransfer));
-          }}
-        >
+        <div className="grid gap-3">
           <div
             role="button"
             tabIndex={0}
             aria-label="Dateien auswählen"
-            onClick={() => fileRef.current?.click()}
+            onClick={() => openPicker(fileRef.current)}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
-                fileRef.current?.click();
+                openPicker(fileRef.current);
               }
             }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+            }}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              depth.current += 1;
+              setHot(true);
+            }}
+            onDragLeave={() => {
+              depth.current -= 1;
+              if (depth.current <= 0) {
+                depth.current = 0;
+                setHot(false);
+              }
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              depth.current = 0;
+              setHot(false);
+              void offer(collectDataTransfer(event.dataTransfer));
+            }}
             className={cn(
-              "grid h-64 cursor-pointer place-items-center rounded-2xl border border-dashed border-line text-center outline-none focus-visible:border-accent",
-              hot && "border-accent bg-accent/10",
+              "grid h-64 cursor-pointer place-items-center rounded-2xl bg-[#4b2ad4] text-center text-white outline-none focus-visible:ring-2 focus-visible:ring-white",
+              hot && "bg-[#6d4aff] ring-4 ring-white",
             )}
           >
             <span>
-              <Plus className="mx-auto size-12 text-ink" />
-              <span className="mt-3 block text-sm font-medium text-ink">Dateien oder Ordner hier ablegen</span>
-              <span className="mt-1 block text-xs text-faint">Klicken, einfügen oder Ordner wählen · maximal 10 GB</span>
+              <Plus className="mx-auto size-12" />
+              <span className="mt-3 block text-sm font-semibold">Dateien oder Ordner hier ablegen</span>
+              <span className="mt-1 block px-6 text-xs text-white/80">
+                Bilder, Videos, Text, Code, PDF und Ordner · Klicken oder Strg+V · maximal 10 GB
+              </span>
             </span>
           </div>
           <button
             type="button"
-            onClick={() => dirRef.current?.click()}
-            className="cursor-pointer text-sm text-muted hover:text-ink"
+            onClick={() => {
+              const input = dirRef.current;
+              if (!input) return;
+              input.setAttribute("webkitdirectory", "");
+              input.setAttribute("directory", "");
+              openPicker(input);
+            }}
+            className="h-10 cursor-pointer rounded-xl bg-[#2c2158] text-sm font-semibold text-white hover:bg-[#3a2c78]"
           >
             Ordner wählen
           </button>
           {error && <p className="text-xs text-danger">{error}</p>}
+          {/* No accept attribute: every file type must stay selectable. */}
           <input
             ref={fileRef}
             type="file"
             multiple
-            className="hidden"
+            tabIndex={-1}
+            className="sr-only"
             onChange={(event) => {
               const list = event.target.files;
               event.target.value = "";
-              if (list && list.length) void start(fromFileList(list));
+              if (list && list.length) void offer(itemsFromBrowserFiles([...list]));
             }}
           />
           <input
             ref={dirRef}
             type="file"
             multiple
-            className="hidden"
+            tabIndex={-1}
+            className="sr-only"
             onChange={(event) => {
               const list = event.target.files;
               event.target.value = "";
-              if (list && list.length) void start(fromFileList(list));
+              if (list && list.length) void offer(itemsFromBrowserFiles([...list]));
             }}
           />
+        </div>
+      )}
+      {phase === "confirm" && (
+        <div className="grid gap-5 py-2">
+          <p className="break-all text-center text-[15px] font-medium leading-relaxed text-white">{question}</p>
+          <div className="flex justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setPending([]);
+                setPhase("idle");
+              }}
+              className="h-11 cursor-pointer rounded-xl bg-[#2c2158] px-5 text-sm font-semibold text-white hover:bg-[#3a2c78]"
+            >
+              Zurück
+            </button>
+            <button
+              type="button"
+              onClick={() => void run()}
+              className="h-11 cursor-pointer rounded-xl bg-white px-5 text-sm font-semibold text-[#1a1030] hover:bg-[#efeaff]"
+            >
+              Hochladen
+            </button>
+          </div>
         </div>
       )}
       {phase === "work" && (
         <div>
           <TransferProgress label="Wird hochgeladen" written={written} total={total} detail={current} />
-          <button type="button" onClick={cancel} className="mx-auto block cursor-pointer text-sm text-muted hover:text-ink">
+          <button type="button" onClick={cancel} className="mx-auto block cursor-pointer text-sm text-white/70 hover:text-white">
             Abbrechen
           </button>
         </div>
@@ -346,10 +281,10 @@ export default function RemoteUpload({
           <button
             type="button"
             onClick={() => {
-              busyRef.current = false;
+              setPending([]);
               setPhase("idle");
             }}
-            className="cursor-pointer text-sm text-muted hover:text-ink"
+            className="cursor-pointer text-sm text-white/70 hover:text-white"
           >
             Zurück
           </button>

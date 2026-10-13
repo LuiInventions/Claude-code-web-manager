@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Play, Upload, X } from "lucide-react";
+import { ImagePlus, Play, Upload, X } from "lucide-react";
 import { Button, Input } from "../ui";
 import ClaudeCmdPane from "./launcher/ClaudeCmdPane";
 import FileWorkbench, { type OpenFile } from "./FileWorkbench";
 import RemoteFiles from "./RemoteFiles";
+import RemoteImageUpload from "./RemoteImageUpload";
 import RemoteUpload from "./RemoteUpload";
 import { ViewBar } from "./SessionBar";
 import SshLoginPane from "./SshLoginPane";
@@ -57,6 +58,7 @@ export default function RemoteSection() {
   const [cwd, setCwd] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [imageOpen, setImageOpen] = useState(false);
   const [filesNonce, setFilesNonce] = useState(0);
 
   const load = useCallback(() => {
@@ -238,8 +240,27 @@ export default function RemoteSection() {
             <Button variant="primary" icon={Play} className="w-full" onClick={startEmpty}>
               Starten
             </Button>
-            <Button variant="secondary" icon={Upload} className="w-full" onClick={() => setUploadOpen(true)}>
+            <Button
+              variant="secondary"
+              icon={Upload}
+              className="w-full"
+              onClick={() => {
+                setImageOpen(false);
+                setUploadOpen(true);
+              }}
+            >
               Dateien hochladen
+            </Button>
+            <Button
+              variant="secondary"
+              icon={ImagePlus}
+              className="w-full"
+              onClick={() => {
+                setUploadOpen(false);
+                setImageOpen(true);
+              }}
+            >
+              Bild hochladen
             </Button>
           </div>
           <RemoteFiles
@@ -462,6 +483,13 @@ export default function RemoteSection() {
         <RemoteUpload
           dir={cwd.trim() || "~"}
           onClose={() => setUploadOpen(false)}
+          onRefresh={() => setFilesNonce((n) => n + 1)}
+        />
+      )}
+      {status.connected && imageOpen && (
+        <RemoteImageUpload
+          dir={cwd.trim() || "~"}
+          onClose={() => setImageOpen(false)}
           onRefresh={() => setFilesNonce((n) => n + 1)}
         />
       )}
