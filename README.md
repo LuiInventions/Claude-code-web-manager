@@ -130,7 +130,7 @@ The GitHub token is sent as an auth header for that call. It is not written into
 
 ### Local
 
-Local is the same rail against a folder on this PC: **Session count**, **Ordner**, **Starten**, the file list, and **Ordner öffnen** (the projects folder from Settings). **Starten** opens the selected code CLI there. Clicking a subfolder writes that path into **Ordner**. The VS Codium tab uses this same folder.
+local is the same rail against a folder on this PC: **Session count**, **Ordner**, **Starten**, the file list, and **Ordner öffnen** (the projects folder from Settings). **Starten** opens the selected code CLI there. Clicking a subfolder writes that path into **Ordner**. The VS Codium tab uses this same folder.
 
 A Claude Code session shows the usage bar. Grok and Codex do not.
 
