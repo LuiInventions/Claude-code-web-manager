@@ -116,7 +116,16 @@ describe("remote copy", () => {
     if (!bin) return;
     const file = path.join(os.tmpdir(), `ccc-tar-${process.pid}.tar`);
     fs.writeFileSync(file, archive);
-    const listed = spawnSync(bin, ["-c", "import tarfile,sys; t=tarfile.open(sys.argv[1]); print('\\n'.join(m.name+' '+str(m.size) for m in t.getmembers()))", file], { encoding: "utf8" });
+    const listed = spawnSync(
+      bin,
+      ["-c", "import tarfile,sys; t=tarfile.open(sys.argv[1]); print('\\n'.join(m.name+' '+str(m.size) for m in t.getmembers()))", file],
+      {
+        encoding: "utf8",
+        // The Windows runner prints Python stdout as cp1252 unless this is set,
+        // so "größe.txt" arrives mangled and the assertion fails.
+        env: { ...process.env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" },
+      },
+    );
     fs.rmSync(file, { force: true });
     expect(listed.status).toBe(0);
     expect(listed.stdout).toContain("größe.txt 4");
