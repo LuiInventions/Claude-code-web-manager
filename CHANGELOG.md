@@ -5,6 +5,15 @@ follow `package.json`. From 1.9.6 each `v*` tag publishes
 `jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
 `cc-control-center-Setup-<version>.exe`.
 
+## 1.9.19 — 2026-10-13
+
+### CLI panes, new repos, and remote files
+
+- A code CLI started in a small window opens at the size of its pane. It no longer starts on the 80×24 default and sits shifted upward.
+- **New repo** always uses the folder that holds the cloned GitHub repos. That path is shown and cannot be changed. The repository is created there under the name you enter.
+- VS Codium is not in the sidebar. The editor is not started with the app.
+- On Remote, **Dateien hochladen** sends files and folders into the current server directory. **Herunterladen** on a file or folder saves it onto this PC.
+
 ## 1.9.18 — 2026-10-13
 
 ### GitHub clones survive an update

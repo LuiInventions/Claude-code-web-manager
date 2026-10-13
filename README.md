@@ -1,8 +1,7 @@
 # Jarvis Control Center
 
 > Mission control for **Claude Code**, **Grok**, and **ChatGPT Codex** — on this PC,
-> in a cloned GitHub repo, or over SSH on your own server. **VS Codium** runs in
-> the same window. The app itself binds to **`127.0.0.1`**.
+> in a cloned GitHub repo, or over SSH on your own server. The app itself binds to **`127.0.0.1`**.
 
 <p align="center">
   <a href="https://github.com/LuiInventions/jarvis-control-center/releases/latest">
@@ -20,11 +19,12 @@
 </p>
 
 > [!TIP]
-> **v1.9.18** is the current release. The sidebar order is **Remote**, **GitHub**,
-> **Local**, **Repos**, **VS Codium**, **Sessions**. Remote starts a code CLI on
-> your server. **Repos → Update** commits local changes, merges what GitHub gained,
-> and pushes. VS Codium is an editor inside the app, on the Local folder.
-> The installer is `jarvis-control-center-Setup-1.9.18.exe`. v1.8.0 was withdrawn.
+> **v1.9.19** is the current release. The sidebar order is **Remote**, **GitHub**,
+> **Local**, **Repos**, **Sessions**. Remote starts a code CLI on your server and
+> can upload and download files there. **Repos → New repo** creates the repository
+> in the clones folder. That path is fixed. **Repos → Update** commits local
+> changes, merges what GitHub gained, and pushes.
+> The installer is `jarvis-control-center-Setup-1.9.19.exe`. v1.8.0 was withdrawn.
 > v1.9.6 has no installer. [**Changelog**](CHANGELOG.md)
 
 <img width="1920" height="1080" alt="Jarvis Control Center" src="https://github.com/user-attachments/assets/961f27e3-c90e-4594-bbbc-ce2fa462e56b" />
@@ -41,7 +41,6 @@ A terminal gives you one session, no view of the server, and a manual `git add` 
 - **Remote** — log into your server with SSH and start Claude Code, Grok, or Codex there, in a folder you pick, with the server's files beside the terminal.
 - **GitHub** — start the same CLI inside a repo you cloned. **Repos** keeps the token, the clone, and a one-click **Update** that commits and pushes for you.
 - **Local** — the same launcher against a folder on this PC.
-- **VS Codium** — the editor embedded in the app, opened on that local folder.
 - **Sessions** — every running agent as a character in a pixel office.
 
 It ships as a **Windows desktop app**
@@ -80,7 +79,7 @@ loopback. Remote is an SSH session *from* that app out to a host you name.
 - 🛰️ **Remote first** — `user@IP`, then the password and a 2FA code only when SSH asks. **Starten** opens 1–6 live terminals on the server, reusing the login that is already open.
 - 🐙 **GitHub, with the commit written for you** — connect a token, clone, create a repo, flip public/private. **Update** lists the changed files, then commits them (`Update via Control Center`), merges remote commits, and pushes.
 - 📁 **Clones survive an upgrade** — they live in `%LOCALAPPDATA%\Jarvis Control Center\github_repos`, outside the program folder the installer replaces. A missing clone is fetched again with the saved token.
-- 🖥️ **VS Codium in the window** — `codium` or `code serve-web` on the Local folder, shown inside the app.
+- 📤 **Remote files** — upload into the current server folder, and download a file or folder onto this PC.
 - 🚀 **Claude Code, Grok, or ChatGPT Codex** — pick the CLI once. Local, GitHub, and Remote all start that CLI. Up to six sessions, real server-side PTYs that survive a reload.
 - 📄 **Click a file** — Local, GitHub, and Remote open it where the terminals sit. CodeMirror for text; images, PDF, audio, and video in the viewer.
 - 🎮 **Sessions office** — running agents as pixel characters, labeled **GitHub**, **Lokal**, or **Server**.
@@ -91,7 +90,7 @@ loopback. Remote is an SSH session *from* that app out to a host you name.
 
 ## Features
 
-The sidebar, top to bottom: **Remote**, **GitHub**, **Local**, **Repos**, **VS Codium**, **Sessions**, then **Settings**.
+The sidebar, top to bottom: **Remote**, **GitHub**, **Local**, **Repos**, **Sessions**, then **Settings**.
 
 ### Remote
 
@@ -100,7 +99,7 @@ Remote is the first tab. It is how you run a code CLI on a machine that is not t
 1. Enter **`user@IP`** (or pick a saved server) and press **Verbinden**. SSH starts in the background. The password field appears when the server asks for a password, and the 2FA field when it asks for a code. The code is not stored. **IP und Passwort speichern** keeps the host, user, and password.
 2. Once you are in, the left rail matches the other launchers: **Session count** (1–6), **Ordner**, **Starten**, and the server's file list. The connected IP is shown in green next to **Trennen**.
 3. **Starten** opens that many terminals in the folder in **Ordner**. Each one is the code CLI from Settings (Claude Code, Grok, or Codex), with an empty prompt, so you talk to it in the terminal. The CLI reuses the SSH login that is already open. A second connection is not started.
-4. Click a folder in the list to put that path into **Ordner**. Left-click a file to open it. **Dateien** and **Sessions** switch the main area between the file and the terminals.
+4. Click a folder in the list to put that path into **Ordner**. Left-click a file to open it. **Dateien** and **Sessions** switch the main area between the file and the terminals. **Dateien hochladen** sends files into that folder. Right-click a file or folder and choose **Herunterladen** to save it on this PC.
 
 A saved server can be chosen again from the dropdown. **Trennen** closes the session.
 
@@ -109,7 +108,7 @@ A saved server can be chosen again from the dropdown. **Trennen** closes the ses
 Two tabs share one clone:
 
 - **GitHub** starts the code CLI in a cloned repo. The rail is a **Repo** dropdown, **Session count**, **Starten**, and that repo's files. Without a connected account the tab asks you to connect GitHub under **Repos**.
-- **Repos** is the account. Paste a personal access token, clone repos you can see, create a repository (public or private), and change visibility later.
+- **Repos** is the account. Paste a personal access token, clone repos you can see, create a repository (public or private) in the clones folder, and change visibility later. The folder path for a new repo is fixed.
 
 Cloned repos are stored in `%LOCALAPPDATA%\Jarvis Control Center\github_repos`
 (a source checkout uses `github_repos` in the working directory). **Ordner öffnen**
@@ -130,13 +129,13 @@ The GitHub token is sent as an auth header for that call. It is not written into
 
 ### Local
 
-local is the same rail against a folder on this PC: **Session count**, **Ordner**, **Starten**, the file list, and **Ordner öffnen** (the projects folder from Settings). **Starten** opens the selected code CLI there. Clicking a subfolder writes that path into **Ordner**. The VS Codium tab uses this same folder.
+local is the same rail against a folder on this PC: **Session count**, **Ordner**, **Starten**, the file list, and **Ordner öffnen** (the projects folder from Settings). **Starten** opens the selected code CLI there. Clicking a subfolder writes that path into **Ordner**.
 
 A Claude Code session shows the usage bar. Grok and Codex do not.
 
 ### VS Codium
 
-**VS Codium** is its own tab. The app starts `codium serve-web` (or `code serve-web` when Codium is not installed) in the Local folder and shows the editor in the window. **Neu laden** refreshes it. **Erneut versuchen** starts it again.
+VS Codium is not in the sidebar in this release, and it is not started with the app. The section below describes the editor as it worked when the tab was shown: `codium serve-web` (or `code serve-web` when Codium is not installed) in the Local folder. **Neu laden** refreshes it. **Erneut versuchen** starts it again.
 
 The editor is on this PC. The Remote SSH login is separate and is not used to open it.
 
