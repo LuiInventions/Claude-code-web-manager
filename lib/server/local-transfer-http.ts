@@ -3,6 +3,7 @@ import fs from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { imageMime } from "../remote-upload-flow";
 import { decodePathHeader, MAX_TRANSFER_BYTES, planTransfer, remoteRelative } from "../remote-transfer";
+import { listImageSetCache, saveImageSetBytes, saveImageSetFile } from "./image-set-cache";
 import { writeLocalBody, writeLocalTree, type UploadSource } from "./local-upload";
 import { remoteMkdir, remotePut, remoteRead } from "./remote-copy";
 
@@ -10,10 +11,12 @@ const UPLOAD = "/api/fs/upload";
 const PATHS = "/api/transfer/paths";
 const RAW = "/api/fs/raw";
 const PREVIEW = "/api/remote/preview";
+const CACHE = "/api/image-set/cache";
+const LOCAL_SET = "/api/image-set/local";
 
 export function isLocalStream(url: string | undefined): boolean {
   const pathOnly = (url || "").split("?")[0];
-  return pathOnly === UPLOAD || pathOnly === PATHS || pathOnly === RAW || pathOnly === PREVIEW;
+  return pathOnly === UPLOAD || pathOnly === PATHS || pathOnly === RAW || pathOnly === PREVIEW || pathOnly === CACHE || pathOnly === LOCAL_SET;
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {
@@ -341,6 +344,55 @@ async function handlePreview(req: IncomingMessage, res: ServerResponse, getPort:
   else if (!res.writableEnded && !res.destroyed) res.end();
 }
 
+async function handleCacheSave(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method !== "POST") {
+    json(res, 405, { error: "Methode nicht erlaubt." });
+    return;
+  }
+  const type = header(req, "content-type");
+  if (type.includes("application/json")) {
+    const body = (await readJson(req, 1_000_000)) as { name?: unknown; file?: unknown; source?: unknown };
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    const file = typeof body.file === "string" ? body.file.trim() : "";
+    const source = typeof body.source === "string" ? body.source.trim() : "";
+    if (!name || !file || !source) {
+      json(res, 400, { error: "Datei fehlt." });
+      return;
+    }
+    await saveImageSetFile(name, file, source);
+    json(res, 200, { ok: true });
+    return;
+  }
+  let setName = "";
+  let fileName = "";
+  try {
+    setName = decodePathHeader(header(req, "x-ccc-set")).trim();
+    fileName = decodePathHeader(header(req, "x-ccc-file")).trim();
+  } catch {
+    json(res, 400, { error: "Dateiname ungültig." });
+    return;
+  }
+  const length = Number(header(req, "content-length"));
+  if (!setName || !fileName || !Number.isInteger(length) || length < 0) {
+    req.resume();
+    json(res, 400, { error: "Datei fehlt." });
+    return;
+  }
+  await saveImageSetBytes({ name: setName, fileName, body: req, length });
+  json(res, 200, { ok: true });
+}
+
+async function handleLocalSet(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method !== "GET") {
+    json(res, 405, { error: "Methode nicht erlaubt." });
+    return;
+  }
+  const url = new URL(req.url || "", "http://127.0.0.1");
+  const name = url.searchParams.get("name")?.trim() || "";
+  const images = await listImageSetCache(name);
+  json(res, 200, { images });
+}
+
 export async function handleLocalStream(
   req: IncomingMessage,
   res: ServerResponse,
@@ -352,6 +404,8 @@ export async function handleLocalStream(
     if (pathOnly === UPLOAD) await handleFsUpload(req, res);
     else if (pathOnly === PATHS) await handlePaths(req, res, getPort);
     else if (pathOnly === RAW) await handleRaw(req, res);
+    else if (pathOnly === CACHE) await handleCacheSave(req, res);
+    else if (pathOnly === LOCAL_SET) await handleLocalSet(req, res);
     else await handlePreview(req, res, getPort);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Übertragung fehlgeschlagen.";

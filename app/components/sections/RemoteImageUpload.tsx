@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
-import { confirmUploadQuestion, imageMime, imageSetFolderName, imageSetNames, imageSetPrompt, takeImages, uniqueImageName } from "@/lib/remote-upload-flow";
-import { joinRemote, transferSummary } from "@/lib/remote-transfer";
+import { confirmUploadQuestion, imageSetFolderName, imageSetNames, imageSetPrompt, takeImages, uniqueImageName } from "@/lib/remote-upload-flow";
+import { encodePathHeader, joinRemote, transferSummary } from "@/lib/remote-transfer";
 import { cn } from "../ui";
 import { CenterDialog, TransferProgress } from "./CenterDialog";
 import { collectDataTransfer, uploadLocalItems, type LocalItem, type UploadKind } from "./remoteUppyUpload";
@@ -20,13 +20,13 @@ interface PastedImage {
 interface ListedImage {
   name: string;
   path: string;
+  size: number;
 }
 
 type Phase = "pick" | "confirm" | "confirm-delete" | "work" | "copy" | "error";
 
 /** Bigger than this is named, not decoded. A full-size decode freezes the window. */
 const PREVIEW_MAX = 8 * 1024 * 1024;
-const SHOWABLE = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp", "image/avif", "image/x-icon"]);
 
 function childPath(kind: UploadKind, dir: string, name: string): string | null {
   if (kind === "remote") return joinRemote(dir, name);
@@ -40,18 +40,47 @@ function previewSrc(kind: UploadKind, filePath: string): string {
   return kind === "remote" ? `/api/remote/preview?${params}` : `/api/fs/raw?${params}`;
 }
 
-async function listImages(kind: UploadKind, folder: string): Promise<ListedImage[]> {
-  const params = new URLSearchParams({ path: folder });
-  const response = await fetch(kind === "remote" ? `/api/remote/fs?${params}` : `/api/fs?${params}`);
-  const data = (await response.json()) as {
-    entries?: { name: string; path?: string; dir?: boolean; type?: string }[];
-  };
-  return (data.entries ?? [])
-    .filter((entry) => {
-      const directory = kind === "remote" ? Boolean(entry.dir) : entry.type === "dir";
-      return !directory && Boolean(entry.path) && imageMime(entry.name) !== null;
-    })
-    .map((entry) => ({ name: entry.name, path: entry.path as string }));
+function localPreview(filePath: string): string {
+  return `/api/fs/raw?${new URLSearchParams({ path: filePath })}`;
+}
+
+async function listLocalSet(name: string): Promise<ListedImage[]> {
+  const params = new URLSearchParams({ name });
+  const response = await fetch(`/api/image-set/local?${params}`);
+  const data = (await response.json()) as { images?: ListedImage[]; error?: string };
+  if (!response.ok) throw new Error(data.error || "Bildordner fehlt.");
+  return data.images ?? [];
+}
+
+async function rememberImageSet(name: string, items: LocalItem[], signal: AbortSignal): Promise<void> {
+  for (const item of items) {
+    if (item.dir) continue;
+    const file = item.rel.split("/").pop() || "";
+    if (item.file) {
+      const response = await fetch("/api/image-set/cache", {
+        method: "POST",
+        headers: {
+          "x-ccc-set": encodePathHeader(name),
+          "x-ccc-file": encodePathHeader(file),
+          "content-type": item.file.type || "application/octet-stream",
+        },
+        body: item.file,
+        signal,
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error || "Lokale Kopie fehlgeschlagen.");
+      continue;
+    }
+    if (!item.source) throw new Error("Datei fehlt.");
+    const response = await fetch("/api/image-set/cache", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, file, source: item.source }),
+      signal,
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) throw new Error(data.error || "Lokale Kopie fehlgeschlagen.");
+  }
 }
 
 function chipClass(on: boolean): string {
@@ -114,78 +143,37 @@ function FolderBar({
   );
 }
 
-function SetTiles({ kind, images }: { kind: UploadKind; images: ListedImage[] | undefined }) {
-  const urls = usePreviewUrls(kind, images);
-  if (!images) return <p className="col-span-full text-sm text-[#d2c6f5]">Wird geladen…</p>;
-  if (images.length === 0) return <p className="col-span-full text-sm text-[#d2c6f5]">Keine Bilder</p>;
+function LocalTile({ image }: { image: ListedImage }) {
+  const [failed, setFailed] = useState(false);
   return (
-    <>
-      {images.map((image) => (
-        <div key={image.path} className="relative aspect-square overflow-hidden rounded-xl bg-[#2a1b4a]">
-          {urls[image.path] ? (
-            <img src={urls[image.path]} alt={image.name} className="size-full object-cover" />
-          ) : (
-            <span className="grid size-full place-items-center px-2 text-center text-[10px] text-[#d2c6f5]">
-              {urls[image.path] === "" ? "Keine Vorschau" : "…"}
-            </span>
-          )}
-          <span className="absolute inset-x-0 bottom-0 truncate bg-[#1a1030] px-1.5 py-1 text-left text-[10px] text-white">
-            {image.name}
-          </span>
-        </div>
-      ))}
-    </>
+    <div className="relative aspect-square overflow-hidden rounded-xl bg-[#2a1b4a]">
+      {failed ? (
+        <span className="grid size-full place-items-center px-2 text-center text-[10px] text-[#d2c6f5]">Keine Vorschau</span>
+      ) : (
+        <img
+          src={localPreview(image.path)}
+          alt={image.name}
+          className="size-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      )}
+      <span className="absolute inset-x-0 bottom-0 truncate bg-[#1a1030] px-1.5 py-1 text-left text-[10px] text-white">
+        {image.name}
+      </span>
+    </div>
   );
 }
 
-function usePreviewUrls(kind: UploadKind, images: ListedImage[] | undefined): Record<string, string> {
-  const [urls, setUrls] = useState<Record<string, string>>({});
-  const key = images?.map((image) => image.path).join("\n") ?? "";
-  const imagesRef = useRef(images);
-  imagesRef.current = images;
-  useEffect(() => {
-    const listed = imagesRef.current;
-    if (!listed || listed.length === 0) return;
-    const created: string[] = [];
-    const ctrl = new AbortController();
-    let cancelled = false;
-    const load = async () => {
-      const next: Record<string, string> = {};
-      for (const image of listed) {
-        if (ctrl.signal.aborted) return;
-        let preview = "";
-        try {
-          const response = await fetch(previewSrc(kind, image.path), { signal: ctrl.signal });
-          const length = Number(response.headers.get("content-length") || 0);
-          const headerType = (response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
-          const tooBig = Number.isFinite(length) && length > PREVIEW_MAX;
-          if (!response.ok || tooBig || !Number.isFinite(length) || !SHOWABLE.has(headerType)) {
-            await response.body?.cancel().catch(() => undefined);
-          } else {
-            const blob = await response.blob();
-            if (ctrl.signal.aborted) return;
-            if (blob.size <= PREVIEW_MAX) {
-              const typed = blob.type ? blob : new Blob([blob], { type: headerType });
-              preview = URL.createObjectURL(typed);
-              created.push(preview);
-            }
-          }
-        } catch {
-          if (ctrl.signal.aborted) return;
-        }
-        next[image.path] = preview;
-        if (!cancelled) setUrls({ ...next });
-      }
-    };
-    void load();
-    return () => {
-      cancelled = true;
-      ctrl.abort();
-      for (const url of created) URL.revokeObjectURL(url);
-      setUrls({});
-    };
-  }, [kind, key]);
-  return urls;
+function SetTiles({ images }: { images: ListedImage[] | undefined }) {
+  if (!images) return <p className="col-span-full text-sm text-[#d2c6f5]">Wird geladen…</p>;
+  if (images.length === 0) return <p className="col-span-full text-sm text-[#d2c6f5]">Keine lokale Kopie</p>;
+  return (
+    <>
+      {images.map((image) => (
+        <LocalTile key={image.path} image={image} />
+      ))}
+    </>
+  );
 }
 
 function filesFromClipboard(data: DataTransfer): File[] {
@@ -306,14 +294,9 @@ export default function RemoteImageUpload({
       setPictures(undefined);
       return;
     }
-    const folder = childPath(kind, dir, target);
-    if (!folder) {
-      setPictures([]);
-      return;
-    }
     let cancelled = false;
     setPictures(undefined);
-    listImages(kind, folder)
+    listLocalSet(target)
       .then((listed) => {
         if (!cancelled) setPictures(listed);
       })
@@ -323,7 +306,7 @@ export default function RemoteImageUpload({
     return () => {
       cancelled = true;
     };
-  }, [target, dir, kind, listNonce]);
+  }, [target, listNonce]);
 
   const addFiles = (incoming: LocalItem[]) => {
     const candidates = incoming
@@ -413,6 +396,7 @@ export default function RemoteImageUpload({
           setCurrent(name);
         },
       });
+      await rememberImageSet(folderName, queued, ctrl.signal);
       setSummary(transferSummary(result.files, result.bytes, result.dirs));
       setTarget(folderName);
       setCopied(false);
@@ -535,7 +519,7 @@ export default function RemoteImageUpload({
             </div>
           )}
           <div className="grid min-h-56 grid-cols-2 gap-3 rounded-2xl bg-[#120a24] p-3 sm:grid-cols-5">
-            {target !== "new" && <SetTiles kind={kind} images={pictures} />}
+            {target !== "new" && <SetTiles images={pictures} />}
             {target === "new" && images.length === 0 && (
               <p className="col-span-full grid place-items-center text-sm text-[#d2c6f5]">Noch keine Bilder</p>
             )}
@@ -649,7 +633,7 @@ export default function RemoteImageUpload({
             onDelete={askDelete}
           />
           <div className="grid grid-cols-2 gap-3 rounded-2xl bg-[#120a24] p-3 sm:grid-cols-5">
-            <SetTiles kind={kind} images={pictures} />
+            <SetTiles images={pictures} />
           </div>
           <label className="grid gap-2">
             <span className="text-xs font-medium text-[#d2c6f5]">Satz für die KI</span>

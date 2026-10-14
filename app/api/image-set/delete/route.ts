@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { isImageSetFolder } from "@/lib/remote-upload-flow";
+import { removeImageSetCache } from "@/lib/server/image-set-cache";
 import { removeLocalImageSet } from "@/lib/server/local-upload";
 import { remoteRemoveSet } from "@/lib/server/remote-copy";
 import { remoteBrokerPort } from "@/lib/server/remote-session";
@@ -26,6 +27,7 @@ export async function POST(req: NextRequest) {
       if (!port) return Response.json({ error: "Nicht mit dem Server verbunden." }, { status: 409 });
       await remoteRemoveSet(port, dir, name);
     }
+    await removeImageSetCache(name);
     return Response.json({ ok: true });
   } catch (err) {
     return Response.json({ error: (err as Error).message }, { status: 400 });

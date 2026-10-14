@@ -5,6 +5,14 @@ follow `package.json`. From 1.9.6 each `v*` tag publishes
 `jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
 `cc-control-center-Setup-<version>.exe`.
 
+## 1.9.23 — 2026-10-14
+
+### Image sets open from this PC
+
+- Uploading an image set also saves the pictures on this PC.
+- Choosing a set shows those local pictures. It does not download them from the server again, so Remote no longer freezes on that click.
+- A set from before this version has no local copy. The box says **Keine lokale Kopie** instead of leaving a gray tile.
+
 ## 1.9.22 — 2026-10-14
 
 ### Image sets stay a button row
