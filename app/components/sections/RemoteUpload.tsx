@@ -6,7 +6,14 @@ import { confirmUploadQuestion } from "@/lib/remote-upload-flow";
 import { planTransfer, transferSummary } from "@/lib/remote-transfer";
 import { cn } from "../ui";
 import { CenterDialog, TransferProgress, TransferSuccess } from "./CenterDialog";
-import { collectDataTransfer, itemsFromBrowserFiles, uploadLocalItems, type LocalItem } from "./remoteUppyUpload";
+import {
+  collectDataTransfer,
+  expandLocalPaths,
+  itemsFromBrowserFiles,
+  uploadLocalItems,
+  type LocalItem,
+  type UploadKind,
+} from "./remoteUppyUpload";
 
 type Phase = "idle" | "confirm" | "work" | "done" | "error";
 
@@ -23,15 +30,18 @@ function openPicker(input: HTMLInputElement | null) {
 
 export default function RemoteUpload({
   dir,
+  kind = "remote",
   onClose,
   onRefresh,
 }: {
   dir: string;
+  kind?: UploadKind;
   onClose: () => void;
   onRefresh: () => void;
 }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [hot, setHot] = useState(false);
+  const [reading, setReading] = useState(false);
   const [error, setError] = useState("");
   const [question, setQuestion] = useState("");
   const [pending, setPending] = useState<LocalItem[]>([]);
@@ -45,6 +55,8 @@ export default function RemoteUpload({
   const abortRef = useRef<AbortController | null>(null);
   const busyRef = useRef(false);
   const phaseRef = useRef(phase);
+  const dropOnce = useRef(false);
+  const acceptRef = useRef<(data: DataTransfer) => void>(() => {});
   phaseRef.current = phase;
 
   useEffect(() => {
@@ -58,11 +70,16 @@ export default function RemoteUpload({
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
     };
+    const onDrop = (event: DragEvent) => {
+      allow(event);
+      if (phaseRef.current !== "idle" || !event.dataTransfer) return;
+      acceptRef.current(event.dataTransfer);
+    };
     window.addEventListener("dragover", allow);
-    window.addEventListener("drop", allow);
+    window.addEventListener("drop", onDrop);
     return () => {
       window.removeEventListener("dragover", allow);
-      window.removeEventListener("drop", allow);
+      window.removeEventListener("drop", onDrop);
     };
   }, []);
 
@@ -82,6 +99,7 @@ export default function RemoteUpload({
 
   const offer = async (incoming: Promise<LocalItem[]> | LocalItem[]) => {
     if (phaseRef.current === "work") return;
+    setReading(true);
     setError("");
     let items: LocalItem[];
     try {
@@ -90,6 +108,8 @@ export default function RemoteUpload({
       setError((err as Error).message);
       setPhase("idle");
       return;
+    } finally {
+      setReading(false);
     }
     const planned = planTransfer(items);
     if (!planned.ok) {
@@ -100,6 +120,15 @@ export default function RemoteUpload({
     setPending(items);
     setQuestion(confirmUploadQuestion(items, dir));
     setPhase("confirm");
+  };
+
+  acceptRef.current = (data: DataTransfer) => {
+    if (dropOnce.current || phaseRef.current !== "idle") return;
+    dropOnce.current = true;
+    window.setTimeout(() => {
+      dropOnce.current = false;
+    }, 0);
+    void offer(collectDataTransfer(data, true));
   };
 
   const run = async () => {
@@ -114,6 +143,7 @@ export default function RemoteUpload({
     setError("");
     try {
       const result = await uploadLocalItems({
+        kind,
         dir,
         items: pending,
         signal: ctrl.signal,
@@ -142,6 +172,20 @@ export default function RemoteUpload({
 
   const cancel = () => {
     abortRef.current?.abort();
+  };
+
+  const chooseFolder = async () => {
+    const folder = await window.cccDesktop?.pickFolder("Ordner hochladen");
+    if (folder) {
+      void offer(expandLocalPaths([folder]));
+      return;
+    }
+    if (window.cccDesktop?.pickFolder) return;
+    const input = dirRef.current;
+    if (!input) return;
+    input.setAttribute("webkitdirectory", "");
+    input.setAttribute("directory", "");
+    openPicker(input);
   };
 
   return (
@@ -186,7 +230,11 @@ export default function RemoteUpload({
               event.stopPropagation();
               depth.current = 0;
               setHot(false);
-              void offer(collectDataTransfer(event.dataTransfer));
+              dropOnce.current = true;
+              window.setTimeout(() => {
+                dropOnce.current = false;
+              }, 0);
+              void offer(collectDataTransfer(event.dataTransfer, true));
             }}
             className={cn(
               "grid h-64 cursor-pointer place-items-center rounded-2xl bg-[#4b2ad4] text-center text-white outline-none focus-visible:ring-2 focus-visible:ring-white",
@@ -195,7 +243,9 @@ export default function RemoteUpload({
           >
             <span>
               <Plus className="mx-auto size-12" />
-              <span className="mt-3 block text-sm font-semibold">Dateien oder Ordner hier ablegen</span>
+              <span className="mt-3 block text-sm font-semibold">
+                {reading ? "Ordner wird gelesen…" : "Dateien oder Ordner hier ablegen"}
+              </span>
               <span className="mt-1 block px-6 text-xs text-white/80">
                 Bilder, Videos, Text, Code, PDF und Ordner · Klicken oder Strg+V · maximal 10 GB
               </span>
@@ -203,13 +253,7 @@ export default function RemoteUpload({
           </div>
           <button
             type="button"
-            onClick={() => {
-              const input = dirRef.current;
-              if (!input) return;
-              input.setAttribute("webkitdirectory", "");
-              input.setAttribute("directory", "");
-              openPicker(input);
-            }}
+            onClick={() => void chooseFolder()}
             className="h-10 cursor-pointer rounded-xl bg-[#2c2158] text-sm font-semibold text-white hover:bg-[#3a2c78]"
           >
             Ordner wählen

@@ -5,12 +5,14 @@ import {
   ArrowLeft,
   FileText,
   FolderOpen,
+  ImagePlus,
   ListTree,
   Loader2,
   Play,
   Plus,
   Sparkles,
   Split,
+  Upload,
   Wand2,
   X,
   Zap,
@@ -20,6 +22,8 @@ import type { SectionCommand } from "../app-commands";
 import { MODEL_OPTIONS, EFFORT_OPTIONS } from "@/lib/launcher-config";
 import ClaudeCmdPane from "./launcher/ClaudeCmdPane";
 import LocalFiles from "./LocalFiles";
+import RemoteImageUpload from "./RemoteImageUpload";
+import RemoteUpload from "./RemoteUpload";
 import FileWorkbench, { type OpenFile } from "./FileWorkbench";
 import { ViewBar } from "./SessionBar";
 import UsageBar from "./launcher/UsageBar";
@@ -114,6 +118,9 @@ export default function LauncherSection({
   const [githubConnected, setGithubConnected] = useState(false);
   const [githubRestoring, setGithubRestoring] = useState(false);
   const [projectPath, setProjectPath] = useState("");
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [imageOpen, setImageOpen] = useState(false);
+  const [filesNonce, setFilesNonce] = useState(0);
   const localPathRef = useRef("");
   const [pathMode, setPathMode] = useState<"list" | "manual">("list");
   const [raw, setRaw] = useState("");
@@ -800,10 +807,39 @@ export default function LauncherSection({
               >
                 Starten
               </Button>
+              {(source !== "github" || githubConnected) && (
+                <>
+                  <Button
+                    variant="secondary"
+                    icon={Upload}
+                    className="w-full"
+                    disabled={!projectPath.trim()}
+                    onClick={() => {
+                      setImageOpen(false);
+                      setUploadOpen(true);
+                    }}
+                  >
+                    Dateien hochladen
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    icon={ImagePlus}
+                    className="w-full"
+                    disabled={!projectPath.trim()}
+                    onClick={() => {
+                      setUploadOpen(false);
+                      setImageOpen(true);
+                    }}
+                  >
+                    Bild hochladen
+                  </Button>
+                </>
+              )}
             </div>
             {(source !== "github" || githubConnected) && (
               <LocalFiles
                 path={projectPath}
+                reloadToken={filesNonce}
                 floor={selectedGithub?.path}
                 onOpenFile={openListedFile}
                 onPathChange={(next) => {
@@ -961,6 +997,22 @@ export default function LauncherSection({
           </div>
         )}
       </div>
+      {uploadOpen && projectPath.trim() && (
+        <RemoteUpload
+          kind="local"
+          dir={projectPath.trim()}
+          onClose={() => setUploadOpen(false)}
+          onRefresh={() => setFilesNonce((n) => n + 1)}
+        />
+      )}
+      {imageOpen && projectPath.trim() && (
+        <RemoteImageUpload
+          kind="local"
+          dir={projectPath.trim()}
+          onClose={() => setImageOpen(false)}
+          onRefresh={() => setFilesNonce((n) => n + 1)}
+        />
+      )}
     </div>
   );
 }

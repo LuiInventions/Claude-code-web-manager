@@ -9,7 +9,7 @@ import { viewFromBuffer, type FileView } from "../file-view";
  */
 
 const BROKER_PY = `
-import base64, json, fcntl, os, pty, select, signal, socket, stat, struct, termios, threading
+import base64, json, fcntl, os, pty, re, select, shutil, signal, socket, stat, struct, termios, threading
 s = socket.socket()
 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 try:
@@ -202,6 +202,22 @@ def write_exact(conn, n, rest, handle):
         handle.write(chunk)
         left -= len(chunk)
     return True
+
+def do_rmset(root_raw, rel):
+    if not re.match(r"^image_set[A-Za-z]+$", rel or ""):
+        return {"error": "Nur Bildordner."}
+    dest = dest_under(root_raw, rel, False)
+    if not dest or os.path.islink(dest) or not os.path.isdir(dest):
+        return {"error": "Ordner fehlt."}
+    root = os.path.realpath(safe_path(root_raw))
+    probe = os.path.realpath(dest)
+    if probe == root or not inside(root, probe):
+        return {"error": "Pfad ungueltig."}
+    try:
+        shutil.rmtree(probe)
+    except OSError as exc:
+        return {"error": str(exc)}
+    return {"ok": True}
 
 def do_mkdir(root_raw, rel):
     dest = dest_under(root_raw, rel, False)
@@ -500,6 +516,11 @@ def handle(conn):
             root = base64.b64decode(parts[1]).decode("utf-8", "replace")
             rel = base64.b64decode(parts[2]).decode("utf-8", "replace")
             send_json(conn, do_mkdir(root, rel))
+            return
+        if op == "RMSET" and len(parts) == 3:
+            root = base64.b64decode(parts[1]).decode("utf-8", "replace")
+            rel = base64.b64decode(parts[2]).decode("utf-8", "replace")
+            send_json(conn, do_rmset(root, rel))
             return
         if op == "GET" and len(parts) == 2:
             raw = base64.b64decode(parts[1]).decode("utf-8", "replace")

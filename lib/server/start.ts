@@ -4,6 +4,7 @@ import nextConfig from "../../next.config.mjs";
 import { getConfig } from "../config";
 import { handleWsUpgrade } from "./ws-hub";
 import { remoteBrokerPort } from "./remote-session";
+import { handleLocalStream, isLocalStream } from "./local-transfer-http";
 import { handleRemoteTransfer, isRemoteTransfer } from "./remote-transfer-http";
 import { startUsagePoller } from "./usage-poller";
 import { warmCodeCli } from "./cli-warm";
@@ -49,6 +50,10 @@ export async function startServer(
     // Copies run longer than Node's default 5-minute request timeout.
     if (isRemoteTransfer(req.url)) {
       void handleRemoteTransfer(req, res, remoteBrokerPort);
+      return;
+    }
+    if (isLocalStream(req.url)) {
+      void handleLocalStream(req, res, remoteBrokerPort);
       return;
     }
     handle(req, res);

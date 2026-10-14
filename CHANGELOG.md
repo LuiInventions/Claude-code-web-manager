@@ -5,6 +5,14 @@ follow `package.json`. From 1.9.6 each `v*` tag publishes
 `jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
 `cc-control-center-Setup-<version>.exe`.
 
+## 1.9.21 — 2026-10-14
+
+### Folder upload, image-set preview, and local copies
+
+- Dropping or choosing a folder asks for confirmation, then uploads the folder. On the desktop app the real folder path is read, so the confirm step opens instead of staying silent.
+- Each image set shows the pictures inside it, at the same square size as a pasted image. **Löschen** asks for confirmation and removes that set.
+- **Dateien hochladen** and **Bild hochladen** are on GitHub and Local as well as Remote. On GitHub and Local they write into the folder shown in **Ordner** on this PC.
+
 ## 1.9.20 — 2026-10-14
 
 ### Remote upload and image sets

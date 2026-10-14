@@ -1,24 +1,73 @@
 import { getDroppedFiles } from "@uppy/utils";
-import { relativeUploadPath } from "@/lib/remote-upload-flow";
+import type { ExpandedItem } from "@/lib/local-tree";
+import { droppedItemsOrError, relativeUploadPath } from "@/lib/remote-upload-flow";
 import { encodePathHeader, MAX_TRANSFER_BYTES, planTransfer, remoteRelative, runPool } from "@/lib/remote-transfer";
+
+export type UploadKind = "remote" | "local";
 
 export interface LocalItem {
   rel: string;
   size: number;
   dir?: boolean;
   file?: File;
+  /** Absolute path on this PC. Set when Electron can see the dropped folder. */
+  source?: string;
+}
+
+function desktopPaths(files: readonly File[]): string[] {
+  const pathForFile = window.cccDesktop?.pathForFile;
+  if (!pathForFile) return [];
+  const paths: string[] = [];
+  for (const file of files) {
+    try {
+      const found = pathForFile(file);
+      if (found) paths.push(found);
+    } catch {
+      // The File was built in script and has no disk path.
+    }
+  }
+  return paths;
+}
+
+/** Ask the local server to walk real folders. Electron's directory reader never finishes. */
+export async function expandLocalPaths(paths: readonly string[]): Promise<LocalItem[]> {
+  const response = await fetch("/api/local/expand", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ paths }),
+  });
+  const data = (await response.json()) as { items?: ExpandedItem[]; error?: string };
+  if (!response.ok || !data.items) throw new Error(data.error || "Ordner konnte nicht gelesen werden.");
+  return data.items.map((item) => ({
+    rel: item.rel,
+    size: item.size,
+    dir: item.dir,
+    source: item.source,
+  }));
 }
 
 /**
- * Read a drop or a paste with Uppy. Uppy walks folders and, when the browser
- * rejects a file through the directory API, falls back to the file itself.
+ * Read a drop or a paste.
+ * A folder dropped in the desktop app is walked from its real path, because the
+ * browser directory API hangs there and the confirm step would never open.
  * Call this synchronously from the drop handler so the DataTransfer is still valid.
  */
-export function collectDataTransfer(data: DataTransfer): Promise<LocalItem[]> {
+export function collectDataTransfer(data: DataTransfer, fromDrop = false): Promise<LocalItem[]> {
   const fallback = [...data.files];
-  return getDroppedFiles(data, { logDropError: () => {} })
-    .then((dropped) => itemsFromBrowserFiles(dropped.length > 0 ? dropped : fallback))
-    .catch(() => itemsFromBrowserFiles(fallback));
+  const dropped = fromDrop ? window.cccDesktop?.takeDropPaths?.() ?? [] : [];
+  const paths = dropped.length > 0 ? dropped : desktopPaths(fallback);
+  if (paths.length > 0) return expandLocalPaths(paths);
+  const walked = Promise.race([
+    getDroppedFiles(data, { logDropError: () => {} }).catch(() => [] as File[]),
+    new Promise<File[]>((resolve) => {
+      window.setTimeout(() => resolve([]), 8000);
+    }),
+  ]);
+  return walked.then((dropped) => {
+    const decision = droppedItemsOrError(dropped, fallback);
+    if (!decision.ok) throw new Error(decision.error);
+    return itemsFromBrowserFiles(decision.files);
+  });
 }
 
 export function itemsFromBrowserFiles(files: readonly File[]): LocalItem[] {
@@ -37,7 +86,18 @@ export function itemsFromBrowserFiles(files: readonly File[]): LocalItem[] {
   });
 }
 
-function postOne(dir: string, rel: string, body: Blob | null, kind: "file" | "dir", signal: AbortSignal): Promise<void> {
+function uploadEndpoint(kind: UploadKind): string {
+  return kind === "local" ? "/api/fs/upload" : "/api/remote/upload";
+}
+
+function postOne(
+  kind: UploadKind,
+  dir: string,
+  rel: string,
+  body: Blob | null,
+  fileKind: "file" | "dir",
+  signal: AbortSignal,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) {
       reject(new Error("Abgebrochen."));
@@ -50,10 +110,10 @@ function postOne(dir: string, rel: string, body: Blob | null, kind: "file" | "di
       signal.removeEventListener("abort", abort);
       fn();
     };
-    xhr.open("POST", "/api/remote/upload");
+    xhr.open("POST", uploadEndpoint(kind));
     xhr.setRequestHeader("x-ccc-dir", encodePathHeader(dir));
     xhr.setRequestHeader("x-ccc-rel", encodePathHeader(rel));
-    xhr.setRequestHeader("x-ccc-kind", kind);
+    xhr.setRequestHeader("x-ccc-kind", fileKind);
     xhr.onload = () => {
       finish(() => {
         if (xhr.status >= 200 && xhr.status < 300) {
@@ -77,7 +137,7 @@ function postOne(dir: string, rel: string, body: Blob | null, kind: "file" | "di
 }
 
 /** Create directories shallow-first. Same-depth folders can run together; a child waits for its parent. */
-async function mkdirAll(dir: string, dirs: readonly string[], signal: AbortSignal): Promise<void> {
+async function mkdirAll(kind: UploadKind, dir: string, dirs: readonly string[], signal: AbortSignal): Promise<void> {
   let depth = -1;
   let batch: string[] = [];
   const flush = async () => {
@@ -85,7 +145,7 @@ async function mkdirAll(dir: string, dirs: readonly string[], signal: AbortSigna
     batch = [];
     await runPool(current, 3, async (rel) => {
       if (signal.aborted) throw new Error("Abgebrochen.");
-      await postOne(dir, rel, null, "dir", signal);
+      await postOne(kind, dir, rel, null, "dir", signal);
     });
   };
   for (const rel of dirs) {
@@ -104,6 +164,7 @@ function failureMessage(error: unknown): string {
 }
 
 async function uploadFilesWithUppy(
+  kind: UploadKind,
   dir: string,
   planned: { rel: string; size: number }[],
   files: Map<string, File>,
@@ -124,7 +185,7 @@ async function uploadFilesWithUppy(
       allowedFileTypes: null,
     },
   }).use(XHRUpload, {
-    endpoint: "/api/remote/upload",
+    endpoint: uploadEndpoint(kind),
     method: "POST",
     formData: false,
     timeout: 0,
@@ -194,25 +255,123 @@ async function uploadFilesWithUppy(
   }
 }
 
-export async function uploadLocalItems(options: {
+async function uploadFromSources(options: {
+  kind: UploadKind;
   dir: string;
   items: readonly LocalItem[];
   onProgress: (written: number, total: number, current: string) => void;
   signal: AbortSignal;
 }): Promise<{ files: number; bytes: number; dirs: number }> {
+  const response = await fetch("/api/transfer/paths", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      kind: options.kind,
+      dir: options.dir,
+      items: options.items.map((item) => ({
+        rel: item.rel,
+        source: item.source,
+        dir: Boolean(item.dir),
+        size: item.size,
+      })),
+    }),
+    signal: options.signal,
+  });
+  if (!response.ok) {
+    let message = "Hochladen fehlgeschlagen.";
+    try {
+      const parsed = (await response.json()) as { error?: string };
+      if (parsed.error) message = parsed.error;
+    } catch {
+      // The body was not JSON.
+    }
+    throw new Error(message);
+  }
+  if (!response.body) throw new Error("Hochladen fehlgeschlagen.");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let doneInfo: { files: number; bytes: number; dirs: number } | null = null;
+  const takeLine = (line: string) => {
+    if (!line) return;
+    const msg = JSON.parse(line) as {
+      type?: string;
+      written?: number;
+      total?: number;
+      current?: string;
+      error?: string;
+      files?: number;
+      bytes?: number;
+      dirs?: number;
+    };
+    if (msg.type === "progress") options.onProgress(msg.written ?? 0, msg.total ?? 0, msg.current ?? "");
+    else if (msg.type === "error") throw new Error(msg.error || "Hochladen fehlgeschlagen.");
+    else if (msg.type === "done") doneInfo = { files: msg.files ?? 0, bytes: msg.bytes ?? 0, dirs: msg.dirs ?? 0 };
+  };
+  while (true) {
+    const step = await reader.read();
+    if (step.done) break;
+    buf += decoder.decode(step.value, { stream: true });
+    let nl = buf.indexOf("\n");
+    while (nl >= 0) {
+      takeLine(buf.slice(0, nl));
+      buf = buf.slice(nl + 1);
+      nl = buf.indexOf("\n");
+    }
+  }
+  takeLine(buf.trim());
+  if (!doneInfo) throw new Error("Hochladen fehlgeschlagen.");
+  return doneInfo;
+}
+
+export async function uploadLocalItems(options: {
+  kind?: UploadKind;
+  dir: string;
+  items: readonly LocalItem[];
+  onProgress: (written: number, total: number, current: string) => void;
+  signal: AbortSignal;
+}): Promise<{ files: number; bytes: number; dirs: number }> {
+  const kind = options.kind ?? "remote";
   const planned = planTransfer(options.items);
   if (!planned.ok) throw new Error(planned.error);
+  const sourced = options.items.filter((item) => !item.file);
+  const blobs = options.items.filter((item) => item.file);
+  if (blobs.length === 0) return uploadFromSources({ ...options, kind, items: sourced });
   const files = new Map<string, File>();
-  for (const item of options.items) {
+  for (const item of blobs) {
     const rel = remoteRelative(item.rel);
     if (rel && item.file) files.set(rel, item.file);
   }
-  await mkdirAll(options.dir, planned.plan.dirs, options.signal);
-  if (options.signal.aborted) throw new Error("Abgebrochen.");
-  if (planned.plan.files.length === 0) {
-    options.onProgress(0, 0, "");
-    return { files: 0, bytes: 0, dirs: planned.plan.dirs.length };
+  let base = 0;
+  let sourceBytes = 0;
+  let sourceFiles = 0;
+  let dirs = planned.plan.dirs.length;
+  if (sourced.length > 0) {
+    const fromDisk = await uploadFromSources({
+      kind,
+      dir: options.dir,
+      items: sourced,
+      signal: options.signal,
+      onProgress: (written, total, name) => options.onProgress(written, total, name),
+    });
+    base = fromDisk.bytes;
+    sourceBytes = fromDisk.bytes;
+    sourceFiles = fromDisk.files;
+    dirs = fromDisk.dirs;
   }
-  await uploadFilesWithUppy(options.dir, planned.plan.files, files, options.onProgress, options.signal);
-  return { files: planned.plan.files.length, bytes: planned.plan.total, dirs: planned.plan.dirs.length };
+  await mkdirAll(kind, options.dir, planned.plan.dirs, options.signal);
+  if (options.signal.aborted) throw new Error("Abgebrochen.");
+  const blobPlan = planned.plan.files.filter((file) => files.has(file.rel));
+  if (blobPlan.length === 0) {
+    options.onProgress(base, sourceBytes, "");
+    return { files: sourceFiles, bytes: sourceBytes, dirs };
+  }
+  await uploadFilesWithUppy(kind, options.dir, blobPlan, files, (written, total, name) => {
+    options.onProgress(base + written, sourceBytes + total, name);
+  }, options.signal);
+  return {
+    files: sourceFiles + blobPlan.length,
+    bytes: sourceBytes + blobPlan.reduce((sum, file) => sum + file.size, 0),
+    dirs,
+  };
 }

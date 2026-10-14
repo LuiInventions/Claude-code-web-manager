@@ -50,7 +50,7 @@ export function CenterDialog({
         aria-labelledby="transfer-title"
         tabIndex={-1}
         className={cn(
-          "relative w-full rounded-2xl border-2 p-6 outline-none",
+          "relative max-h-[92vh] w-full overflow-y-auto rounded-2xl border-2 p-6 outline-none",
           wide ? "max-w-3xl" : "max-w-lg",
           solid
             ? "border-[#7c5cff] bg-[#1a1030] shadow-[0_24px_70px_rgba(0,0,0,0.55)]"

@@ -46,12 +46,14 @@ export default function LocalFiles({
   onPathChange,
   onOpenFile,
   floor,
+  reloadToken = 0,
 }: {
   path: string;
   onPathChange: (path: string) => void;
   onOpenFile?: (path: string, name: string) => void;
   /** Hide Zurück once the parent would leave this folder. */
   floor?: string;
+  reloadToken?: number;
 }) {
   const [query, setQuery] = useState("");
   const [listing, setListing] = useState<Listing>({ entries: [] });
@@ -79,7 +81,7 @@ export default function LocalFiles({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [path]);
+  }, [path, reloadToken]);
 
   useEffect(() => {
     if (!menu) return;

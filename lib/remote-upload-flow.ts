@@ -87,6 +87,35 @@ export function takeImages(existing: readonly { size: number }[], incoming: read
 
 const IMAGE_SET_NAME = /^image_set[A-Za-z]+$/;
 
+const IMAGE_MIME: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  bmp: "image/bmp",
+  svg: "image/svg+xml",
+  avif: "image/avif",
+  heic: "image/heic",
+  heif: "image/heif",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+  ico: "image/x-icon",
+};
+
+/** Content type for a preview, or null when the name is not an image we can show. */
+export function imageMime(name: string): string | null {
+  const base = name.replace(/\\/g, "/").split("/").pop() || "";
+  const dot = base.lastIndexOf(".");
+  if (dot <= 0) return null;
+  return IMAGE_MIME[base.slice(dot + 1).toLowerCase()] ?? null;
+}
+
+/** True for a folder this uploader created. Deletes accept only this shape. */
+export function isImageSetFolder(name: string): boolean {
+  return IMAGE_SET_NAME.test(name);
+}
+
 /** Folder names this uploader created, in a stable order for the picker bar. */
 export function imageSetNames(entries: readonly { name: string; dir?: boolean }[]): string[] {
   const seen = new Set<string>();
@@ -115,6 +144,21 @@ function randomLetterBytes(): Uint8Array {
 /** The same sentence every time, with the folder filled in, so it can be pasted to the CLI. */
 export function imageSetPrompt(folderPath: string): string {
   return `in ${folderPath} sind die bilder:`;
+}
+
+/**
+ * A dropped folder that the browser could not walk must not become a 0-byte file.
+ * `walked` is what the directory API returned. `fallback` is `dataTransfer.files`.
+ */
+export function droppedItemsOrError<T extends NamedFile>(
+  walked: readonly T[],
+  fallback: readonly T[],
+): { ok: true; files: T[] } | { ok: false; error: string } {
+  if (walked.length > 0) return { ok: true, files: [...walked] };
+  if (fallback.length === 0) return { ok: false, error: "Nichts zum Hochladen." };
+  const readable = fallback.some((file) => file.size > 0 || Boolean(file.relativePath || file.webkitRelativePath));
+  if (!readable) return { ok: false, error: "Ordner konnte nicht gelesen werden." };
+  return { ok: true, files: [...fallback] };
 }
 
 export function uniqueImageName(name: string, used: Set<string>): string {

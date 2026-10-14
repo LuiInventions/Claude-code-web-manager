@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
+import { isImageSetFolder } from "../remote-upload-flow";
 import {
   joinRemote,
   localDestWith,
@@ -15,6 +16,7 @@ import {
  *
  * PUT <root-b64> <rel-b64> <size>\n <size bytes>  → OK {json}\n | ERR …\n
  * MKDIR <root-b64> <rel-b64>\n                    → OK {json}\n
+ * RMSET <root-b64> <name-b64>\n                   → OK {json}\n
  * GET <path-b64>\n                                → OK <size>\n <size bytes>
  * WALK <path-b64>\n                               → FILE/DIR lines, then END
  */
@@ -211,6 +213,23 @@ export async function remoteMkdir(port: number, root: string, rel: string, signa
   });
 }
 
+/** Delete one image_set directory. The broker refuses every other name. */
+export async function remoteRemoveSet(port: number, root: string, name: string, signal?: AbortSignal): Promise<void> {
+  if (!isImageSetFolder(name)) throw new Error("Nur Bildordner.");
+  await withSocket(port, signal, async (socket, queue) => {
+    await writeAll(socket, Buffer.from(`RMSET ${b64(root)} ${b64(name)}\n`));
+    try {
+      parseOk(await queue.readLine(), "Löschen fehlgeschlagen.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (message === "bad") {
+        throw new Error("Bitte die Verbindung trennen und neu aufbauen, dann den Bildordner noch einmal löschen.");
+      }
+      throw err;
+    }
+  });
+}
+
 export interface WalkedRemote {
   files: { rel: string; size: number }[];
   dirs: string[];
@@ -254,6 +273,7 @@ export async function remoteRead(
   remotePath: string,
   write: (chunk: Buffer) => Promise<void>,
   signal?: AbortSignal,
+  onSize?: (size: number) => void,
 ): Promise<number> {
   return withSocket(port, signal, async (socket, queue) => {
     await writeAll(socket, Buffer.from(`GET ${b64(remotePath)}\n`));
@@ -263,6 +283,7 @@ export async function remoteRead(
     if (!match) throw new Error("Antwort ungültig.");
     const size = Number(match[1]);
     if (!Number.isSafeInteger(size) || size < 0 || size > MAX_TRANSFER_BYTES) throw new Error("Maximal 10 GB.");
+    onSize?.(size);
     let left = size;
     while (left > 0) {
       throwIfAborted(signal);

@@ -2,21 +2,53 @@
 
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
-import { confirmUploadQuestion, imageSetFolderName, imageSetNames, imageSetPrompt, takeImages, uniqueImageName } from "@/lib/remote-upload-flow";
+import { confirmUploadQuestion, imageMime, imageSetFolderName, imageSetNames, imageSetPrompt, takeImages, uniqueImageName } from "@/lib/remote-upload-flow";
 import { joinRemote, transferSummary } from "@/lib/remote-transfer";
 import { cn } from "../ui";
 import { CenterDialog, TransferProgress } from "./CenterDialog";
-import { collectDataTransfer, uploadLocalItems, type LocalItem } from "./remoteUppyUpload";
+import { collectDataTransfer, uploadLocalItems, type LocalItem, type UploadKind } from "./remoteUppyUpload";
 
 interface PastedImage {
   id: string;
   name: string;
   size: number;
-  file: File;
   url: string;
+  file?: File;
+  source?: string;
 }
 
-type Phase = "pick" | "confirm" | "work" | "copy" | "error";
+interface ListedImage {
+  name: string;
+  path: string;
+}
+
+type Phase = "pick" | "confirm" | "confirm-delete" | "work" | "copy" | "error";
+
+function childPath(kind: UploadKind, dir: string, name: string): string | null {
+  if (kind === "remote") return joinRemote(dir, name);
+  if (!dir.trim() || !name) return null;
+  const sep = dir.includes("\\") ? "\\" : "/";
+  return `${dir.replace(/[\\/]+$/, "")}${sep}${name}`;
+}
+
+function previewSrc(kind: UploadKind, filePath: string): string {
+  const params = new URLSearchParams({ path: filePath });
+  return kind === "remote" ? `/api/remote/preview?${params}` : `/api/fs/raw?${params}`;
+}
+
+async function listImages(kind: UploadKind, folder: string): Promise<ListedImage[]> {
+  const params = new URLSearchParams({ path: folder });
+  const response = await fetch(kind === "remote" ? `/api/remote/fs?${params}` : `/api/fs?${params}`);
+  const data = (await response.json()) as {
+    entries?: { name: string; path?: string; dir?: boolean; type?: string }[];
+  };
+  return (data.entries ?? [])
+    .filter((entry) => {
+      const directory = kind === "remote" ? Boolean(entry.dir) : entry.type === "dir";
+      return !directory && Boolean(entry.path) && imageMime(entry.name) !== null;
+    })
+    .map((entry) => ({ name: entry.name, path: entry.path as string }));
+}
 
 function chipClass(on: boolean): string {
   return cn(
@@ -25,40 +57,74 @@ function chipClass(on: boolean): string {
   );
 }
 
+function ImageTiles({ images, kind }: { images: ListedImage[] | undefined; kind: UploadKind }) {
+  if (!images) return <p className="text-sm text-[#d2c6f5]">Wird geladen…</p>;
+  if (images.length === 0) return <p className="text-sm text-[#d2c6f5]">Keine Bilder</p>;
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      {images.map((image) => (
+        <div key={image.path} className="relative aspect-square overflow-hidden rounded-xl bg-[#2a1b4a]">
+          <img src={previewSrc(kind, image.path)} alt={image.name} className="size-full object-cover" />
+          <span className="absolute inset-x-0 bottom-0 truncate bg-[#1a1030] px-1.5 py-1 text-left text-[10px] text-white">
+            {image.name}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function FolderBar({
   names,
+  pictures,
+  kind,
   selected,
   allowNew,
+  allowDelete,
   onSelect,
+  onDelete,
 }: {
   names: string[];
+  pictures: Record<string, ListedImage[] | undefined>;
+  kind: UploadKind;
   selected: string;
   allowNew: boolean;
+  allowDelete: boolean;
   onSelect: (name: string) => void;
+  onDelete: (name: string) => void;
 }) {
   return (
-    <div className="grid gap-2">
+    <div className="grid gap-3">
       <span className="text-xs font-medium text-[#d2c6f5]">Ordner</span>
-      <div className="flex gap-2 overflow-x-auto pb-1" role="listbox" aria-label="Bildordner">
-        {allowNew && (
-          <button type="button" role="option" aria-selected={selected === "new"} onClick={() => onSelect("new")} className={chipClass(selected === "new")}>
-            Neuer Ordner
-          </button>
-        )}
-        {names.map((name) => (
-          <button
-            key={name}
-            type="button"
-            role="option"
-            aria-selected={selected === name}
-            onClick={() => onSelect(name)}
-            className={cn(chipClass(selected === name), "font-mono")}
-          >
-            {name}
-          </button>
-        ))}
-        {names.length === 0 && !allowNew && <span className="text-sm text-[#d2c6f5]">Noch kein Bildordner</span>}
-      </div>
+      {allowNew && (
+        <button type="button" onClick={() => onSelect("new")} className={cn(chipClass(selected === "new"), "justify-self-start")}>
+          Neuer Ordner
+        </button>
+      )}
+      {names.length === 0 && !allowNew && <span className="text-sm text-[#d2c6f5]">Noch kein Bildordner</span>}
+      {names.map((name) => (
+        <section
+          key={name}
+          className={cn("grid gap-3 rounded-2xl bg-[#120a24] p-3", selected === name && "ring-2 ring-[#7c5cff]")}
+        >
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => onSelect(name)} className={cn(chipClass(selected === name), "min-w-0 truncate font-mono")}>
+              {name}
+            </button>
+            {allowDelete && (
+              <button
+                type="button"
+                aria-label={`${name} löschen`}
+                onClick={() => onDelete(name)}
+                className="ml-auto h-9 shrink-0 cursor-pointer rounded-lg bg-[#3a2048] px-3 text-sm font-semibold text-white hover:bg-[#5a2858]"
+              >
+                Löschen
+              </button>
+            )}
+          </div>
+          <ImageTiles images={pictures[name]} kind={kind} />
+        </section>
+      ))}
     </div>
   );
 }
@@ -76,10 +142,12 @@ function filesFromClipboard(data: DataTransfer): File[] {
 
 export default function RemoteImageUpload({
   dir,
+  kind = "remote",
   onClose,
   onRefresh,
 }: {
   dir: string;
+  kind?: UploadKind;
   onClose: () => void;
   onRefresh: () => void;
 }) {
@@ -88,6 +156,8 @@ export default function RemoteImageUpload({
   const [error, setError] = useState("");
   const [folderName, setFolderName] = useState("");
   const [sets, setSets] = useState<string[]>([]);
+  const [pictures, setPictures] = useState<Record<string, ListedImage[]>>({});
+  const [deleteName, setDeleteName] = useState("");
   const [target, setTarget] = useState("new");
   const [listNonce, setListNonce] = useState(0);
   const [question, setQuestion] = useState("");
@@ -106,7 +176,7 @@ export default function RemoteImageUpload({
   const imagesRef = useRef(images);
   const urlsRef = useRef(new Set<string>());
   const phaseRef = useRef(phase);
-  const addRef = useRef<(incoming: File[]) => void>(() => {});
+  const addRef = useRef<(incoming: LocalItem[]) => void>(() => {});
   imagesRef.current = images;
   phaseRef.current = phase;
 
@@ -120,10 +190,11 @@ export default function RemoteImageUpload({
       event.preventDefault();
       if (phaseRef.current !== "pick" || !event.dataTransfer) return;
       const data = event.dataTransfer;
-      void collectDataTransfer(data).then((items) => {
-        const incoming = items.flatMap((item) => (item.file ? [item.file] : []));
-        if (incoming.length > 0) addRef.current(incoming);
-      });
+      void collectDataTransfer(data, true)
+        .then((items) => {
+          if (items.length > 0) addRef.current(items);
+        })
+        .catch((err: Error) => setError(err.message));
     };
     const onPaste = (event: ClipboardEvent) => {
       if (phaseRef.current !== "pick" || !event.clipboardData) return;
@@ -131,7 +202,7 @@ export default function RemoteImageUpload({
       if (incoming.length === 0) return;
       event.preventDefault();
       if (inputRef.current) inputRef.current.value = "";
-      addRef.current(incoming);
+      addRef.current(incoming.map((file) => ({ rel: file.name || "bild", size: file.size, file })));
     };
     window.addEventListener("dragover", allowDrag);
     window.addEventListener("drop", onDrop);
@@ -154,10 +225,15 @@ export default function RemoteImageUpload({
   useEffect(() => {
     let cancelled = false;
     const params = new URLSearchParams({ path: dir });
-    fetch(`/api/remote/fs?${params}`)
+    const listUrl = kind === "remote" ? `/api/remote/fs?${params}` : `/api/fs?${params}`;
+    fetch(listUrl)
       .then((response) => response.json())
-      .then((data: { entries?: { name: string; dir?: boolean }[] }) => {
-        if (!cancelled) setSets(imageSetNames(data.entries ?? []));
+      .then((data: { entries?: { name: string; dir?: boolean; type?: string }[] }) => {
+        const entries = (data.entries ?? []).map((entry) => ({
+          name: entry.name,
+          dir: kind === "remote" ? Boolean(entry.dir) : entry.type === "dir",
+        }));
+        if (!cancelled) setSets(imageSetNames(entries));
       })
       .catch(() => {
         if (!cancelled) setSets([]);
@@ -165,25 +241,51 @@ export default function RemoteImageUpload({
     return () => {
       cancelled = true;
     };
-  }, [dir, listNonce]);
+  }, [dir, kind, listNonce]);
 
-  const addFiles = (incoming: File[]) => {
-    if (incoming.length === 0) return;
-    const decision = takeImages(
-      imagesRef.current,
-      incoming.map((file) => ({ name: file.name || "bild", type: file.type, size: file.size })),
-    );
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const next: Record<string, ListedImage[]> = {};
+      await Promise.all(
+        sets.map(async (name) => {
+          const folder = childPath(kind, dir, name);
+          next[name] = folder ? await listImages(kind, folder).catch(() => []) : [];
+        }),
+      );
+      if (!cancelled) setPictures(next);
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [sets, dir, kind]);
+
+  const addFiles = (incoming: LocalItem[]) => {
+    const candidates = incoming
+      .filter((item) => !item.dir)
+      .map((item) => ({
+        name: item.rel.split("/").pop() || "bild",
+        type: item.file?.type || "",
+        size: item.size,
+        file: item.file,
+        source: item.source,
+      }));
+    if (candidates.length === 0) return;
+    const decision = takeImages(imagesRef.current, candidates);
     setError(decision.error);
     if (decision.take.length === 0) return;
     const next = decision.take.map((index) => {
-      const file = incoming[index];
-      const url = URL.createObjectURL(file);
-      urlsRef.current.add(url);
+      const item = candidates[index];
+      const blob = item.file ? URL.createObjectURL(item.file) : "";
+      if (blob) urlsRef.current.add(blob);
+      const url = blob || (item.source ? previewSrc("local", item.source) : "");
       return {
         id: crypto.randomUUID(),
-        name: file.name || "bild",
-        size: file.size,
-        file,
+        name: item.name,
+        size: item.size,
+        file: item.file,
+        source: item.source,
         url,
       };
     });
@@ -195,7 +297,7 @@ export default function RemoteImageUpload({
 
   const remove = (id: string) => {
     const image = imagesRef.current.find((item) => item.id === id);
-    if (image) {
+    if (image?.url.startsWith("blob:")) {
       URL.revokeObjectURL(image.url);
       urlsRef.current.delete(image.url);
     }
@@ -208,7 +310,7 @@ export default function RemoteImageUpload({
   const goNext = () => {
     if (images.length === 0) return;
     const folder = target === "new" ? imageSetFolderName() : target;
-    const folderPath = joinRemote(dir, folder);
+    const folderPath = childPath(kind, dir, folder);
     if (!folderPath) {
       setError("Pfad ungültig.");
       return;
@@ -218,6 +320,7 @@ export default function RemoteImageUpload({
       rel: `${folder}/${uniqueImageName(image.name, used)}`,
       size: image.size,
       file: image.file,
+      source: image.file ? undefined : image.source,
     }));
     setFolderName(folder);
     setQueued(items);
@@ -237,6 +340,7 @@ export default function RemoteImageUpload({
     setCurrent("");
     try {
       const result = await uploadLocalItems({
+        kind,
         dir,
         items: queued,
         signal: ctrl.signal,
@@ -270,12 +374,43 @@ export default function RemoteImageUpload({
     setCopied(false);
     setTarget(name);
     if (name === "new") return;
-    const path = joinRemote(dir, name);
+    const path = childPath(kind, dir, name);
     if (path) setSentence(imageSetPrompt(path));
   };
 
+  const askDelete = (name: string) => {
+    setDeleteName(name);
+    setQuestion(`Möchten Sie ${name} löschen?`);
+    setError("");
+    setPhase("confirm-delete");
+  };
+
+  const runDelete = async () => {
+    if (!deleteName) return;
+    try {
+      const response = await fetch("/api/image-set/delete", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind, dir, name: deleteName }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error || "Löschen fehlgeschlagen.");
+      if (target === deleteName) {
+        setTarget("new");
+        setSentence("");
+      }
+      setDeleteName("");
+      setListNonce((n) => n + 1);
+      setPhase("pick");
+      onRefresh();
+    } catch (err) {
+      setError((err as Error).message);
+      setPhase("error");
+    }
+  };
+
   const knownSets = folderName && !sets.includes(folderName) ? [folderName, ...sets] : sets;
-  const previewPath = target !== "new" ? joinRemote(dir, target) : null;
+  const previewPath = target !== "new" ? childPath(kind, dir, target) : null;
   const previewSentence = previewPath ? imageSetPrompt(previewPath) : "";
 
   const copySentence = async (value = sentence) => {
@@ -311,7 +446,16 @@ export default function RemoteImageUpload({
     >
       {phase === "pick" && (
         <div className="grid gap-4">
-          <FolderBar names={sets} selected={target} allowNew onSelect={selectFolder} />
+          <FolderBar
+            names={sets}
+            pictures={pictures}
+            kind={kind}
+            selected={target}
+            allowNew
+            allowDelete
+            onSelect={selectFolder}
+            onDelete={askDelete}
+          />
           <p className="text-xs text-[#d2c6f5]">
             {target === "new" ? "Jeder Upload legt einen neuen Ordner an." : `Neue Bilder kommen in ${target}.`}
           </p>
@@ -381,6 +525,27 @@ export default function RemoteImageUpload({
           </button>
         </div>
       )}
+      {phase === "confirm-delete" && (
+        <div className="grid gap-5 py-2">
+          <p className="break-all text-center text-[15px] font-medium leading-relaxed text-white">{question}</p>
+          <div className="flex justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => setPhase("pick")}
+              className="h-11 cursor-pointer rounded-xl bg-[#2c2158] px-5 text-sm font-semibold text-white hover:bg-[#3a2c78]"
+            >
+              Zurück
+            </button>
+            <button
+              type="button"
+              onClick={() => void runDelete()}
+              className="h-11 cursor-pointer rounded-xl bg-white px-5 text-sm font-semibold text-[#1a1030] hover:bg-[#efeaff]"
+            >
+              Löschen
+            </button>
+          </div>
+        </div>
+      )}
       {phase === "confirm" && (
         <div className="grid gap-5 py-2">
           <p className="break-all text-center text-[15px] font-medium leading-relaxed text-white">{question}</p>
@@ -416,13 +581,19 @@ export default function RemoteImageUpload({
       )}
       {phase === "copy" && (
         <div className="grid gap-4 py-2">
-          <p className="text-center text-sm font-semibold text-white">Die Bilder liegen auf dem Server.</p>
+          <p className="text-center text-sm font-semibold text-white">
+            {kind === "local" ? "Die Bilder liegen im Ordner." : "Die Bilder liegen auf dem Server."}
+          </p>
           <p className="text-center text-xs text-[#d2c6f5]">{summary}</p>
           <FolderBar
             names={knownSets}
+            pictures={pictures}
+            kind={kind}
             selected={target === "new" ? folderName : target}
             allowNew={false}
+            allowDelete
             onSelect={selectFolder}
+            onDelete={askDelete}
           />
           <label className="grid gap-2">
             <span className="text-xs font-medium text-[#d2c6f5]">Satz für die KI</span>
