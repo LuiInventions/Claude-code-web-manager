@@ -5,6 +5,13 @@ follow `package.json`. From 1.9.6 each `v*` tag publishes
 `jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
 `cc-control-center-Setup-<version>.exe`.
 
+## 1.9.22 — 2026-10-14
+
+### Image sets stay a button row
+
+- Old image sets are buttons in one row again. **Neuer Ordner** shows the empty paste box. Choosing a set shows its pictures in that box, at the same square size.
+- Clicking a picture no longer opens a full-size view. That view froze the window. A preview that cannot be shown says **Keine Vorschau**.
+
 ## 1.9.21 — 2026-10-14
 
 ### Folder upload, image-set preview, and local copies

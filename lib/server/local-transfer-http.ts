@@ -232,7 +232,7 @@ async function handlePaths(req: IncomingMessage, res: ServerResponse, getPort: (
   res.end();
 }
 
-function streamFile(res: ServerResponse, filePath: string, mime: string, size: number): fs.ReadStream {
+function streamFile(req: IncomingMessage, res: ServerResponse, filePath: string, mime: string, size: number): void {
   res.writeHead(200, {
     "content-type": mime,
     "content-length": String(size),
@@ -241,8 +241,17 @@ function streamFile(res: ServerResponse, filePath: string, mime: string, size: n
     "x-content-type-options": "nosniff",
   });
   const stream = fs.createReadStream(filePath);
+  const stop = () => stream.destroy();
+  // `close` on the response also fires after a normal end. Only a client
+  // abort should tear the file down, or a short body leaves the browser
+  // waiting on content-length and every later request to this app queues.
+  req.on("aborted", stop);
+  stream.on("error", () => {
+    req.off("aborted", stop);
+    if (!res.writableEnded) res.destroy();
+  });
+  stream.on("end", () => req.off("aborted", stop));
   stream.pipe(res);
-  return stream;
 }
 
 async function handleRaw(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -268,7 +277,7 @@ async function handleRaw(req: IncomingMessage, res: ServerResponse): Promise<voi
     json(res, 404, { error: "Datei fehlt." });
     return;
   }
-  streamFile(res, filePath, mime, st.size);
+  streamFile(req, res, filePath, mime, st.size);
 }
 
 async function handlePreview(req: IncomingMessage, res: ServerResponse, getPort: () => number | null): Promise<void> {
@@ -289,28 +298,47 @@ async function handlePreview(req: IncomingMessage, res: ServerResponse, getPort:
     return;
   }
   const ctrl = new AbortController();
-  res.on("close", () => ctrl.abort());
+  const stop = () => ctrl.abort();
+  req.on("aborted", stop);
   let headed = false;
-  await remoteRead(
-    port,
-    filePath,
-    async (chunk) => {
-      if (!res.write(chunk)) await once(res, "drain");
-    },
-    ctrl.signal,
-    (size) => {
-      res.writeHead(200, {
-        "content-type": mime,
-        "content-length": String(size),
-        "content-disposition": "inline",
-        "cache-control": "no-store",
-        "x-content-type-options": "nosniff",
-      });
-      headed = true;
-    },
-  );
+  try {
+    await remoteRead(
+      port,
+      filePath,
+      async (chunk) => {
+        if (ctrl.signal.aborted || res.destroyed) return;
+        if (!res.write(chunk)) {
+          await new Promise<void>((resolve) => {
+            const done = () => resolve();
+            res.once("drain", done);
+            ctrl.signal.addEventListener("abort", done, { once: true });
+          });
+        }
+      },
+      ctrl.signal,
+      (size) => {
+        if (res.headersSent || res.destroyed) return;
+        res.writeHead(200, {
+          "content-type": mime,
+          "content-length": String(size),
+          "content-disposition": "inline",
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+        });
+        headed = true;
+      },
+    );
+  } catch (err) {
+    if (res.headersSent) {
+      if (!res.destroyed) res.destroy();
+      return;
+    }
+    throw err;
+  } finally {
+    req.off("aborted", stop);
+  }
   if (!headed && !res.headersSent) json(res, 502, { error: "Bild fehlt." });
-  else if (!res.writableEnded) res.end();
+  else if (!res.writableEnded && !res.destroyed) res.end();
 }
 
 export async function handleLocalStream(

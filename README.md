@@ -19,16 +19,17 @@
 </p>
 
 > [!TIP]
-> **v1.9.21** is the current release. The sidebar order is **Remote**, **GitHub**,
+> **v1.9.22** is the current release. The sidebar order is **Remote**, **GitHub**,
 > **Local**, **Repos**, **Sessions**. Remote starts a code CLI on your server and
 > can upload and download files there. Dropping or choosing a folder asks for
 > confirmation, then uploads it. **Bild hochladen** pastes images into a new
-> `image_set` folder. Each set shows its pictures and can be deleted.
+> `image_set` folder. Older sets are buttons in one row. Choosing one shows its
+> pictures in the box below, and the set can be deleted.
 > **Dateien hochladen** and **Bild hochladen** are also on GitHub and Local and
 > write into the folder on this PC. **Repos → New repo** creates the repository
 > in the clones folder. That path is fixed. **Repos → Update** commits local
 > changes, merges what GitHub gained, and pushes.
-> The installer is `jarvis-control-center-Setup-1.9.21.exe`. v1.8.0 was withdrawn.
+> The installer is `jarvis-control-center-Setup-1.9.22.exe`. v1.8.0 was withdrawn.
 > v1.9.6 has no installer. [**Changelog**](CHANGELOG.md)
 
 <img width="1920" height="1080" alt="Jarvis Control Center" src="https://github.com/user-attachments/assets/961f27e3-c90e-4594-bbbc-ce2fa462e56b" />

@@ -24,6 +24,10 @@ interface ListedImage {
 
 type Phase = "pick" | "confirm" | "confirm-delete" | "work" | "copy" | "error";
 
+/** Bigger than this is named, not decoded. A full-size decode freezes the window. */
+const PREVIEW_MAX = 8 * 1024 * 1024;
+const SHOWABLE = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp", "image/avif", "image/x-icon"]);
+
 function childPath(kind: UploadKind, dir: string, name: string): string | null {
   if (kind === "remote") return joinRemote(dir, name);
   if (!dir.trim() || !name) return null;
@@ -57,27 +61,8 @@ function chipClass(on: boolean): string {
   );
 }
 
-function ImageTiles({ images, kind }: { images: ListedImage[] | undefined; kind: UploadKind }) {
-  if (!images) return <p className="text-sm text-[#d2c6f5]">Wird geladen…</p>;
-  if (images.length === 0) return <p className="text-sm text-[#d2c6f5]">Keine Bilder</p>;
-  return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-      {images.map((image) => (
-        <div key={image.path} className="relative aspect-square overflow-hidden rounded-xl bg-[#2a1b4a]">
-          <img src={previewSrc(kind, image.path)} alt={image.name} className="size-full object-cover" />
-          <span className="absolute inset-x-0 bottom-0 truncate bg-[#1a1030] px-1.5 py-1 text-left text-[10px] text-white">
-            {image.name}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function FolderBar({
   names,
-  pictures,
-  kind,
   selected,
   allowNew,
   allowDelete,
@@ -85,8 +70,6 @@ function FolderBar({
   onDelete,
 }: {
   names: string[];
-  pictures: Record<string, ListedImage[] | undefined>;
-  kind: UploadKind;
   selected: string;
   allowNew: boolean;
   allowDelete: boolean;
@@ -94,39 +77,115 @@ function FolderBar({
   onDelete: (name: string) => void;
 }) {
   return (
-    <div className="grid gap-3">
-      <span className="text-xs font-medium text-[#d2c6f5]">Ordner</span>
-      {allowNew && (
-        <button type="button" onClick={() => onSelect("new")} className={cn(chipClass(selected === "new"), "justify-self-start")}>
-          Neuer Ordner
-        </button>
-      )}
-      {names.length === 0 && !allowNew && <span className="text-sm text-[#d2c6f5]">Noch kein Bildordner</span>}
-      {names.map((name) => (
-        <section
-          key={name}
-          className={cn("grid gap-3 rounded-2xl bg-[#120a24] p-3", selected === name && "ring-2 ring-[#7c5cff]")}
-        >
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => onSelect(name)} className={cn(chipClass(selected === name), "min-w-0 truncate font-mono")}>
-              {name}
-            </button>
-            {allowDelete && (
-              <button
-                type="button"
-                aria-label={`${name} löschen`}
-                onClick={() => onDelete(name)}
-                className="ml-auto h-9 shrink-0 cursor-pointer rounded-lg bg-[#3a2048] px-3 text-sm font-semibold text-white hover:bg-[#5a2858]"
-              >
-                Löschen
-              </button>
-            )}
-          </div>
-          <ImageTiles images={pictures[name]} kind={kind} />
-        </section>
-      ))}
+    <div className="grid gap-2">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-medium text-[#d2c6f5]">Ordner</span>
+        {allowDelete && selected !== "new" && (
+          <button
+            type="button"
+            onClick={() => onDelete(selected)}
+            className="ml-auto h-8 cursor-pointer rounded-lg bg-[#3a2048] px-3 text-sm font-semibold text-white hover:bg-[#5a2858]"
+          >
+            Löschen
+          </button>
+        )}
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-1" role="listbox" aria-label="Bildordner">
+        {allowNew && (
+          <button type="button" role="option" aria-selected={selected === "new"} onClick={() => onSelect("new")} className={chipClass(selected === "new")}>
+            Neuer Ordner
+          </button>
+        )}
+        {names.map((name) => (
+          <button
+            key={name}
+            type="button"
+            role="option"
+            aria-selected={selected === name}
+            onClick={() => onSelect(name)}
+            className={cn(chipClass(selected === name), "font-mono")}
+          >
+            {name}
+          </button>
+        ))}
+        {names.length === 0 && !allowNew && <span className="text-sm text-[#d2c6f5]">Noch kein Bildordner</span>}
+      </div>
     </div>
   );
+}
+
+function SetTiles({ kind, images }: { kind: UploadKind; images: ListedImage[] | undefined }) {
+  const urls = usePreviewUrls(kind, images);
+  if (!images) return <p className="col-span-full text-sm text-[#d2c6f5]">Wird geladen…</p>;
+  if (images.length === 0) return <p className="col-span-full text-sm text-[#d2c6f5]">Keine Bilder</p>;
+  return (
+    <>
+      {images.map((image) => (
+        <div key={image.path} className="relative aspect-square overflow-hidden rounded-xl bg-[#2a1b4a]">
+          {urls[image.path] ? (
+            <img src={urls[image.path]} alt={image.name} className="size-full object-cover" />
+          ) : (
+            <span className="grid size-full place-items-center px-2 text-center text-[10px] text-[#d2c6f5]">
+              {urls[image.path] === "" ? "Keine Vorschau" : "…"}
+            </span>
+          )}
+          <span className="absolute inset-x-0 bottom-0 truncate bg-[#1a1030] px-1.5 py-1 text-left text-[10px] text-white">
+            {image.name}
+          </span>
+        </div>
+      ))}
+    </>
+  );
+}
+
+function usePreviewUrls(kind: UploadKind, images: ListedImage[] | undefined): Record<string, string> {
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const key = images?.map((image) => image.path).join("\n") ?? "";
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
+  useEffect(() => {
+    const listed = imagesRef.current;
+    if (!listed || listed.length === 0) return;
+    const created: string[] = [];
+    const ctrl = new AbortController();
+    let cancelled = false;
+    const load = async () => {
+      const next: Record<string, string> = {};
+      for (const image of listed) {
+        if (ctrl.signal.aborted) return;
+        let preview = "";
+        try {
+          const response = await fetch(previewSrc(kind, image.path), { signal: ctrl.signal });
+          const length = Number(response.headers.get("content-length") || 0);
+          const headerType = (response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+          const tooBig = Number.isFinite(length) && length > PREVIEW_MAX;
+          if (!response.ok || tooBig || !Number.isFinite(length) || !SHOWABLE.has(headerType)) {
+            await response.body?.cancel().catch(() => undefined);
+          } else {
+            const blob = await response.blob();
+            if (ctrl.signal.aborted) return;
+            if (blob.size <= PREVIEW_MAX) {
+              const typed = blob.type ? blob : new Blob([blob], { type: headerType });
+              preview = URL.createObjectURL(typed);
+              created.push(preview);
+            }
+          }
+        } catch {
+          if (ctrl.signal.aborted) return;
+        }
+        next[image.path] = preview;
+        if (!cancelled) setUrls({ ...next });
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+      for (const url of created) URL.revokeObjectURL(url);
+      setUrls({});
+    };
+  }, [kind, key]);
+  return urls;
 }
 
 function filesFromClipboard(data: DataTransfer): File[] {
@@ -156,7 +215,7 @@ export default function RemoteImageUpload({
   const [error, setError] = useState("");
   const [folderName, setFolderName] = useState("");
   const [sets, setSets] = useState<string[]>([]);
-  const [pictures, setPictures] = useState<Record<string, ListedImage[]>>({});
+  const [pictures, setPictures] = useState<ListedImage[] | undefined>(undefined);
   const [deleteName, setDeleteName] = useState("");
   const [target, setTarget] = useState("new");
   const [listNonce, setListNonce] = useState(0);
@@ -164,7 +223,6 @@ export default function RemoteImageUpload({
   const [queued, setQueued] = useState<LocalItem[]>([]);
   const [sentence, setSentence] = useState("");
   const [copied, setCopied] = useState(false);
-  const [zoom, setZoom] = useState<PastedImage | null>(null);
   const [written, setWritten] = useState(0);
   const [total, setTotal] = useState(0);
   const [current, setCurrent] = useState("");
@@ -244,22 +302,28 @@ export default function RemoteImageUpload({
   }, [dir, kind, listNonce]);
 
   useEffect(() => {
+    if (target === "new") {
+      setPictures(undefined);
+      return;
+    }
+    const folder = childPath(kind, dir, target);
+    if (!folder) {
+      setPictures([]);
+      return;
+    }
     let cancelled = false;
-    const load = async () => {
-      const next: Record<string, ListedImage[]> = {};
-      await Promise.all(
-        sets.map(async (name) => {
-          const folder = childPath(kind, dir, name);
-          next[name] = folder ? await listImages(kind, folder).catch(() => []) : [];
-        }),
-      );
-      if (!cancelled) setPictures(next);
-    };
-    void load();
+    setPictures(undefined);
+    listImages(kind, folder)
+      .then((listed) => {
+        if (!cancelled) setPictures(listed);
+      })
+      .catch(() => {
+        if (!cancelled) setPictures([]);
+      });
     return () => {
       cancelled = true;
     };
-  }, [sets, dir, kind]);
+  }, [target, dir, kind, listNonce]);
 
   const addFiles = (incoming: LocalItem[]) => {
     const candidates = incoming
@@ -277,7 +341,7 @@ export default function RemoteImageUpload({
     if (decision.take.length === 0) return;
     const next = decision.take.map((index) => {
       const item = candidates[index];
-      const blob = item.file ? URL.createObjectURL(item.file) : "";
+      const blob = item.file && item.size <= PREVIEW_MAX ? URL.createObjectURL(item.file) : "";
       if (blob) urlsRef.current.add(blob);
       const url = blob || (item.source ? previewSrc("local", item.source) : "");
       return {
@@ -304,7 +368,6 @@ export default function RemoteImageUpload({
     const next = imagesRef.current.filter((item) => item.id !== id);
     imagesRef.current = next;
     setImages(next);
-    setZoom((currentZoom) => (currentZoom?.id === id ? null : currentZoom));
   };
 
   const goNext = () => {
@@ -424,10 +487,6 @@ export default function RemoteImageUpload({
   };
 
   const close = () => {
-    if (zoom) {
-      setZoom(null);
-      return;
-    }
     if (phase === "work") {
       abortRef.current?.abort();
       return;
@@ -448,8 +507,6 @@ export default function RemoteImageUpload({
         <div className="grid gap-4">
           <FolderBar
             names={sets}
-            pictures={pictures}
-            kind={kind}
             selected={target}
             allowNew
             allowDelete
@@ -478,22 +535,20 @@ export default function RemoteImageUpload({
             </div>
           )}
           <div className="grid min-h-56 grid-cols-2 gap-3 rounded-2xl bg-[#120a24] p-3 sm:grid-cols-5">
-            {images.length === 0 && (
+            {target !== "new" && <SetTiles kind={kind} images={pictures} />}
+            {target === "new" && images.length === 0 && (
               <p className="col-span-full grid place-items-center text-sm text-[#d2c6f5]">Noch keine Bilder</p>
             )}
             {images.map((image) => (
-              <div key={image.id} className="relative aspect-square">
-                <button
-                  type="button"
-                  onClick={() => setZoom(image)}
-                  className="size-full cursor-pointer overflow-hidden rounded-xl bg-[#2a1b4a]"
-                  aria-label={`${image.name} vergrössern`}
-                >
+              <div key={image.id} className="relative aspect-square overflow-hidden rounded-xl bg-[#2a1b4a]">
+                {image.url ? (
                   <img src={image.url} alt={image.name} className="size-full object-cover" />
-                  <span className="absolute inset-x-0 bottom-0 truncate bg-[#1a1030] px-1.5 py-1 text-left text-[10px] text-white">
-                    {image.name}
-                  </span>
-                </button>
+                ) : (
+                  <span className="grid size-full place-items-center px-2 text-center text-[10px] text-[#d2c6f5]">Keine Vorschau</span>
+                )}
+                <span className="absolute inset-x-0 bottom-0 truncate bg-[#1a1030] px-1.5 py-1 text-left text-[10px] text-white">
+                  {image.name}
+                </span>
                 <button
                   type="button"
                   aria-label={`${image.name} entfernen`}
@@ -587,14 +642,15 @@ export default function RemoteImageUpload({
           <p className="text-center text-xs text-[#d2c6f5]">{summary}</p>
           <FolderBar
             names={knownSets}
-            pictures={pictures}
-            kind={kind}
             selected={target === "new" ? folderName : target}
             allowNew={false}
             allowDelete
             onSelect={selectFolder}
             onDelete={askDelete}
           />
+          <div className="grid grid-cols-2 gap-3 rounded-2xl bg-[#120a24] p-3 sm:grid-cols-5">
+            <SetTiles kind={kind} images={pictures} />
+          </div>
           <label className="grid gap-2">
             <span className="text-xs font-medium text-[#d2c6f5]">Satz für die KI</span>
             <div className="flex gap-2">
@@ -629,19 +685,6 @@ export default function RemoteImageUpload({
           <p className="text-sm text-danger">{error}</p>
           <button type="button" onClick={() => setPhase("pick")} className="cursor-pointer text-sm text-white/70 hover:text-white">
             Zurück
-          </button>
-        </div>
-      )}
-      {zoom && (
-        <div className="absolute inset-0 z-10 grid content-center justify-items-center gap-4 rounded-2xl bg-[#120a24] p-6">
-          <img src={zoom.url} alt={zoom.name} className="max-h-[60vh] max-w-full rounded-xl object-contain" />
-          <p className="max-w-full truncate text-xs text-[#d2c6f5]">{zoom.name}</p>
-          <button
-            type="button"
-            onClick={() => setZoom(null)}
-            className="h-10 cursor-pointer rounded-xl bg-white px-4 text-sm font-semibold text-[#1a1030]"
-          >
-            Schliessen
           </button>
         </div>
       )}
