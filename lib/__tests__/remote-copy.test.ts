@@ -130,7 +130,9 @@ describe("remote copy", () => {
     expect(listed.status).toBe(0);
     expect(listed.stdout).toContain("größe.txt 4");
     expect(listed.stdout).toContain("a.zip 1");
-  });
+    // The first Python process on a Windows runner can take longer than
+    // Vitest's 5s default while Defender scans it.
+  }, 20_000);
 
   it.skipIf(!pythonBin())("streams files and folders through the broker, including binary and unicode names", async () => {
     const broker = await startBroker();

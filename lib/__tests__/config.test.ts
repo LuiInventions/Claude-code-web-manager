@@ -61,7 +61,9 @@ describe("config (multi-provider)", () => {
     expect(openai.models).toContain(openai.defaultModel);
     expect(typeof pub.appVersion).toBe("string");
     expect(JSON.stringify(pub)).not.toContain("sk-secret-value");
-  });
+    // where.exe for claude, grok, and codex can each sit until its 4s timeout
+    // on a Windows runner. Three misses are about 12s, past Vitest's 5s default.
+  }, 20_000);
 
   it("ready requires the projects folder AND setup completed on this version", () => {
     process.env.CCC_APP_VERSION = "9.9.9";
