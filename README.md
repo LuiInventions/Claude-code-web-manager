@@ -45,7 +45,7 @@ A terminal gives you one session, no view of the server, and a manual `git add` 
 - **Remote** — log into your server with SSH and start Claude Code, Grok, or Codex there, in a folder you pick, with the server's files beside the terminal.
 - **GitHub** — start the same CLI inside a repo you cloned. **Repos** keeps the token, the clone, and a one-click **Update** that commits and pushes for you.
 - **Local** — the same launcher against a folder on this PC.
-- **Sessions** — every running agent as a character in a pixel office.
+- **Sessions** — every running agent as a character in a pixel office
 
 It ships as a **Windows desktop app**
 ([**download the `.exe`**](https://github.com/LuiInventions/jarvis-control-center/releases/latest))
