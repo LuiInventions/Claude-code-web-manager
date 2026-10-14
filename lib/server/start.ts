@@ -8,6 +8,8 @@ import { handleLocalStream, isLocalStream } from "./local-transfer-http";
 import { handleRemoteTransfer, isRemoteTransfer } from "./remote-transfer-http";
 import { startUsagePoller } from "./usage-poller";
 import { warmCodeCli } from "./cli-warm";
+import { handleMcp, isMcpRequest } from "./mcp/http";
+import { publishMcpEndpoint, unpublishMcpEndpoint } from "./mcp/endpoint";
 
 export interface RunningServer {
   host: string;
@@ -47,6 +49,11 @@ export async function startServer(
   const upgrade = app.getUpgradeHandler();
 
   const server: Server = createServer((req, res) => {
+    // The MCP server shares this loopback listener so it starts with the app.
+    if (isMcpRequest(req.url)) {
+      void handleMcp(req, res);
+      return;
+    }
     // Copies run longer than Node's default 5-minute request timeout.
     if (isRemoteTransfer(req.url)) {
       void handleRemoteTransfer(req, res, remoteBrokerPort);
@@ -81,9 +88,11 @@ export async function startServer(
     server.once("error", onListenError);
     server.listen(port, host, () => {
       server.removeListener("error", onListenError);
+      const mcp = publishMcpEndpoint(host, port);
       if (!opts.quiet) {
         console.log(
-          `\n  ▸ Jarvis Control Center  →  http://${host}:${port}   (loopback only)\n`,
+          `\n  ▸ Jarvis Control Center  →  http://${host}:${port}   (loopback only)\n` +
+            `  ▸ MCP                     →  ${mcp}\n`,
         );
       }
       startUsagePoller();
@@ -95,6 +104,10 @@ export async function startServer(
   return {
     host,
     port,
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    close: () =>
+      new Promise<void>((resolve) => {
+        unpublishMcpEndpoint();
+        server.close(() => resolve());
+      }),
   };
 }

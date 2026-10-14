@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Bot,
   Code,
   FolderGit2,
   FolderOpen,
@@ -11,6 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Button, cn, EmptyState } from "./ui";
+import { copyText } from "./term-copy";
 import { play as playSfx, resume as resumeSfx } from "@/lib/sfx";
 import {
   AppCommandsContext,
@@ -23,6 +25,7 @@ import SessionsSection from "./sections/SessionsSection";
 import SettingsSection from "./sections/SettingsSection";
 import GithubSection from "./sections/GithubSection";
 import RemoteSection from "./sections/RemoteSection";
+import JarvisSection from "./sections/JarvisSection";
 
 interface SectionDef {
   id: SectionId;
@@ -37,6 +40,7 @@ const MAIN_SECTIONS: SectionDef[] = [
   { id: "launcher", label: "Local", desc: "Launch a code CLI in a local folder", icon: FolderOpen },
   { id: "github", label: "Repos", desc: "Connect a GitHub token and clone repos", icon: Code },
   { id: "sessions", label: "Sessions", desc: "Live code-CLI sessions, visualized", icon: Gamepad2 },
+  { id: "jarvis", label: "Jarvis", desc: "Chat mit GPT 6 Luna", icon: Bot },
 ];
 
 const SETTINGS_SECTION: SectionDef = {
@@ -53,10 +57,9 @@ export default function Shell() {
   const [opened, setOpened] = useState<Set<SectionId>>(
     () => new Set<SectionId>(["launcher"]),
   );
-  const [command, setCommand] = useState<{
-    target: SectionId;
-    payload: unknown;
+  const [delivery, setDelivery] = useState<{
     nonce: number;
+    items: { target: SectionId; payload: unknown }[];
   } | null>(null);
 
   // Global, app-wide subtle click feedback on any interactive element.
@@ -79,7 +82,7 @@ export default function Shell() {
 
   const dispatch = useCallback(
     (target: SectionId, payload: unknown) => {
-      setCommand({ target, payload, nonce: Math.random() });
+      setDelivery({ nonce: Math.random(), items: [{ target, payload }] });
       go(target);
     },
     [go],
@@ -96,10 +99,66 @@ export default function Shell() {
     [go, dispatch],
   );
 
-  const cmdFor = (id: SectionId): SectionCommand | null =>
-    command && command.target === id
-      ? { nonce: command.nonce, payload: command.payload }
-      : null;
+  const cmdFor = (id: SectionId): SectionCommand | null => {
+    if (!delivery) return null;
+    const mine = delivery.items.filter((item) => item.target === id);
+    if (mine.length === 0) return null;
+    return {
+      nonce: delivery.nonce,
+      payload: mine.length === 1 ? mine[0].payload : { kind: "batch", items: mine.map((item) => item.payload) },
+    };
+  };
+
+  // The MCP server queues navigation and "show this session" here. The window
+  // reports the visible section so tools can tell whether anyone is looking.
+  // The loop does not restart when the section changes, or a drained command
+  // would be thrown away.
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  useEffect(() => {
+    let stop = false;
+    let timer = 0;
+    const tick = async () => {
+      try {
+        await fetch("/api/ui-commands", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ section: activeRef.current }),
+        });
+        const res = await fetch("/api/ui-commands");
+        const data = (await res.json()) as {
+          commands?: { section: SectionId; payload: unknown }[];
+        };
+        if (!stop) {
+          const fresh: { target: SectionId; payload: unknown }[] = [];
+          for (const cmd of data.commands ?? []) {
+            const payload = cmd.payload as { kind?: string; text?: string } | null;
+            if (payload?.kind === "copy-text" && typeof payload.text === "string") {
+              void copyText(payload.text);
+              continue;
+            }
+            if (payload?.kind === "navigate") {
+              go(cmd.section);
+              continue;
+            }
+            fresh.push({ target: cmd.section, payload: cmd.payload });
+          }
+          if (fresh.length > 0) {
+            setDelivery({ nonce: Math.random(), items: fresh });
+            go(fresh[fresh.length - 1].target);
+          }
+        }
+      } catch {
+        /* the server is still booting */
+      }
+      if (!stop) timer = window.setTimeout(tick, 600);
+    };
+    void tick();
+    return () => {
+      stop = true;
+      window.clearTimeout(timer);
+    };
+  }, [go, dispatch]);
 
   return (
     <AppCommandsContext.Provider value={commands}>
@@ -151,9 +210,11 @@ function renderSection(id: SectionId, command: SectionCommand | null, active: bo
     case "sessions":
       return <SessionsSection active={active} />;
     case "remote":
-      return <RemoteSection />;
+      return <RemoteSection command={command} />;
     case "github":
       return <GithubSection />;
+    case "jarvis":
+      return <JarvisSection />;
     case "settings":
       return <SettingsSection />;
     default:

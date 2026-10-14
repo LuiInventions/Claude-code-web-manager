@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   confirmUploadQuestion,
+  imageFilesInListing,
   imageSetFolderName,
   imageSetNames,
   imageSetPrompt,
+  imageSetRelPaths,
+  imageUploadName,
   isImageFile,
+  mergeImageSetContents,
   relativeUploadPath,
   takeImages,
   uniqueImageName,
@@ -102,5 +106,50 @@ describe("image set", () => {
     expect(uniqueImageName("bild.png", used)).toBe("bild.png");
     expect(uniqueImageName("ordner/bild.png", used)).toBe("bild-2.png");
     expect(uniqueImageName("a<b>.txt", used)).toBe("a_b_.txt");
+    const again = new Set<string>(["image.png"]);
+    expect(uniqueImageName("Image.PNG", again)).toBe("Image-2.PNG");
+  });
+
+  it("counts pictures already in a set and uploads a new name into that folder", () => {
+    expect(
+      imageFilesInListing([
+        { name: "a.png", type: "file", size: 4 },
+        { name: "notes.txt", type: "file", size: 1 },
+        { name: "nested", type: "dir" },
+        { name: "b.JPG", dir: false, size: 8 },
+        { name: "A.PNG", type: "file", size: 9 },
+      ]),
+    ).toEqual([
+      { name: "a.png", size: 4 },
+      { name: "b.JPG", size: 8 },
+    ]);
+
+    const merged = mergeImageSetContents(
+      [
+        { name: "a.png", size: 0 },
+        { name: "b.JPG", size: 0 },
+        { name: "c.png", size: 0 },
+      ],
+      [{ name: "a.png", size: 4 }],
+    );
+    expect(merged.count).toBe(3);
+    expect(merged.bytes).toBe(4);
+    expect(merged.names).toEqual(["a.png", "b.JPG", "c.png"]);
+    expect(mergeImageSetContents(null, [{ name: "only.png", size: 2 }]).count).toBe(1);
+
+    const room = takeImages(
+      merged.files,
+      Array.from({ length: 8 }, (_, i) => ({ name: `${i}.png`, type: "image/png", size: 1 })),
+    );
+    expect(room.take).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(room.error).toBe("Maximal 10 Bilder.");
+
+    expect(
+      imageSetRelPaths("image_setabcdefgh", merged.names, [
+        { name: "a.png", type: "image/png" },
+        { name: "clip", type: "image/jpeg" },
+      ]),
+    ).toEqual(["image_setabcdefgh/a-2.png", "image_setabcdefgh/clip.jpg"]);
+    expect(imageUploadName("", "image/png", new Set())).toBe("bild.png");
   });
 });

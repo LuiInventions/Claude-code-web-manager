@@ -18,7 +18,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Badge, Button, Textarea, cn } from "../ui";
-import type { SectionCommand } from "../app-commands";
+import { commandPayloads, type SectionCommand } from "../app-commands";
 import { MODEL_OPTIONS, EFFORT_OPTIONS } from "@/lib/launcher-config";
 import ClaudeCmdPane from "./launcher/ClaudeCmdPane";
 import LocalFiles from "./LocalFiles";
@@ -518,23 +518,92 @@ export default function LauncherSection({
   /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
   useEffect(() => {
     if (!command) return;
-    const p = command.payload as {
-      projectPath?: string;
-      projectName?: string;
-      prompt?: string;
-      origin?: "github";
-      repoFullName?: string;
-    };
-    if (p?.projectPath) {
-      setPathMode("manual");
-      setProjectPath(p.projectPath);
-      setRaw(p.prompt ?? "");
-      setImproved("");
-      setPhase("idle");
-      pendingOriginRef.current = p.origin
-        ? { origin: p.origin, repoFullName: p.repoFullName }
-        : null;
+    const ids: string[] = [];
+    for (const payload of commandPayloads(command.payload)) {
+      const p = payload as {
+        projectPath?: string;
+        projectName?: string;
+        prompt?: string;
+        origin?: "github";
+        repoFullName?: string;
+        sessionId?: string;
+        kind?: string;
+        sessions?: { sessionId?: string }[];
+      };
+      if (p?.kind === "reload-files") {
+        setFilesNonce((n) => n + 1);
+        continue;
+      }
+      if (p?.kind === "attach-sessions" && Array.isArray(p.sessions)) {
+        for (const row of p.sessions) {
+          if (row.sessionId) ids.push(row.sessionId);
+        }
+        continue;
+      }
+      if (p?.kind === "attach-session" && p.sessionId) ids.push(p.sessionId);
+      if (p?.projectPath) {
+        setPathMode("manual");
+        setProjectPath(p.projectPath);
+        setRaw(p.prompt ?? "");
+        setImproved("");
+        setPhase("idle");
+        pendingOriginRef.current = p.origin
+          ? { origin: p.origin, repoFullName: p.repoFullName }
+          : null;
+      }
     }
+    if (ids.length === 0) return;
+    void fetch("/api/launcher/live-sessions")
+      .then((r) => r.json())
+      .then((d: { sessions?: Array<{
+        id: string;
+        batchId?: string;
+        projectName?: string;
+        cwd: string;
+        prompt: string;
+        model: string;
+        effort: string;
+        origin?: "github";
+        repoFullName?: string;
+        where?: "remote";
+        status: "running" | "done" | "error";
+        startedAt?: number;
+      }> }) => {
+        const added: LiveSession[] = [];
+        for (const id of ids) {
+          const s = (d.sessions ?? []).find((row) => row.id === id);
+          if (!s || s.where === "remote") continue;
+          if (sourceLock === "github" ? s.origin !== "github" : s.origin === "github") continue;
+          added.push({
+            id: s.id,
+            batchId: s.batchId || s.id,
+            createdAt: s.startedAt || Date.now(),
+            projectName: s.projectName || "",
+            projectPath: s.cwd,
+            prompt: s.prompt,
+            status: s.status,
+            cmd: {
+              cwd: s.cwd,
+              prompt: s.prompt,
+              model: s.model,
+              effort: s.effort,
+              origin: s.origin,
+              repoFullName: s.repoFullName,
+            },
+          });
+        }
+        if (added.length === 0) return;
+        setSessions((prev) => {
+          const known = new Set(prev.map((row) => row.id));
+          const fresh = added.filter((row) => !known.has(row.id));
+          return fresh.length ? [...fresh, ...prev] : prev;
+        });
+        setSelectedId(added[0].id);
+        setSidebarOpen(false);
+        setPane("sessions");
+        if (added[0].projectPath) setProjectPath(added[0].projectPath);
+      })
+      .catch(() => {});
   }, [command?.nonce]);
   /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 

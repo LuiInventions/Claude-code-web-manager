@@ -19,8 +19,11 @@
 </p>
 
 > [!TIP]
-> **v1.9.23** is the current release. The sidebar order is **Remote**, **GitHub**,
-> **Local**, **Repos**, **Sessions**. Remote starts a code CLI on your server and
+> **v1.9.24** is the current release. The sidebar order is **Remote**, **GitHub**,
+> **Local**, **Repos**, **Sessions**, **Jarvis**. Jarvis is a chat with GPT 6 Luna
+> that drives the app through the local MCP server and keeps the conversation.
+> Running GitHub, Local, and Remote sessions are numbered, and a tool reads a
+> session's command-window text. Remote starts a code CLI on your server and
 > can upload and download files there. Dropping or choosing a folder asks for
 > confirmation, then uploads it. **Bild hochladen** pastes images into a new
 > `image_set` folder. Older sets are buttons in one row. Choosing one shows the
@@ -29,7 +32,7 @@
 > write into the folder on this PC. **Repos → New repo** creates the repository
 > in the clones folder. That path is fixed. **Repos → Update** commits local
 > changes, merges what GitHub gained, and pushes.
-> The installer is `jarvis-control-center-Setup-1.9.23.exe`. v1.8.0 was withdrawn.
+> The installer is `jarvis-control-center-Setup-1.9.24.exe`. v1.8.0 was withdrawn.
 > v1.9.6 has no installer. [**Changelog**](CHANGELOG.md)
 
 <img width="1920" height="1080" alt="Jarvis Control Center" src="https://github.com/user-attachments/assets/961f27e3-c90e-4594-bbbc-ce2fa462e56b" />
@@ -47,6 +50,7 @@ A terminal gives you one session, no view of the server, and a manual `git add` 
 - **GitHub** — start the same CLI inside a repo you cloned. **Repos** keeps the token, the clone, and a one-click **Update** that commits and pushes for you.
 - **Local** — the same launcher against a folder on this PC.
 - **Sessions** — every running agent as a character in a pixel office
+- **Jarvis** — a chat with GPT 6 Luna. It calls the local MCP tools, including the numbered session lists and the command-window read.
 
 It ships as a **Windows desktop app**
 ([**download the `.exe`**](https://github.com/LuiInventions/jarvis-control-center/releases/latest))

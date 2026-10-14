@@ -1,10 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { X } from "lucide-react";
-import { confirmUploadQuestion, imageSetFolderName, imageSetNames, imageSetPrompt, takeImages, uniqueImageName } from "@/lib/remote-upload-flow";
+import {
+  confirmUploadQuestion,
+  imageFilesInListing,
+  imageSetFolderName,
+  imageSetNames,
+  imageSetPrompt,
+  imageSetRelPaths,
+  MAX_IMAGE_COUNT,
+  mergeImageSetContents,
+  takeImages,
+  type ImageSetContents,
+  type ListedSetFile,
+} from "@/lib/remote-upload-flow";
 import { encodePathHeader, joinRemote, transferSummary } from "@/lib/remote-transfer";
-import { cn } from "../ui";
+import { Button, cn } from "../ui";
 import { CenterDialog, TransferProgress } from "./CenterDialog";
 import { collectDataTransfer, uploadLocalItems, type LocalItem, type UploadKind } from "./remoteUppyUpload";
 
@@ -13,6 +25,7 @@ interface PastedImage {
   name: string;
   size: number;
   url: string;
+  type?: string;
   file?: File;
   source?: string;
 }
@@ -35,11 +48,6 @@ function childPath(kind: UploadKind, dir: string, name: string): string | null {
   return `${dir.replace(/[\\/]+$/, "")}${sep}${name}`;
 }
 
-function previewSrc(kind: UploadKind, filePath: string): string {
-  const params = new URLSearchParams({ path: filePath });
-  return kind === "remote" ? `/api/remote/preview?${params}` : `/api/fs/raw?${params}`;
-}
-
 function localPreview(filePath: string): string {
   return `/api/fs/raw?${new URLSearchParams({ path: filePath })}`;
 }
@@ -50,6 +58,22 @@ async function listLocalSet(name: string): Promise<ListedImage[]> {
   const data = (await response.json()) as { images?: ListedImage[]; error?: string };
   if (!response.ok) throw new Error(data.error || "Bildordner fehlt.");
   return data.images ?? [];
+}
+
+/** Names already in the destination folder. A failed list is null, not an empty set. */
+async function listFolderImages(kind: UploadKind, folderPath: string): Promise<ListedSetFile[] | null> {
+  try {
+    const params = new URLSearchParams({ path: folderPath });
+    const url = kind === "remote" ? `/api/remote/fs?${params}` : `/api/fs?${params}`;
+    const response = await fetch(url);
+    const data = (await response.json()) as {
+      entries?: { name: string; dir?: boolean; type?: string; size?: number | null }[];
+    };
+    if (!response.ok) return null;
+    return imageFilesInListing(data.entries ?? []);
+  } catch {
+    return null;
+  }
 }
 
 async function rememberImageSet(name: string, items: LocalItem[], signal: AbortSignal): Promise<void> {
@@ -85,8 +109,10 @@ async function rememberImageSet(name: string, items: LocalItem[], signal: AbortS
 
 function chipClass(on: boolean): string {
   return cn(
-    "h-9 shrink-0 cursor-pointer rounded-lg px-3 text-sm font-semibold",
-    on ? "bg-white text-[#1a1030]" : "bg-[#2c2158] text-white hover:bg-[#3a2c78]",
+    "h-9 max-w-full shrink-0 cursor-pointer rounded-md border px-3 text-sm",
+    on
+      ? "border-transparent bg-accent font-medium text-accent-ink"
+      : "border-line bg-raised text-ink hover:bg-selected",
   );
 }
 
@@ -108,12 +134,12 @@ function FolderBar({
   return (
     <div className="grid gap-2">
       <div className="flex items-center gap-2">
-        <span className="text-xs font-medium text-[#d2c6f5]">Ordner</span>
+        <span className="text-xs font-medium text-muted">Ordner</span>
         {allowDelete && selected !== "new" && (
           <button
             type="button"
             onClick={() => onDelete(selected)}
-            className="ml-auto h-8 cursor-pointer rounded-lg bg-[#3a2048] px-3 text-sm font-semibold text-white hover:bg-[#5a2858]"
+            className="ml-auto h-8 cursor-pointer rounded-md px-2 text-sm text-danger hover:bg-danger/10"
           >
             Löschen
           </button>
@@ -131,13 +157,60 @@ function FolderBar({
             type="button"
             role="option"
             aria-selected={selected === name}
+            title={name}
             onClick={() => onSelect(name)}
-            className={cn(chipClass(selected === name), "font-mono")}
+            className={cn(chipClass(selected === name), "font-mono text-[13px]")}
           >
             {name}
           </button>
         ))}
-        {names.length === 0 && !allowNew && <span className="text-sm text-[#d2c6f5]">Noch kein Bildordner</span>}
+        {names.length === 0 && !allowNew && <span className="text-sm text-muted">Noch kein Bildordner</span>}
+      </div>
+    </div>
+  );
+}
+
+function PathBox({ value }: { value: string }) {
+  return (
+    <label className="grid gap-1 rounded-lg border border-line bg-raised px-3 py-2">
+      <span className="text-xs font-medium text-muted">Pfad</span>
+      <input
+        readOnly
+        value={value}
+        aria-label="Pfad"
+        onFocus={(event) => event.currentTarget.select()}
+        className="w-full bg-transparent font-mono text-[13px] leading-5 text-ink outline-none"
+      />
+    </label>
+  );
+}
+
+function SentenceBox({
+  value,
+  copied,
+  inputRef,
+  onCopy,
+}: {
+  value: string;
+  copied: boolean;
+  inputRef?: RefObject<HTMLInputElement | null>;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="grid gap-1 rounded-lg border border-line bg-raised px-3 py-2">
+      <span className="text-xs font-medium text-muted">Satz</span>
+      <div className="flex items-center gap-2">
+        <input
+          ref={inputRef}
+          readOnly
+          value={value}
+          aria-label="Satz"
+          onFocus={(event) => event.currentTarget.select()}
+          className="h-9 min-w-0 flex-1 bg-transparent font-mono text-[13px] text-ink outline-none"
+        />
+        <Button type="button" size="sm" variant="primary" onClick={onCopy}>
+          {copied ? "Kopiert" : "Kopieren"}
+        </Button>
       </div>
     </div>
   );
@@ -146,27 +219,31 @@ function FolderBar({
 function LocalTile({ image }: { image: ListedImage }) {
   const [failed, setFailed] = useState(false);
   return (
-    <div className="relative aspect-square overflow-hidden rounded-xl bg-[#2a1b4a]">
+    <div className="relative aspect-square overflow-hidden rounded-md border border-line bg-raised">
       {failed ? (
-        <span className="grid size-full place-items-center px-2 text-center text-[10px] text-[#d2c6f5]">Keine Vorschau</span>
+        <span className="grid size-full place-items-center px-2 text-center text-xs text-muted">Keine Vorschau</span>
       ) : (
         <img
           src={localPreview(image.path)}
           alt={image.name}
+          loading="lazy"
           className="size-full object-cover"
           onError={() => setFailed(true)}
         />
       )}
-      <span className="absolute inset-x-0 bottom-0 truncate bg-[#1a1030] px-1.5 py-1 text-left text-[10px] text-white">
+      <span className="absolute inset-x-0 bottom-0 truncate bg-black/65 px-1.5 py-1 text-left text-xs text-white">
         {image.name}
       </span>
     </div>
   );
 }
 
-function SetTiles({ images }: { images: ListedImage[] | undefined }) {
-  if (!images) return <p className="col-span-full text-sm text-[#d2c6f5]">Wird geladen…</p>;
-  if (images.length === 0) return <p className="col-span-full text-sm text-[#d2c6f5]">Keine lokale Kopie</p>;
+function SetTiles({ images, quietEmpty }: { images: ListedImage[] | undefined; quietEmpty?: boolean }) {
+  if (!images) return <p className="col-span-full text-sm text-muted">Wird geladen…</p>;
+  if (images.length === 0) {
+    if (quietEmpty) return null;
+    return <p className="col-span-full text-sm text-muted">Keine lokale Kopie</p>;
+  }
   return (
     <>
       {images.map((image) => (
@@ -204,12 +281,12 @@ export default function RemoteImageUpload({
   const [folderName, setFolderName] = useState("");
   const [sets, setSets] = useState<string[]>([]);
   const [pictures, setPictures] = useState<ListedImage[] | undefined>(undefined);
+  const [contained, setContained] = useState<ImageSetContents | null>(null);
   const [deleteName, setDeleteName] = useState("");
   const [target, setTarget] = useState("new");
   const [listNonce, setListNonce] = useState(0);
   const [question, setQuestion] = useState("");
   const [queued, setQueued] = useState<LocalItem[]>([]);
-  const [sentence, setSentence] = useState("");
   const [copied, setCopied] = useState(false);
   const [written, setWritten] = useState(0);
   const [total, setTotal] = useState(0);
@@ -222,9 +299,13 @@ export default function RemoteImageUpload({
   const imagesRef = useRef(images);
   const urlsRef = useRef(new Set<string>());
   const phaseRef = useRef(phase);
+  const targetRef = useRef(target);
+  const containedRef = useRef(contained);
   const addRef = useRef<(incoming: LocalItem[]) => void>(() => {});
   imagesRef.current = images;
   phaseRef.current = phase;
+  targetRef.current = target;
+  containedRef.current = contained;
 
   useEffect(() => {
     const focusBar = window.setTimeout(() => inputRef.current?.focus(), 0);
@@ -292,23 +373,42 @@ export default function RemoteImageUpload({
   useEffect(() => {
     if (target === "new") {
       setPictures(undefined);
+      setContained(null);
       return;
     }
     let cancelled = false;
     setPictures(undefined);
-    listLocalSet(target)
-      .then((listed) => {
-        if (!cancelled) setPictures(listed);
-      })
-      .catch(() => {
-        if (!cancelled) setPictures([]);
-      });
+    setContained(null);
+    const folderPath = childPath(kind, dir, target);
+    Promise.all([
+      folderPath ? listFolderImages(kind, folderPath) : Promise.resolve(null),
+      listLocalSet(target).catch(() => [] as ListedImage[]),
+    ]).then(([folder, cache]) => {
+      if (cancelled) return;
+      setPictures(cache);
+      setContained(mergeImageSetContents(folder, cache));
+    });
     return () => {
       cancelled = true;
     };
-  }, [target, listNonce]);
+  }, [target, kind, dir, listNonce]);
+
+  const dropPending = () => {
+    for (const image of imagesRef.current) {
+      if (image.url.startsWith("blob:")) {
+        URL.revokeObjectURL(image.url);
+        urlsRef.current.delete(image.url);
+      }
+    }
+    imagesRef.current = [];
+    setImages([]);
+  };
 
   const addFiles = (incoming: LocalItem[]) => {
+    if (targetRef.current !== "new" && !containedRef.current) {
+      setError("Bildordner wird gezählt.");
+      return;
+    }
     const candidates = incoming
       .filter((item) => !item.dir)
       .map((item) => ({
@@ -319,18 +419,20 @@ export default function RemoteImageUpload({
         source: item.source,
       }));
     if (candidates.length === 0) return;
-    const decision = takeImages(imagesRef.current, candidates);
+    const held = targetRef.current === "new" ? [] : containedRef.current?.files ?? [];
+    const decision = takeImages([...held, ...imagesRef.current], candidates);
     setError(decision.error);
     if (decision.take.length === 0) return;
     const next = decision.take.map((index) => {
       const item = candidates[index];
       const blob = item.file && item.size <= PREVIEW_MAX ? URL.createObjectURL(item.file) : "";
       if (blob) urlsRef.current.add(blob);
-      const url = blob || (item.source ? previewSrc("local", item.source) : "");
+      const url = blob || (item.source ? localPreview(item.source) : "");
       return {
         id: crypto.randomUUID(),
         name: item.name,
         size: item.size,
+        type: item.type,
         file: item.file,
         source: item.source,
         url,
@@ -355,15 +457,28 @@ export default function RemoteImageUpload({
 
   const goNext = () => {
     if (images.length === 0) return;
+    if (target !== "new" && !contained) {
+      setError("Bildordner wird gezählt.");
+      return;
+    }
+    const held = target === "new" ? [] : contained?.files ?? [];
+    if (held.length + images.length > MAX_IMAGE_COUNT) {
+      setError("Maximal 10 Bilder.");
+      return;
+    }
     const folder = target === "new" ? imageSetFolderName() : target;
     const folderPath = childPath(kind, dir, folder);
     if (!folderPath) {
       setError("Pfad ungültig.");
       return;
     }
-    const used = new Set<string>();
-    const items: LocalItem[] = images.map((image) => ({
-      rel: `${folder}/${uniqueImageName(image.name, used)}`,
+    const rels = imageSetRelPaths(
+      folder,
+      held.map((file) => file.name),
+      images.map((image) => ({ name: image.name, type: image.type || image.file?.type })),
+    );
+    const items: LocalItem[] = images.map((image, index) => ({
+      rel: rels[index],
       size: image.size,
       file: image.file,
       source: image.file ? undefined : image.source,
@@ -371,7 +486,6 @@ export default function RemoteImageUpload({
     setFolderName(folder);
     setQueued(items);
     setQuestion(confirmUploadQuestion(items, dir));
-    setSentence(imageSetPrompt(folderPath));
     setPhase("confirm");
   };
 
@@ -397,6 +511,7 @@ export default function RemoteImageUpload({
         },
       });
       await rememberImageSet(folderName, queued, ctrl.signal);
+      dropPending();
       setSummary(transferSummary(result.files, result.bytes, result.dirs));
       setTarget(folderName);
       setCopied(false);
@@ -419,10 +534,8 @@ export default function RemoteImageUpload({
 
   const selectFolder = (name: string) => {
     setCopied(false);
+    setError("");
     setTarget(name);
-    if (name === "new") return;
-    const path = childPath(kind, dir, name);
-    if (path) setSentence(imageSetPrompt(path));
   };
 
   const askDelete = (name: string) => {
@@ -442,10 +555,7 @@ export default function RemoteImageUpload({
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error || "Löschen fehlgeschlagen.");
-      if (target === deleteName) {
-        setTarget("new");
-        setSentence("");
-      }
+      if (target === deleteName) setTarget("new");
       setDeleteName("");
       setListNonce((n) => n + 1);
       setPhase("pick");
@@ -458,9 +568,11 @@ export default function RemoteImageUpload({
 
   const knownSets = folderName && !sets.includes(folderName) ? [folderName, ...sets] : sets;
   const previewPath = target !== "new" ? childPath(kind, dir, target) : null;
-  const previewSentence = previewPath ? imageSetPrompt(previewPath) : "";
+  const boxPath = (target === "new" ? dir : previewPath) || dir;
+  const boxSentence = target === "new" ? "" : previewPath ? imageSetPrompt(previewPath) : "";
+  const shown = target === "new" ? images.length : contained ? contained.count + images.length : null;
 
-  const copySentence = async (value = sentence) => {
+  const copySentence = async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
@@ -481,14 +593,22 @@ export default function RemoteImageUpload({
   return (
     <CenterDialog
       title={phase === "copy" ? "Bilder hochgeladen" : phase === "work" ? "Wird hochgeladen" : "Bild hochladen"}
-      subtitle={dir}
       busy={phase === "work"}
-      solid
+      plain
       wide
       onClose={close}
     >
       {phase === "pick" && (
-        <div className="grid gap-4">
+        <div className="grid gap-3">
+          <PathBox value={boxPath} />
+          {boxSentence && (
+            <SentenceBox
+              value={boxSentence}
+              copied={copied}
+              inputRef={sentenceRef}
+              onCopy={() => void copySentence(boxSentence)}
+            />
+          )}
           <FolderBar
             names={sets}
             selected={target}
@@ -497,47 +617,26 @@ export default function RemoteImageUpload({
             onSelect={selectFolder}
             onDelete={askDelete}
           />
-          <p className="text-xs text-[#d2c6f5]">
-            {target === "new" ? "Jeder Upload legt einen neuen Ordner an." : `Neue Bilder kommen in ${target}.`}
-          </p>
-          {previewSentence && (
-            <div className="flex gap-2">
-              <input
-                readOnly
-                value={previewSentence}
-                onFocus={(event) => event.currentTarget.select()}
-                aria-label="Satz für die KI"
-                className="h-12 min-w-0 flex-1 rounded-xl border-2 border-[#7c5cff] bg-[#120a24] px-4 font-mono text-sm text-white outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => void copySentence(previewSentence)}
-                className="h-12 cursor-pointer rounded-xl bg-white px-4 text-sm font-semibold text-[#1a1030] hover:bg-[#efeaff]"
-              >
-                {copied ? "Kopiert" : "Kopieren"}
-              </button>
-            </div>
-          )}
-          <div className="grid min-h-56 grid-cols-2 gap-3 rounded-2xl bg-[#120a24] p-3 sm:grid-cols-5">
-            {target !== "new" && <SetTiles images={pictures} />}
+          <div className="grid min-h-48 grid-cols-2 gap-2 rounded-lg border border-line bg-canvas p-3 sm:grid-cols-5">
+            {target !== "new" && <SetTiles images={pictures} quietEmpty={images.length > 0} />}
             {target === "new" && images.length === 0 && (
-              <p className="col-span-full grid place-items-center text-sm text-[#d2c6f5]">Noch keine Bilder</p>
+              <p className="col-span-full grid place-items-center text-sm text-muted">Noch keine Bilder</p>
             )}
             {images.map((image) => (
-              <div key={image.id} className="relative aspect-square overflow-hidden rounded-xl bg-[#2a1b4a]">
+              <div key={image.id} className="relative aspect-square overflow-hidden rounded-md border border-line bg-raised">
                 {image.url ? (
                   <img src={image.url} alt={image.name} className="size-full object-cover" />
                 ) : (
-                  <span className="grid size-full place-items-center px-2 text-center text-[10px] text-[#d2c6f5]">Keine Vorschau</span>
+                  <span className="grid size-full place-items-center px-2 text-center text-xs text-muted">Keine Vorschau</span>
                 )}
-                <span className="absolute inset-x-0 bottom-0 truncate bg-[#1a1030] px-1.5 py-1 text-left text-[10px] text-white">
+                <span className="absolute inset-x-0 bottom-0 truncate bg-black/65 px-1.5 py-1 text-left text-xs text-white">
                   {image.name}
                 </span>
                 <button
                   type="button"
                   aria-label={`${image.name} entfernen`}
                   onClick={() => remove(image.id)}
-                  className="absolute right-1 top-1 z-10 inline-flex size-6 cursor-pointer items-center justify-center rounded-md bg-[#1a1030] text-white"
+                  className="absolute right-1 top-1 z-10 inline-flex size-8 cursor-pointer items-center justify-center rounded-md bg-surface/90 text-ink hover:bg-surface"
                 >
                   <X className="size-3.5" />
                 </button>
@@ -548,61 +647,45 @@ export default function RemoteImageUpload({
             ref={inputRef}
             aria-label="Bilder einfügen"
             placeholder="Bilder mit Strg+V einfügen"
-            className="h-12 w-full rounded-xl border-2 border-[#7c5cff] bg-[#120a24] px-4 text-sm text-white outline-none placeholder:text-[#c4b6ef]"
+            className="h-10 w-full rounded-lg border border-line bg-raised px-3 text-sm text-ink outline-none placeholder:text-faint"
           />
-          <p className="text-xs text-[#d2c6f5]">
-            {images.length} / 10 · bis zu 10 Bilder, zusammen maximal 2 GB
+          <p className="text-sm tabular-nums text-muted" aria-live="polite">
+            {shown === null ? `… / ${MAX_IMAGE_COUNT}` : `${shown} / ${MAX_IMAGE_COUNT}`}
+            <span className="text-faint"> · maximal 2 GB</span>
           </p>
-          {error && <p className="text-xs text-danger">{error}</p>}
-          <button
-            type="button"
-            disabled={images.length === 0}
-            onClick={goNext}
-            className="h-11 cursor-pointer rounded-xl bg-white text-sm font-semibold text-[#1a1030] hover:bg-[#efeaff] disabled:cursor-not-allowed disabled:opacity-40"
-          >
+          {error && (
+            <p className="text-sm text-danger" role="alert">
+              {error}
+            </p>
+          )}
+          <Button type="button" variant="primary" className="w-full" disabled={images.length === 0} onClick={goNext}>
             Weiter
-          </button>
+          </Button>
         </div>
       )}
       {phase === "confirm-delete" && (
         <div className="grid gap-5 py-2">
-          <p className="break-all text-center text-[15px] font-medium leading-relaxed text-white">{question}</p>
+          <p className="break-all text-center text-[15px] font-medium leading-relaxed text-ink">{question}</p>
           <div className="flex justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => setPhase("pick")}
-              className="h-11 cursor-pointer rounded-xl bg-[#2c2158] px-5 text-sm font-semibold text-white hover:bg-[#3a2c78]"
-            >
+            <Button type="button" variant="secondary" onClick={() => setPhase("pick")}>
               Zurück
-            </button>
-            <button
-              type="button"
-              onClick={() => void runDelete()}
-              className="h-11 cursor-pointer rounded-xl bg-white px-5 text-sm font-semibold text-[#1a1030] hover:bg-[#efeaff]"
-            >
+            </Button>
+            <Button type="button" variant="danger" onClick={() => void runDelete()}>
               Löschen
-            </button>
+            </Button>
           </div>
         </div>
       )}
       {phase === "confirm" && (
         <div className="grid gap-5 py-2">
-          <p className="break-all text-center text-[15px] font-medium leading-relaxed text-white">{question}</p>
+          <p className="break-all text-center text-[15px] font-medium leading-relaxed text-ink">{question}</p>
           <div className="flex justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => setPhase("pick")}
-              className="h-11 cursor-pointer rounded-xl bg-[#2c2158] px-5 text-sm font-semibold text-white hover:bg-[#3a2c78]"
-            >
+            <Button type="button" variant="secondary" onClick={() => setPhase("pick")}>
               Zurück
-            </button>
-            <button
-              type="button"
-              onClick={() => void run()}
-              className="h-11 cursor-pointer rounded-xl bg-white px-5 text-sm font-semibold text-[#1a1030] hover:bg-[#efeaff]"
-            >
+            </Button>
+            <Button type="button" variant="primary" onClick={() => void run()}>
               Hochladen
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -612,18 +695,19 @@ export default function RemoteImageUpload({
           <button
             type="button"
             onClick={() => abortRef.current?.abort()}
-            className="mx-auto block cursor-pointer text-sm text-white/70 hover:text-white"
+            className="mx-auto block cursor-pointer text-sm text-muted hover:text-ink"
           >
             Abbrechen
           </button>
         </div>
       )}
       {phase === "copy" && (
-        <div className="grid gap-4 py-2">
-          <p className="text-center text-sm font-semibold text-white">
+        <div className="grid gap-3 py-1">
+          <p className="text-center text-sm font-medium text-ink">
             {kind === "local" ? "Die Bilder liegen im Ordner." : "Die Bilder liegen auf dem Server."}
           </p>
-          <p className="text-center text-xs text-[#d2c6f5]">{summary}</p>
+          <p className="text-center text-sm text-muted">{summary}</p>
+          <PathBox value={boxPath} />
           <FolderBar
             names={knownSets}
             selected={target === "new" ? folderName : target}
@@ -632,42 +716,28 @@ export default function RemoteImageUpload({
             onSelect={selectFolder}
             onDelete={askDelete}
           />
-          <div className="grid grid-cols-2 gap-3 rounded-2xl bg-[#120a24] p-3 sm:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 rounded-lg border border-line bg-canvas p-3 sm:grid-cols-5">
             <SetTiles images={pictures} />
           </div>
-          <label className="grid gap-2">
-            <span className="text-xs font-medium text-[#d2c6f5]">Satz für die KI</span>
-            <div className="flex gap-2">
-              <input
-                ref={sentenceRef}
-                readOnly
-                value={sentence}
-                onFocus={(event) => event.currentTarget.select()}
-                aria-label="Satz für die KI"
-                className="h-12 min-w-0 flex-1 rounded-xl border-2 border-[#7c5cff] bg-[#120a24] px-4 font-mono text-sm text-white outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => void copySentence()}
-                className="h-12 cursor-pointer rounded-xl bg-white px-4 text-sm font-semibold text-[#1a1030] hover:bg-[#efeaff]"
-              >
-                {copied ? "Kopiert" : "Kopieren"}
-              </button>
-            </div>
-          </label>
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-11 cursor-pointer rounded-xl bg-[#2c2158] text-sm font-semibold text-white hover:bg-[#3a2c78]"
-          >
+          {boxSentence && (
+            <SentenceBox
+              value={boxSentence}
+              copied={copied}
+              inputRef={sentenceRef}
+              onCopy={() => void copySentence(boxSentence)}
+            />
+          )}
+          <Button type="button" variant="secondary" className="w-full" onClick={onClose}>
             Schliessen
-          </button>
+          </Button>
         </div>
       )}
       {phase === "error" && (
         <div className="grid gap-3 py-4 text-center">
-          <p className="text-sm text-danger">{error}</p>
-          <button type="button" onClick={() => setPhase("pick")} className="cursor-pointer text-sm text-white/70 hover:text-white">
+          <p className="text-sm text-danger" role="alert">
+            {error}
+          </p>
+          <button type="button" onClick={() => setPhase("pick")} className="cursor-pointer text-sm text-muted hover:text-ink">
             Zurück
           </button>
         </div>

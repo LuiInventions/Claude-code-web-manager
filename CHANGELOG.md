@@ -5,6 +5,15 @@ follow `package.json`. From 1.9.6 each `v*` tag publishes
 `jarvis-control-center-Setup-<version>.exe`. Earlier installers were named
 `cc-control-center-Setup-<version>.exe`.
 
+## 1.9.24 — 2026-10-14
+
+### Jarvis chat and session text
+
+- The sidebar has a **Jarvis** tab. The chat uses GPT 6 Luna with the OpenAI key from Settings, keeps the conversation, and calls the local MCP tools.
+- `list_active_github_sessions`, `list_active_local_sessions`, and `list_active_remote_sessions` number the running sessions in that area. Session 1 is the oldest.
+- `get_session_x_info` returns that session's command-window text and copies it in the open window.
+- The image dialog uses the app theme. A pasted image without an extension gets one, and a name already in the set keeps a single entry when only the letter case differs.
+
 ## 1.9.23 — 2026-10-14
 
 ### Image sets open from this PC

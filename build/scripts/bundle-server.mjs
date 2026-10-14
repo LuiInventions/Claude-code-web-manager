@@ -16,7 +16,7 @@ await build({
   format: "cjs",
   bundle: true,
   target: "node20",
-  external: ["next", "node-pty", "electron", "openai", "ws"],
+  external: ["next", "node-pty", "electron", "openai", "ws", "@modelcontextprotocol/sdk"],
   banner: { js: "// generated — do not edit" },
 });
 

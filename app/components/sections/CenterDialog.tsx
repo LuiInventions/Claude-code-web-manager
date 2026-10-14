@@ -13,6 +13,7 @@ export function CenterDialog({
   onClose,
   children,
   solid = false,
+  plain = false,
   wide = false,
 }: {
   title: string;
@@ -22,6 +23,8 @@ export function CenterDialog({
   children: React.ReactNode;
   /** Solid fill. Upload dialogs use this so the box is not glass. */
   solid?: boolean;
+  /** Flat theme surface. The image dialog uses this. */
+  plain?: boolean;
   wide?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -50,11 +53,15 @@ export function CenterDialog({
         aria-labelledby="transfer-title"
         tabIndex={-1}
         className={cn(
-          "relative max-h-[92vh] w-full overflow-y-auto rounded-2xl border-2 p-6 outline-none",
+          "relative max-h-[92vh] w-full overflow-y-auto p-6 outline-none",
           wide ? "max-w-3xl" : "max-w-lg",
-          solid
-            ? "border-[#7c5cff] bg-[#1a1030] shadow-[0_24px_70px_rgba(0,0,0,0.55)]"
-            : "glass-pane border",
+          plain
+            ? "rounded-xl border border-line bg-surface shadow-[0_24px_60px_rgba(0,0,0,0.45)]"
+            : "rounded-2xl border-2",
+          !plain &&
+            (solid
+              ? "border-[#7c5cff] bg-[#1a1030] shadow-[0_24px_70px_rgba(0,0,0,0.55)]"
+              : "glass-pane border"),
         )}
         onMouseDown={(event) => event.stopPropagation()}
       >

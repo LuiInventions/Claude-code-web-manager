@@ -161,10 +161,18 @@ export function droppedItemsOrError<T extends NamedFile>(
   return { ok: true, files: [...fallback] };
 }
 
+function nameTaken(used: Set<string>, name: string): boolean {
+  const lower = name.toLowerCase();
+  for (const item of used) {
+    if (item.toLowerCase() === lower) return true;
+  }
+  return false;
+}
+
 export function uniqueImageName(name: string, used: Set<string>): string {
   const base = name.replace(/\\/g, "/").split("/").pop()?.replace(/^\.+/, "") || "bild";
   const clean = base.replace(/[<>:"|?*\u0000-\u001f]/g, "_") || "bild";
-  if (!used.has(clean)) {
+  if (!nameTaken(used, clean)) {
     used.add(clean);
     return clean;
   }
@@ -172,8 +180,106 @@ export function uniqueImageName(name: string, used: Set<string>): string {
   const stem = dot > 0 ? clean.slice(0, dot) : clean;
   const ext = dot > 0 ? clean.slice(dot) : "";
   let n = 2;
-  while (used.has(`${stem}-${n}${ext}`)) n += 1;
+  while (nameTaken(used, `${stem}-${n}${ext}`)) n += 1;
   const next = `${stem}-${n}${ext}`;
   used.add(next);
   return next;
+}
+
+const TYPE_EXT: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "image/bmp": "bmp",
+  "image/svg+xml": "svg",
+  "image/avif": "avif",
+  "image/heic": "heic",
+  "image/heif": "heif",
+  "image/tiff": "tiff",
+  "image/x-icon": "ico",
+  "image/vnd.microsoft.icon": "ico",
+};
+
+/** A file name the image-set cache will accept, and that is not already in `used`. */
+export function imageUploadName(name: string, type: string | undefined, used: Set<string>): string {
+  let base = name.replace(/\\/g, "/").split("/").pop()?.replace(/^\.+/, "") || "bild";
+  base = base.replace(/[<>:"|?*\u0000-\u001f]/g, "_") || "bild";
+  if (imageMime(base) === null) {
+    const mime = (type || "").split(";")[0].trim().toLowerCase();
+    const ext = TYPE_EXT[mime] || (mime.startsWith("image/") ? "png" : "");
+    if (ext) base = `${base.replace(/\.+$/, "") || "bild"}.${ext}`;
+  }
+  return uniqueImageName(base, used);
+}
+
+export interface ListedSetFile {
+  name: string;
+  size: number;
+}
+
+/** Image files in a directory listing. Remote entries use `dir`, local entries use `type`. */
+export function imageFilesInListing(
+  entries: readonly { name: string; dir?: boolean; type?: string; size?: number | null }[],
+): ListedSetFile[] {
+  const files: ListedSetFile[] = [];
+  const seen = new Set<string>();
+  for (const entry of entries) {
+    if (!entry.name || entry.type === "dir" || entry.dir === true) continue;
+    if (!isImageFile({ name: entry.name })) continue;
+    const key = entry.name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const size = typeof entry.size === "number" && Number.isFinite(entry.size) && entry.size > 0 ? entry.size : 0;
+    files.push({ name: entry.name, size });
+  }
+  files.sort((a, b) => a.name.localeCompare(b.name));
+  return files;
+}
+
+export interface ImageSetContents {
+  names: string[];
+  count: number;
+  bytes: number;
+  files: ListedSetFile[];
+}
+
+/**
+ * One row per file name. A folder listing and the local cache describe the same
+ * pictures, so a name that is in both counts once. The larger known size wins.
+ */
+export function mergeImageSetContents(
+  folder: readonly ListedSetFile[] | null,
+  cache: readonly ListedSetFile[] | null,
+): ImageSetContents {
+  const byKey = new Map<string, ListedSetFile>();
+  const put = (file: ListedSetFile) => {
+    const key = file.name.toLowerCase();
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, { name: file.name, size: file.size > 0 ? file.size : 0 });
+      return;
+    }
+    if (file.size > prev.size) byKey.set(key, { name: prev.name, size: file.size });
+  };
+  if (folder) for (const file of folder) put(file);
+  if (cache) for (const file of cache) put(file);
+  const files = [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
+  return {
+    names: files.map((file) => file.name),
+    count: files.length,
+    bytes: files.reduce((sum, file) => sum + file.size, 0),
+    files,
+  };
+}
+
+/** Relative upload paths inside an existing or new image-set folder. */
+export function imageSetRelPaths(
+  folder: string,
+  existing: readonly string[],
+  incoming: readonly { name: string; type?: string }[],
+): string[] {
+  const used = new Set(existing);
+  return incoming.map((file) => `${folder}/${imageUploadName(file.name, file.type, used)}`);
 }

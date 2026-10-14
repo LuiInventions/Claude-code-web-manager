@@ -10,12 +10,20 @@ export type SectionId =
   | "remote"
   | "codium"
   | "github"
+  | "jarvis"
   | "settings";
 
 /** A command targeted at a section, with a nonce so repeats re-trigger effects. */
 export interface SectionCommand {
   nonce: number;
   payload: unknown;
+}
+
+/** One payload, or every payload a single poll delivered to the same section. */
+export function commandPayloads(payload: unknown): unknown[] {
+  const record = payload as { kind?: string; items?: unknown[] } | null;
+  if (record && record.kind === "batch" && Array.isArray(record.items)) return record.items;
+  return [payload];
 }
 
 /** Cross-section actions used to drive the rest of the app. */

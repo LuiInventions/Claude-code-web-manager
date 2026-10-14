@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ImagePlus, Play, Upload, X } from "lucide-react";
 import { Button, Input } from "../ui";
 import ClaudeCmdPane from "./launcher/ClaudeCmdPane";
@@ -11,6 +11,7 @@ import RemoteUpload from "./RemoteUpload";
 import { ViewBar } from "./SessionBar";
 import SshLoginPane from "./SshLoginPane";
 import type { RemotePublicStatus } from "@/lib/remote-ssh";
+import { commandPayloads, type SectionCommand } from "../app-commands";
 
 const EMPTY: RemotePublicStatus = {
   connected: false,
@@ -35,12 +36,20 @@ interface Box {
   createdAt: number;
 }
 
+function mergeBoxes(prev: Box[], ids: string[]): Box[] {
+  const known = new Set(prev.map((box) => box.id));
+  const added = ids
+    .filter((id, index) => id && ids.indexOf(id) === index && !known.has(id))
+    .map((id, i) => ({ id, createdAt: Date.now() + i }));
+  return added.length ? [...added, ...prev] : prev;
+}
+
 function gridShape(n: number): { cols: number; rows: number } {
   const cols = n <= 2 ? 1 : 2;
   return { cols, rows: Math.max(1, Math.ceil(n / cols)) };
 }
 
-export default function RemoteSection() {
+export default function RemoteSection({ command }: { command?: SectionCommand | null }) {
   const [status, setStatus] = useState<RemotePublicStatus>(EMPTY);
   const [login, setLogin] = useState("");
   const [picked, setPicked] = useState("");
@@ -60,6 +69,7 @@ export default function RemoteSection() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [imageOpen, setImageOpen] = useState(false);
   const [filesNonce, setFilesNonce] = useState(0);
+  const pendingSessions = useRef<string[]>([]);
 
   const load = useCallback(() => {
     fetch("/api/remote")
@@ -84,7 +94,56 @@ export default function RemoteSection() {
       return;
     }
     setCwd((prev) => prev || status.dir || "~");
+    const ids = pendingSessions.current;
+    if (ids.length === 0) return;
+    pendingSessions.current = [];
+    setPane("sessions");
+    setBoxes((prev) => mergeBoxes(prev, ids));
   }, [status.connected, status.dir]);
+
+  // A session started over MCP should appear in this grid instead of spawning a second PTY.
+  useEffect(() => {
+    if (!command) return;
+    const ids: string[] = [];
+    for (const item of commandPayloads(command.payload)) {
+      const payload = item as {
+        kind?: string;
+        sessionId?: string;
+        cwd?: string;
+        cli?: string;
+        sessions?: { sessionId?: string; cwd?: string; cli?: string }[];
+      };
+      if (payload?.kind === "reload-files") {
+        setFilesNonce((n) => n + 1);
+        continue;
+      }
+      if (payload?.kind === "set-cwd" && payload.cwd) {
+        setCwd(payload.cwd);
+        continue;
+      }
+      if (payload?.kind === "attach-sessions" && Array.isArray(payload.sessions)) {
+        for (const row of payload.sessions) {
+          if (row.sessionId) ids.push(row.sessionId);
+          if (row.cwd) setCwd(row.cwd);
+          if (row.cli) setCli(row.cli);
+        }
+        continue;
+      }
+      if (payload?.kind === "attach-session" && payload.sessionId) {
+        ids.push(payload.sessionId);
+        if (payload.cwd) setCwd(payload.cwd);
+        if (payload.cli) setCli(payload.cli);
+      }
+    }
+    if (ids.length === 0) return;
+    setPane("sessions");
+    if (!status.connected) {
+      pendingSessions.current = ids;
+      return;
+    }
+    pendingSessions.current = [];
+    setBoxes((prev) => mergeBoxes(prev, ids));
+  }, [command?.nonce, status.connected]);
 
   useEffect(() => {
     if (status.needsPassword) setSaveLogin(status.saveLogin);
